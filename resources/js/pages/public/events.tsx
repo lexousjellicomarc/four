@@ -3,6 +3,7 @@ import { CalendarDays, MapPin, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { events as fallbackEvents, type EventItem } from '@/data/events';
 import PublicLayout from '@/layouts/public-layout';
+import PageHero from '@/components/public/page-hero';
 
 type FilterMode = 'all' | 'bccc' | 'city';
 
@@ -39,6 +40,20 @@ export default function EventsPage({ events }: { events?: EventItem[] }) {
   return (
     <PublicLayout>
       <Head title="Events" />
+<PageHero
+  eyebrow="Events & Announcements"
+  title="Public convention-center events and Baguio City highlights"
+  description="This page separates BCCC public events from Baguio City public events so the frontend follows the content structure you want."
+  backgroundImages={[
+    featuredEvent?.lightImage || '/marketing/images/events/1.JPG',
+    '/marketing/images/events/2.JPG',
+    '/marketing/images/events/3.JPG',
+  ]}
+  actions={[
+    { label: 'View Calendar', href: '/calendar' },
+    { label: 'Ask About Events', href: '/contact', variant: 'secondary' },
+  ]}
+/>
 
       <section className="mx-auto w-full max-w-7xl space-y-10 px-4 pb-12 sm:px-6 lg:px-8">
         <div className="overflow-hidden rounded-[2rem] border border-black/5 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-neutral-950 dark:shadow-[0_24px_70px_rgba(0,0,0,0.35)]">

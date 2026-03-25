@@ -1,5 +1,5 @@
 import type { ChangeEvent, FormEvent } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 import {
   CalendarDays,
@@ -20,6 +20,10 @@ import {
   X,
 } from 'lucide-react';
 import AdminLayout from '@/layouts/admin-layout';
+import TourismMemberManager, { type TourismMemberRow } from '@/components/admin/tourism-member-manager';
+
+
+type TourismMemberState = TourismMemberRow;
 
 type RowId = number | string;
 
@@ -81,6 +85,8 @@ type SiteConfigState = {
   address: string;
   phone: string;
   email: string;
+  visitaUrl: string;
+  creativeBaguioUrl: string;
   footerDescription: string;
   footerCopyright: string;
 };
@@ -93,6 +99,7 @@ type AdminHomePageProps = {
   initialSpaces?: SpaceRow[];
   initialStats?: StatRow[];
   initialSiteConfig?: SiteConfigState;
+  initialTourismMembers?: TourismMemberState[];
 };
 
 type NoticeState =
@@ -208,6 +215,9 @@ const fallbackSiteConfig: SiteConfigState = {
     'A public-facing venue platform for space discovery, event highlights, schedule visibility, and booking guidance for the Baguio Convention and Cultural Center.',
   footerCopyright:
     '© 2026 BCCC EASE • City Government of Baguio • All Rights Reserved',
+    visitaUrl: 'https://visita.baguio.gov.ph/',
+    creativeBaguioUrl: 'https://creativebaguio.com/',
+
 };
 
 function getCsrfToken() {
@@ -218,6 +228,11 @@ function getCsrfToken() {
       ?.trim() ?? ''
   );
 }
+
+function confirmDeleteAction(label: string) {
+  return window.confirm(`Are you sure you want to delete this ${label}? This action cannot be undone.`);
+}
+
 
 async function parseApiResponse(response: Response) {
   const contentType = response.headers.get('content-type') ?? '';
@@ -431,9 +446,17 @@ export default function AdminHomePage({
   initialCalendarBlocks = [],
   initialSpaces = [],
   initialStats = [],
+  initialTourismMembers = [],
   initialSiteConfig = fallbackSiteConfig,
 }: AdminHomePageProps) {
   const [notice, setNotice] = useState<NoticeState>(null);
+
+  const page = usePage();
+  const pageUrl = String(page.url || '');
+  const queryString = pageUrl.includes('?') ? pageUrl.split('?')[1] : '';
+  const params = new URLSearchParams(queryString);
+  const activeTab = params.get('tab') || 'home';
+
 
   const [bcccEvents, setBcccEvents] = useState<EventRow[]>(initialBcccEvents);
   const [cityEvents, setCityEvents] = useState<EventRow[]>(initialCityEvents);
@@ -949,10 +972,16 @@ export default function AdminHomePage({
     }
   };
 
+  const showHomeSection = activeTab === 'home';
+  const showEventsSection = activeTab === 'events';
+  const showCalendarSection = activeTab === 'calendar';
+  const showFacilitiesSection = activeTab === 'facilities' || activeTab === 'tourism-office';
+  const showContactSection = activeTab === 'contact';
+
   const submitSiteConfig = async (e: FormEvent) => {
     e.preventDefault();
     setNotice(null);
-
+    
     try {
       const payload = await apiJson<{
         message: string;
@@ -963,8 +992,11 @@ export default function AdminHomePage({
         address: siteConfig.address,
         phone: siteConfig.phone,
         email: siteConfig.email,
+        visita_url: siteConfig.visitaUrl,
+        creative_baguio_url: siteConfig.creativeBaguioUrl,
         footer_description: siteConfig.footerDescription,
         footer_copyright: siteConfig.footerCopyright,
+        
       });
 
       setSiteConfig(payload.item);
@@ -975,7 +1007,8 @@ export default function AdminHomePage({
   };
 
   return (
-    <AdminLayout>
+    <AdminLayout title="Frontend configuration" subtitle="Manage the public website in separated sections so editing is cleaner, clearer, and easier to monitor.">
+
       <Head title="Admin Home" />
 
       <div className="space-y-8">
@@ -1024,7 +1057,7 @@ export default function AdminHomePage({
         </section>
 
         <NoticeBanner notice={notice} />
-
+        {showContactSection ? (
         <SectionCard
           title="Site Settings"
           subtitle="Footer, map, address, phone, and email used by the public pages."
@@ -1106,7 +1139,9 @@ export default function AdminHomePage({
             </div>
           </form>
         </SectionCard>
+) : null}
 
+        {showEventsSection ? (
         <SectionCard
           title="Public Events"
           subtitle="Manage BCCC events and Baguio City public events from one form."
@@ -1137,6 +1172,24 @@ export default function AdminHomePage({
               required
             />
 
+              <input
+  value={siteConfig.visitaUrl}
+  onChange={(e) =>
+    setSiteConfig((prev) => ({ ...prev, visitaUrl: e.target.value }))
+  }
+  placeholder="Baguio VISITA URL"
+  className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none dark:border-white/10 dark:bg-white/5"
+/>
+
+<input
+  value={siteConfig.creativeBaguioUrl}
+  onChange={(e) =>
+    setSiteConfig((prev) => ({ ...prev, creativeBaguioUrl: e.target.value }))
+  }
+  placeholder="Creative Baguio URL"
+  className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none dark:border-white/10 dark:bg-white/5"
+/>
+
             <input
               value={eventForm.venue}
               onChange={(e) =>
@@ -1146,6 +1199,7 @@ export default function AdminHomePage({
               className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none dark:border-white/10 dark:bg-[#121318]"
               required
             />
+            <TourismMemberManager initialMembers={initialTourismMembers} />
 
             <input
               type="date"
@@ -1331,7 +1385,7 @@ export default function AdminHomePage({
                             </button>
                             <button
                               type="button"
-                              onClick={() => deleteEvent(row.id)}
+                              onClick={() => { if (confirmDeleteAction('calendar block')) { deleteCalendarBlock(row.id); } }}
                               className="rounded-full border border-red-200 bg-white p-2 text-red-600 dark:border-red-400/20 dark:bg-[#17181c]"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1358,7 +1412,8 @@ export default function AdminHomePage({
             ))}
           </div>
         </SectionCard>
-
+) : null}
+{showCalendarSection ? (
         <SectionCard
           title="Calendar Blocks"
           subtitle="Manage public status colors and blocked/private/public schedule windows."
@@ -1528,7 +1583,8 @@ export default function AdminHomePage({
             )}
           </div>
         </SectionCard>
-
+) : null}
+{showHomeSection ? (
         <SectionCard
           title="Feature Packages"
           subtitle="Manage package cards shown on the public side."
@@ -1635,7 +1691,7 @@ export default function AdminHomePage({
                     </button>
                     <button
                       type="button"
-                      onClick={() => deletePackage(row.id)}
+                      onClick={() => { if (confirmDeleteAction('package')) { deletePackage(row.id); } }}
                       className="rounded-full border border-red-200 bg-white p-2 text-red-600 dark:border-red-400/20 dark:bg-[#17181c]"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1660,7 +1716,8 @@ export default function AdminHomePage({
             )}
           </div>
         </SectionCard>
-
+) : null}
+        {showFacilitiesSection ? (
         <SectionCard
           title="Venue Spaces"
           subtitle="Manage facilities, tourism office cards, and homepage visibility."
@@ -1880,7 +1937,7 @@ export default function AdminHomePage({
                     </button>
                     <button
                       type="button"
-                      onClick={() => deleteSpace(row.id)}
+                      onClick={() => { if (confirmDeleteAction('space')) { deleteSpace(row.id); } }}
                       className="rounded-full border border-red-200 bg-white p-2 text-red-600 dark:border-red-400/20 dark:bg-[#17181c]"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1897,7 +1954,8 @@ export default function AdminHomePage({
             )}
           </div>
         </SectionCard>
-
+) : null}
+        {showHomeSection ? (
         <SectionCard
           title="Homepage Stats"
           subtitle="Manage the counters and quick stats shown on the homepage."
@@ -2005,7 +2063,7 @@ export default function AdminHomePage({
                     </button>
                     <button
                       type="button"
-                      onClick={() => deleteStat(row.id)}
+                      onClick={() => { if (confirmDeleteAction('homepage stat')) { deleteStat(row.id); } }}
                       className="rounded-full border border-red-200 bg-white p-2 text-red-600 dark:border-red-400/20 dark:bg-[#17181c]"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -2022,6 +2080,7 @@ export default function AdminHomePage({
             )}
           </div>
         </SectionCard>
+        ) :null}
 
         <section className="grid gap-6 lg:grid-cols-3">
           <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#121318]">

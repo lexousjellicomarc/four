@@ -13,18 +13,20 @@ class BookingResource extends JsonResource
     public function toArray(Request $request): array
     {
         $items = $this->whenLoaded('bookingServices', function () {
-            return $this->bookingServices->map(function ($item) {
-                $price = $item->service?->price ?? 0;
-                return [
-                    'id' => $item->id,
-                    'service_id' => $item->service_id,
-                    'service_name' => $item->service?->name,
-                    'price' => $price,
-                    'quantity' => $item->quantity,
-                    'line_total' => ($price * $item->quantity),
-                ];
-            })->toArray();
-        });
+    return $this->bookingServices->map(function ($item) {
+        $price = (float) ($item->service?->price ?? 0);
+
+        return [
+            'id' => $item->id,
+            'service_id' => $item->service_id,
+            'service_name' => $item->service?->name,
+            'price' => $price,
+            'quantity' => 1,
+            'line_total' => $price,
+        ];
+    })->toArray();
+});
+
 
         $payments = $this->whenLoaded('payments', function () {
             return $this->payments->map(function ($p) {

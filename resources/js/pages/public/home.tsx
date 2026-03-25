@@ -4,7 +4,6 @@ import type { Facility } from '@/data/facilities';
 import type { OfferItem } from '@/data/offers';
 import type { StatItem } from '@/data/stats';
 import AmenitiesRow from '@/components/public/amenities-row';
-import AvailabilityStrip from '@/components/public/availability-strip';
 import EventsHighlights from '@/components/public/events-highlights';
 import HeroBanner from '@/components/public/hero-banner';
 import LocationAssistance from '@/components/public/location-assistance';
@@ -17,6 +16,8 @@ import PublicLayout from '@/layouts/public-layout';
 type VenueOption = {
   label: string;
   value: string;
+  category?: string | null;
+  capacity?: string | null;
 };
 
 type HomeProps = {
@@ -39,8 +40,7 @@ export default function Home({
       <Head title="Home" />
 
       <div className="space-y-8 pb-12 lg:space-y-10">
-        <HeroBanner venueOptions={[]} />
-        <AvailabilityStrip venueOptions={venueOptions} />
+        <HeroBanner venueOptions={venueOptions} />
         <WelcomeSection />
         <SpacesGrid items={spaces} />
         <StatsBanner items={stats} />

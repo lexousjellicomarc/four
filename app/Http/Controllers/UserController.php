@@ -36,7 +36,7 @@ class UserController extends Controller
         }
 
         $users = $query->with('roles')
-            ->orderBy('id', 'desc')
+            ->orderByDesc('id')
             ->paginate(10)
             ->through(function (User $user) {
                 return [
@@ -44,7 +44,7 @@ class UserController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'email_verified_at' => $user->email_verified_at,
-                    'roles' => $user->roles->pluck('name')->all(),
+                    'role' => $user->roles->pluck('name')->first(),
                     'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
                 ];
             });
@@ -63,10 +63,8 @@ class UserController extends Controller
 
     public function create(): Response
     {
-        $availableRoles = Role::query()->pluck('name')->all();
-
         return Inertia::render('users/create', [
-            'availableRoles' => $availableRoles,
+            'availableRoles' => Role::query()->pluck('name')->all(),
         ]);
     }
 
@@ -78,8 +76,7 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', Password::defaults(), 'confirmed'],
-            'roles' => ['array'],
-            'roles.*' => ['string', 'exists:roles,name'],
+            'role' => ['nullable', 'string', 'exists:roles,name'],
         ]);
 
         $user = User::create([
@@ -88,16 +85,21 @@ class UserController extends Controller
             'password' => Hash::make($data['password']),
         ]);
 
-        $roles = $data['roles'] ?? [];
-        if (!empty($roles)) {
-            $user->syncRoles($roles);
+        $oldRoles = [];
+        $newRoles = [];
+
+        if (! empty($data['role'])) {
+            $user->syncRoles([$data['role']]);
+            $newRoles = [$data['role']];
+        } else {
+            $user->syncRoles([]);
         }
 
         if ($actor) {
             $this->notifications->userCreated($user, $actor);
 
-            if (!empty($roles)) {
-                $this->notifications->userRolesUpdated($user, $actor, [], $roles);
+            if (! empty($newRoles)) {
+                $this->notifications->userRolesUpdated($user, $actor, $oldRoles, $newRoles);
             }
         }
 
@@ -107,17 +109,15 @@ class UserController extends Controller
 
     public function edit(User $user): Response
     {
-        $availableRoles = Role::query()->pluck('name')->all();
-
         return Inertia::render('users/edit', [
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'roles' => $user->roles->pluck('name')->all(),
+                'role' => $user->roles->pluck('name')->first(),
                 'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
             ],
-            'availableRoles' => $availableRoles,
+            'availableRoles' => Role::query()->pluck('name')->all(),
         ]);
     }
 
@@ -129,8 +129,7 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
             'password' => ['nullable', 'string', Password::defaults(), 'confirmed'],
-            'roles' => ['array'],
-            'roles.*' => ['string', 'exists:roles,name'],
+            'role' => ['nullable', 'string', 'exists:roles,name'],
         ]);
 
         $original = $user->getOriginal();
@@ -141,48 +140,50 @@ class UserController extends Controller
             'email' => $data['email'],
         ]);
 
-        if (!empty($data['password'])) {
+        if (! empty($data['password'])) {
             $user->update([
                 'password' => Hash::make($data['password']),
             ]);
         }
 
-        if (isset($data['roles'])) {
-            $user->syncRoles($data['roles']);
+        if (! empty($data['role'])) {
+            $user->syncRoles([$data['role']]);
+        } else {
+            $user->syncRoles([]);
         }
 
         $user->refresh();
+        $newRoles = $user->roles->pluck('name')->all();
 
         $changes = [];
         foreach ($user->getAttributes() as $field => $newVal) {
-            if (!array_key_exists($field, $original)) {
+            if (! array_key_exists($field, $original)) {
                 continue;
             }
+
             $oldVal = $original[$field];
             if ($oldVal == $newVal) {
                 continue;
             }
-            if ($field === 'password' || $field === 'remember_token') {
+
+            if (in_array($field, ['password', 'remember_token'], true)) {
                 $changes[$field] = ['(hidden)', '(hidden)'];
                 continue;
             }
+
             $changes[$field] = [$oldVal, $newVal];
         }
 
         if ($actor) {
             $this->notifications->userUpdated($user, $actor, $changes);
 
-            if (isset($data['roles'])) {
-                $newRoles = $user->roles->pluck('name')->all();
+            $oldSorted = $oldRoles;
+            $newSorted = $newRoles;
+            sort($oldSorted);
+            sort($newSorted);
 
-                $oldSorted = $oldRoles;
-                $newSorted = $newRoles;
-                sort($oldSorted);
-                sort($newSorted);
-
-                if ($oldSorted !== $newSorted) {
-                    $this->notifications->userRolesUpdated($user, $actor, $oldRoles, $newRoles);
-                }
+            if ($oldSorted !== $newSorted) {
+                $this->notifications->userRolesUpdated($user, $actor, $oldRoles, $newRoles);
             }
         }
 

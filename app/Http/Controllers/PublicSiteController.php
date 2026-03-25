@@ -7,6 +7,7 @@ use App\Models\FeaturePackage;
 use App\Models\HomepageStat;
 use App\Models\PublicEvent;
 use App\Models\SiteSetting;
+use App\Models\TourismMember;
 use App\Models\VenueSpace;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -84,6 +85,7 @@ class PublicSiteController extends Controller
                 ->take(3)
                 ->values()
                 ->all(),
+            'members' => $this->membersPayload()->all(),
         ]);
     }
 
@@ -111,6 +113,8 @@ class PublicSiteController extends Controller
             'address' => $settings?->address ?: 'CH3X+RRW, Baguio, Benguet, Philippines',
             'phone' => $settings?->phone ?: '(074) 446 2009',
             'email' => $settings?->email ?: 'info@bccc-ease.com',
+            'visitaUrl' => $settings?->visita_url ?: '',
+            'creativeBaguioUrl' => $settings?->creative_baguio_url ?: '',
             'footerDescription' => $settings?->footer_description ?: 'A public-facing venue platform for space discovery, event highlights, schedule visibility, and booking guidance for the Baguio Convention and Cultural Center.',
             'footerCopyright' => $settings?->footer_copyright ?: '© 2026 BCCC EASE • City Government of Baguio • All Rights Reserved',
         ];
@@ -126,10 +130,12 @@ class PublicSiteController extends Controller
         ])->merge(
             VenueSpace::query()
                 ->orderBy('sort_order')
-                ->get(['title'])
+                ->get(['title', 'category', 'capacity'])
                 ->map(fn (VenueSpace $space) => [
                     'label' => $space->title,
                     'value' => $space->title,
+                    'category' => $space->category,
+                    'capacity' => $space->capacity,
                 ])
         )->unique('value')->values();
     }
@@ -140,8 +146,8 @@ class PublicSiteController extends Controller
             ->orderBy('sort_order')
             ->get()
             ->map(function (VenueSpace $space) {
-                $fallbackLight = '/marketing/images/facilities/foyer-lobby.jpg';
-                $fallbackDark = '/marketing/images/facilities/darkmain.jpg';
+                $fallbackLight = '/marketing/images/branding/noon.jpg';
+                $fallbackDark = '/marketing/images/hero/night.png';
 
                 return [
                     'slug' => Str::slug($space->title),
@@ -172,7 +178,7 @@ class PublicSiteController extends Controller
             ->map(function (PublicEvent $event) {
                 $image = is_array($event->images) && count($event->images) > 0
                     ? $event->images[0]
-                    : '/marketing/images/events/1.jpg';
+                    : '/marketing/images/events/1.JPG';
 
                 $scope = $event->scope === 'city' ? 'city' : 'bccc';
 
@@ -218,7 +224,7 @@ class PublicSiteController extends Controller
             ->map(function (FeaturePackage $package) {
                 $image = is_array($package->images) && count($package->images) > 0
                     ? $package->images[0]
-                    : '/marketing/images/offers/meeting-package.jpg';
+                    : '/marketing/images/events/4.jpg';
 
                 return [
                     'title' => $package->title,
@@ -248,6 +254,31 @@ class PublicSiteController extends Controller
                     'publicStatus' => $block->public_status ?: 'red',
                     'dateFrom' => substr((string) $block->date_from, 0, 10),
                     'dateTo' => substr((string) $block->date_to, 0, 10),
+                ];
+            })
+            ->values();
+    }
+
+    protected function membersPayload(): Collection
+    {
+        return TourismMember::query()
+            ->where('is_active', true)
+            ->orderByDesc('is_featured')
+            ->orderBy('sort_order')
+            ->orderBy('full_name')
+            ->get()
+            ->map(function (TourismMember $member) {
+                return [
+                    'id' => $member->id,
+                    'fullName' => $member->full_name,
+                    'designation' => $member->designation,
+                    'unitName' => $member->unit_name,
+                    'email' => $member->email,
+                    'phone' => $member->phone,
+                    'shortBio' => $member->short_bio ?? '',
+                    'details' => is_array($member->details) ? $member->details : [],
+                    'photo' => $member->photo_path,
+                    'featured' => (bool) $member->is_featured,
                 ];
             })
             ->values();

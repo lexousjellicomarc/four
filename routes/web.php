@@ -11,6 +11,10 @@ use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\ServiceTypeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserRoleController;
+use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\AdminInquiryController;
+use App\Http\Controllers\PublicInquiryController;
+use App\Models\TourismMember;
 use App\Models\Booking;
 use App\Models\CalendarBlock;
 use App\Services\BookingService;
@@ -27,6 +31,9 @@ use Inertia\Inertia;
 
 Route::post('/public/availability-check', [PublicAvailabilityController::class, 'check'])
     ->name('public.availability.check');
+
+Route::post('/inquiries', [PublicInquiryController::class, 'store'])
+    ->name('public.inquiries.store');
 
 Route::get('/', [PublicSiteController::class, 'home'])
     ->name('home');
@@ -64,8 +71,9 @@ Route::get('/admin', function (Request $request) {
 
     if ($user) {
         if ($user->hasAnyRole(['admin', 'manager'])) {
-            return redirect()->route('admin.home');
+            return redirect()->route('admin.dashboard');
         }
+
 
         return redirect()->route('dashboard');
     }
@@ -84,6 +92,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('role:admin|manager')
         ->name('admin.home');
 
+    Route::get('/admin/dashboard', [AdminDashboardController::class, 'index'])
+    ->middleware('role:admin|manager')
+    ->name('admin.dashboard');
+
     Route::middleware('role:admin|manager')
         ->prefix('admin/sort')
         ->name('admin.sort.')
@@ -98,6 +110,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->prefix('admin')
         ->name('admin.')
         ->group(function () {
+            
+            Route::post('/tourism-members', [AdminPublicContentController::class, 'storeTourismMember'])->name('tourism-members.store');
+            Route::put('/tourism-members/{tourismMember}', [AdminPublicContentController::class, 'updateTourismMember'])->name('tourism-members.update');
+            Route::delete('/tourism-members/{tourismMember}', [AdminPublicContentController::class, 'destroyTourismMember'])->name('tourism-members.destroy');
+
+            Route::get('/inquiries', [AdminInquiryController::class, 'index'])->name('inquiries.index');
+            Route::put('/inquiries/{inquiry}', [AdminInquiryController::class, 'update'])->name('inquiries.update');
+            Route::delete('/inquiries/{inquiry}', [AdminInquiryController::class, 'destroy'])->name('inquiries.destroy');
+
             Route::post('/events', [AdminPublicContentController::class, 'storeEvent'])->name('events.store');
             Route::put('/events/{publicEvent}', [AdminPublicContentController::class, 'updateEvent'])->name('events.update');
             Route::delete('/events/{publicEvent}', [AdminPublicContentController::class, 'destroyEvent'])->name('events.destroy');

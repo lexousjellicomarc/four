@@ -21,8 +21,7 @@ export default function PublicFooter({ siteSettings }: PublicFooterProps) {
   const footerRef = useRef<HTMLElement | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  const address =
-    siteSettings?.address ?? 'CH3X+RRW, Baguio, Benguet, Philippines';
+  const address = siteSettings?.address ?? 'CH3X+RRW, Baguio, Benguet, Philippines';
   const phone = siteSettings?.phone ?? '(074) 446 2009';
   const email = siteSettings?.email ?? 'info@bccc-ease.com';
   const openMapUrl =
@@ -40,9 +39,7 @@ export default function PublicFooter({ siteSettings }: PublicFooterProps) {
     if (!node) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        setShowScrollTop(entry.isIntersecting);
-      },
+      ([entry]) => setShowScrollTop(entry.isIntersecting),
       { threshold: 0.18 },
     );
 
@@ -57,21 +54,46 @@ export default function PublicFooter({ siteSettings }: PublicFooterProps) {
         ref={footerRef}
         className="border-t border-black/5 bg-white dark:border-white/10 dark:bg-[#121318]"
       >
-        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.2fr_0.8fr_0.8fr] lg:px-8">
+        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.2fr_0.8fr_0.9fr] lg:px-8">
           <div className="space-y-4">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#174f40] dark:text-[#8ea3ff]">
-                BE
-              </div>
-              <h3 className="mt-2 text-2xl font-semibold">BCCC EASE</h3>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-                Baguio Convention &amp; Cultural Center
-              </p>
-            </div>
+            <img
+              src="/marketing/images/logo/lightlogo.png"
+              alt="BCCC EASE"
+              className="h-14 w-auto object-contain dark:hidden"
+            />
+            <img
+              src="/marketing/images/logo/darklogo.png"
+              alt="BCCC EASE"
+              className="hidden h-14 w-auto object-contain dark:block"
+            />
 
             <p className="max-w-xl text-sm leading-7 text-slate-600 dark:text-slate-300">
               {footerDescription}
             </p>
+
+            <div className="flex flex-wrap gap-3">
+              {siteSettings?.visitaUrl ? (
+                <a
+                  href={siteSettings.visitaUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center rounded-full bg-[#0f8b6d] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                >
+                  Baguio VISITA
+                </a>
+              ) : null}
+
+              {siteSettings?.creativeBaguioUrl ? (
+                <a
+                  href={siteSettings.creativeBaguioUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center rounded-full border border-black/10 px-4 py-2 text-sm font-semibold transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10"
+                >
+                  Creative Baguio
+                </a>
+              ) : null}
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -84,7 +106,7 @@ export default function PublicFooter({ siteSettings }: PublicFooterProps) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="transition hover:text-[#174f40] dark:hover:text-[#8ea3ff]"
+                  className="transition hover:text-[#0f8b6d] dark:hover:text-[#8ea3ff]"
                 >
                   {item.label}
                 </Link>
@@ -102,7 +124,7 @@ export default function PublicFooter({ siteSettings }: PublicFooterProps) {
                 href={openMapUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-start gap-3 transition hover:text-[#174f40] dark:hover:text-[#8ea3ff]"
+                className="flex items-start gap-3 transition hover:text-[#0f8b6d] dark:hover:text-[#8ea3ff]"
               >
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{address}</span>
@@ -110,7 +132,7 @@ export default function PublicFooter({ siteSettings }: PublicFooterProps) {
 
               <a
                 href={`tel:${phone}`}
-                className="flex items-center gap-3 transition hover:text-[#174f40] dark:hover:text-[#8ea3ff]"
+                className="flex items-center gap-3 transition hover:text-[#0f8b6d] dark:hover:text-[#8ea3ff]"
               >
                 <Phone className="h-4 w-4 shrink-0" />
                 <span>{phone}</span>
@@ -118,7 +140,7 @@ export default function PublicFooter({ siteSettings }: PublicFooterProps) {
 
               <a
                 href={`mailto:${email}`}
-                className="flex items-center gap-3 transition hover:text-[#174f40] dark:hover:text-[#8ea3ff]"
+                className="flex items-center gap-3 transition hover:text-[#0f8b6d] dark:hover:text-[#8ea3ff]"
               >
                 <Mail className="h-4 w-4 shrink-0" />
                 <span>{email}</span>
@@ -128,12 +150,11 @@ export default function PublicFooter({ siteSettings }: PublicFooterProps) {
             <div className="rounded-2xl border border-black/5 bg-[#f7f5ef] p-4 dark:border-white/10 dark:bg-white/5">
               <h5 className="text-sm font-semibold">Need Venue Assistance?</h5>
               <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                Start your inquiry, review event highlights, or proceed to the
-                public schedule pages for guidance.
+                Start your inquiry, review event highlights, or proceed to the public schedule pages for guidance.
               </p>
               <Link
                 href="/contact"
-                className="mt-4 inline-flex items-center rounded-full bg-[#174f40] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-[#2d47ff]"
+                className="mt-4 inline-flex items-center rounded-full bg-[#0f8b6d] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
               >
                 Start Inquiry
               </Link>
@@ -150,7 +171,7 @@ export default function PublicFooter({ siteSettings }: PublicFooterProps) {
         <button
           type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="fixed bottom-6 right-6 z-[70] inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#174f40] text-white shadow-lg transition hover:-translate-y-1 dark:bg-[#2d47ff]"
+          className="fixed bottom-6 right-6 z-[70] inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#0f8b6d] text-white shadow-lg transition hover:-translate-y-1"
           aria-label="Scroll to top"
         >
           <ArrowUp className="h-5 w-5" />

@@ -103,7 +103,7 @@ export default function Services({ services, serviceTypes }: ServicesPageProps) 
                         <div>
                             <CardTitle>Services</CardTitle>
                             <p className="mt-1 text-sm text-muted-foreground">
-                                Manage service catalog, pricing, and guest-capacity limits.
+                                Manage booking options, prices, and guest-capacity rules. Stock and quantity are fixed to one booking option per schedule.
                             </p>
                         </div>
 
@@ -120,7 +120,6 @@ export default function Services({ services, serviceTypes }: ServicesPageProps) 
                                     <TableHead>Description</TableHead>
                                     <TableHead>UoM</TableHead>
                                     <TableHead className="text-right">Price</TableHead>
-                                    <TableHead className="text-right">Stock</TableHead>
                                     <TableHead>Guest Limit</TableHead>
                                     <TableHead>Capacity Note</TableHead>
                                     <TableHead className="w-[120px] text-right">Actions</TableHead>
@@ -139,7 +138,6 @@ export default function Services({ services, serviceTypes }: ServicesPageProps) 
                                         <TableCell className="text-right">
                                             {Number(service.price).toFixed(2)}
                                         </TableCell>
-                                        <TableCell className="text-right">{service.quantity}</TableCell>
                                         <TableCell>{guestLimitLabel(service)}</TableCell>
                                         <TableCell className="max-w-[240px] whitespace-normal">
                                             {service.capacity_note ?? '-'}

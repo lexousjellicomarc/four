@@ -12,6 +12,8 @@ class SiteSetting extends Model
         'address',
         'phone',
         'email',
+        'visita_url',
+        'creative_baguio_url',
         'footer_description',
         'footer_copyright',
     ];

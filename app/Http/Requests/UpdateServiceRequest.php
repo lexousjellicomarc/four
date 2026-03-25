@@ -11,9 +11,6 @@ class UpdateServiceRequest extends FormRequest
         return true;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     public function rules(): array
     {
         return [
@@ -22,7 +19,7 @@ class UpdateServiceRequest extends FormRequest
             'description' => ['required', 'string'],
             'uom' => ['required', 'string', 'max:50'],
             'price' => ['required', 'numeric', 'min:0'],
-            'quantity' => ['required', 'integer', 'min:0'],
+            'quantity' => ['nullable', 'integer', 'min:1'],
             'min_guests' => ['nullable', 'integer', 'min:0'],
             'max_guests' => ['nullable', 'integer', 'min:0', 'gte:min_guests'],
             'capacity_note' => ['nullable', 'string', 'max:500'],

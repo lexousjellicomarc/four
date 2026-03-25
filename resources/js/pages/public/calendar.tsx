@@ -11,6 +11,8 @@ import {
 import { useMemo, useState } from 'react';
 import { events as fallbackEvents, type EventItem } from '@/data/events';
 import PublicLayout from '@/layouts/public-layout';
+import PageHero from '@/components/public/page-hero';
+
 
 type CalendarStatus = 'available' | 'public_booked' | 'private_booked' | 'blocked';
 
@@ -206,6 +208,20 @@ export default function CalendarPage({
   return (
     <PublicLayout>
       <Head title="Calendar" />
+<PageHero
+  eyebrow="Calendar"
+  title="Simple public schedule visibility"
+  description="A clearer and easier public calendar for checking visible event dates, public bookings, and blocked days."
+  backgroundImages={[
+    '/marketing/images/events/lightmain.JPG',
+    '/marketing/images/branding/noon.jpg',
+    '/marketing/images/events/5.jpg',
+  ]}
+  actions={[
+    { label: 'View Events', href: '/events' },
+    { label: 'Send Inquiry', href: '/contact', variant: 'secondary' },
+  ]}
+/>
 
       <section className="mx-auto w-full max-w-7xl space-y-10 px-4 pb-12 sm:px-6 lg:px-8">
         <div className="overflow-hidden rounded-[2rem] border border-black/5 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-neutral-950 dark:shadow-[0_24px_70px_rgba(0,0,0,0.35)]">

@@ -20,18 +20,6 @@ import { Label } from '@/components/ui/label';
 import { useForm } from '@inertiajs/react';
 import type { Service, ServiceTypeOption } from '@/types';
 
-export type ServicePayload = {
-    service_type_id: number | string | null;
-    name: string;
-    description: string;
-    uom: string;
-    price: number | string;
-    quantity: number | string;
-    min_guests: number | string;
-    max_guests: number | string;
-    capacity_note: string;
-};
-
 interface ServiceFormModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -55,7 +43,6 @@ export default function ServiceFormModal({
         description: '',
         uom: '',
         price: '',
-        quantity: '',
         min_guests: '',
         max_guests: '',
         capacity_note: '',
@@ -69,7 +56,6 @@ export default function ServiceFormModal({
                 description: service.description ?? '',
                 uom: service.uom ?? '',
                 price: service.price ?? '',
-                quantity: service.quantity ?? '',
                 min_guests: service.min_guests ?? '',
                 max_guests: service.max_guests ?? '',
                 capacity_note: service.capacity_note ?? '',
@@ -79,7 +65,6 @@ export default function ServiceFormModal({
             reset();
             clearErrors();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isEdit, service, open]);
 
     function onSubmit(e: React.FormEvent) {
@@ -89,7 +74,7 @@ export default function ServiceFormModal({
             ...data,
             service_type_id: data.service_type_id === '' ? null : Number(data.service_type_id),
             price: data.price === '' ? '' : Number(data.price),
-            quantity: data.quantity === '' ? '' : Number(data.quantity),
+            quantity: 1,
             min_guests: data.min_guests === '' ? null : Number(data.min_guests),
             max_guests: data.max_guests === '' ? null : Number(data.max_guests),
             capacity_note: data.capacity_note.trim() === '' ? null : data.capacity_note.trim(),
@@ -117,9 +102,7 @@ export default function ServiceFormModal({
                 <DialogHeader>
                     <DialogTitle>{isEdit ? 'Edit service' : 'Create service'}</DialogTitle>
                     <DialogDescription>
-                        {isEdit
-                            ? 'Update the service details and optional guest-capacity limits.'
-                            : 'Add a new service to your catalog with optional guest-capacity limits.'}
+                        Create one service per booking option. Quantity and stock are fixed to one because booking availability is controlled by date and time, not stock count.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -153,7 +136,7 @@ export default function ServiceFormModal({
                             <Input
                                 value={data.name}
                                 onChange={(e) => setData('name', e.target.value)}
-                                placeholder="e.g., Board Room"
+                                placeholder="e.g., Main Hall Whole Day"
                                 required
                             />
                             {errors.name && <p className="text-sm text-red-600">{errors.name}</p>}
@@ -175,13 +158,13 @@ export default function ServiceFormModal({
                         )}
                     </div>
 
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-2">
                         <div className="space-y-2">
                             <Label>Unit of Measure</Label>
                             <Input
                                 value={data.uom}
                                 onChange={(e) => setData('uom', e.target.value)}
-                                placeholder="e.g., item"
+                                placeholder="e.g., per booking"
                                 required
                             />
                             {errors.uom && <p className="text-sm text-red-600">{errors.uom}</p>}
@@ -200,28 +183,13 @@ export default function ServiceFormModal({
                             />
                             {errors.price && <p className="text-sm text-red-600">{errors.price}</p>}
                         </div>
-
-                        <div className="space-y-2">
-                            <Label>Stock / Quantity</Label>
-                            <Input
-                                type="number"
-                                min="0"
-                                value={data.quantity}
-                                onChange={(e) => setData('quantity', e.target.value)}
-                                placeholder="0"
-                                required
-                            />
-                            {errors.quantity && (
-                                <p className="text-sm text-red-600">{errors.quantity}</p>
-                            )}
-                        </div>
                     </div>
 
                     <div className="rounded-xl border p-4">
                         <div className="mb-3">
                             <p className="font-semibold">Guest Capacity Rule</p>
                             <p className="text-sm text-muted-foreground">
-                                Use this when a service or room can only support a certain number of guests.
+                                Use this when the selected service is only suitable for a limited number of guests.
                             </p>
                         </div>
 
@@ -260,7 +228,7 @@ export default function ServiceFormModal({
                             <textarea
                                 value={data.capacity_note}
                                 onChange={(e) => setData('capacity_note', e.target.value)}
-                                placeholder="Optional guidance, e.g. Best for 10–30 guests only."
+                                placeholder="Optional guidance, e.g. Best for 50–150 guests only."
                                 rows={3}
                                 className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                             />
@@ -280,8 +248,8 @@ export default function ServiceFormModal({
                                     ? 'Saving...'
                                     : 'Creating...'
                                 : isEdit
-                                  ? 'Save changes'
-                                  : 'Create'}
+                                  ? 'Save Changes'
+                                  : 'Create Service'}
                         </Button>
                     </DialogFooter>
                 </form>

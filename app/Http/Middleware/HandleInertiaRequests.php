@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\UserNotification;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use App\Models\Inquiry;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -36,6 +37,7 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        
         return array_merge(parent::share($request), [
             'survey' => [
                 'url' => config('survey.url'),
@@ -89,7 +91,22 @@ class HandleInertiaRequests extends Middleware
                     'latest'       => $notifications,
                 ];
             },
-    
+            'adminInquiryCounts' => function () use ($request) {
+            $user = $request->user();
+
+            if (! $user || ! $user->hasAnyRole(['admin', 'manager'])) {
+                return [
+                    'total' => 0,
+                    'new' => 0,
+                ];
+            }
+
+                return [
+                    'total' => Inquiry::query()->count(),
+                    'new' => Inquiry::query()->where('status', 'new')->count(),
+                ];
+            },
+
             'flash' => [
                 'success' => function () use ($request) {
                     return $request->session()->get('success');

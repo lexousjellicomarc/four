@@ -23,7 +23,7 @@ class UserRoleController extends Controller
                 'id' => $u->id,
                 'name' => $u->name,
                 'email' => $u->email,
-                'roles' => $u->roles->pluck('name')->all(),
+                'role' => $u->roles->pluck('name')->first(),
             ];
         });
 
@@ -41,16 +41,19 @@ class UserRoleController extends Controller
         $oldRoles = $user->roles->pluck('name')->all();
 
         $data = $request->validate([
-            'roles' => ['array'],
-            'roles.*' => ['string'],
+            'role' => ['nullable', 'string'],
         ]);
 
-        $requestedRoles = collect($data['roles'] ?? [])
-            ->filter(fn ($r) => Role::where('name', $r)->exists())
-            ->values()
-            ->all();
+        $requestedRole = null;
+        if (! empty($data['role']) && Role::where('name', $data['role'])->exists()) {
+            $requestedRole = $data['role'];
+        }
 
-        $user->syncRoles($requestedRoles);
+        if ($requestedRole) {
+            $user->syncRoles([$requestedRole]);
+        } else {
+            $user->syncRoles([]);
+        }
 
         $newRoles = $user->roles->pluck('name')->all();
 
@@ -65,6 +68,6 @@ class UserRoleController extends Controller
             }
         }
 
-        return back()->with('success', 'Roles updated for user: ' . $user->email);
+        return back()->with('success', 'Role updated for user: ' . $user->email);
     }
 }

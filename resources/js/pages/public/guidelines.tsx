@@ -8,6 +8,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import PublicLayout from '@/layouts/public-layout';
+import PageHero from '@/components/public/page-hero';
+
 
 const guidelineSections = [
   {
@@ -43,6 +45,20 @@ export default function GuidelinesPage() {
   return (
     <PublicLayout>
       <Head title="Guidelines | BCCC EASE" />
+<PageHero
+  eyebrow="Venue Guidelines"
+  title="Public booking reminders, venue-use guidance, and policy-ready information"
+  description="This page acts as the public reference for general guidelines, booking preparation, venue conduct, and operational reminders."
+  backgroundImages={[
+    '/marketing/images/branding/sunrise.jpg',
+    '/marketing/images/branding/noon.jpg',
+    '/marketing/images/events/4.jpg',
+  ]}
+  actions={[
+    { label: 'Contact for Clarification', href: '/contact' },
+    { label: 'Proceed to Booking', href: '/bookings/create', variant: 'secondary' },
+  ]}
+/>
 
       <section className="relative overflow-hidden px-4 pb-16 pt-32 md:px-6 lg:px-8">
         <div className="absolute inset-0 bg-[#ece7dc] dark:bg-[#3d3d40]" />

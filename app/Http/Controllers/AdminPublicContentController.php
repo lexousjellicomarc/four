@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use App\Models\TourismMember;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,6 +29,7 @@ class AdminPublicContentController extends Controller
             'initialCalendarBlocks' => $this->calendarBlocksPayload()->all(),
             'initialSpaces' => $this->spacesPayload()->all(),
             'initialStats' => $this->statsPayload()->all(),
+            'initialTourismMembers' => $this->membersPayload()->all(),
             'initialSiteConfig' => $this->siteSettingsPayload(),
         ]);
     }
@@ -341,6 +343,95 @@ class AdminPublicContentController extends Controller
         ]);
     }
 
+    public function storeTourismMember(Request $request): JsonResponse
+{
+    $this->ensureAdmin($request);
+
+    $data = $request->validate([
+        'full_name' => ['required', 'string', 'max:255'],
+        'designation' => ['required', 'string', 'max:255'],
+        'unit_name' => ['nullable', 'string', 'max:255'],
+        'email' => ['nullable', 'email', 'max:255'],
+        'phone' => ['nullable', 'string', 'max:255'],
+        'short_bio' => ['nullable', 'string'],
+        'details_text' => ['nullable', 'string'],
+        'is_active' => ['nullable', 'boolean'],
+        'is_featured' => ['nullable', 'boolean'],
+        'photo' => ['nullable', 'image', 'max:8192'],
+    ]);
+
+    $member = TourismMember::query()->create([
+        'full_name' => $data['full_name'],
+        'designation' => $data['designation'],
+        'unit_name' => $data['unit_name'] ?? null,
+        'email' => $data['email'] ?? null,
+        'phone' => $data['phone'] ?? null,
+        'short_bio' => $data['short_bio'] ?? null,
+        'details' => $this->detailsTextToArray($data['details_text'] ?? null),
+        'photo_path' => $this->storeSingleImage($request, 'photo', 'tourism-members'),
+        'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : true,
+        'is_featured' => array_key_exists('is_featured', $data) ? (bool) $data['is_featured'] : false,
+        'sort_order' => (TourismMember::query()->max('sort_order') ?? 0) + 1,
+    ]);
+
+    return response()->json([
+        'message' => 'Tourism member profile created successfully.',
+        'item' => $this->memberRow($member->fresh()),
+    ]);
+}
+
+public function updateTourismMember(Request $request, TourismMember $tourismMember): JsonResponse
+{
+    $this->ensureAdmin($request);
+
+    $data = $request->validate([
+        'full_name' => ['required', 'string', 'max:255'],
+        'designation' => ['required', 'string', 'max:255'],
+        'unit_name' => ['nullable', 'string', 'max:255'],
+        'email' => ['nullable', 'email', 'max:255'],
+        'phone' => ['nullable', 'string', 'max:255'],
+        'short_bio' => ['nullable', 'string'],
+        'details_text' => ['nullable', 'string'],
+        'is_active' => ['nullable', 'boolean'],
+        'is_featured' => ['nullable', 'boolean'],
+        'photo' => ['nullable', 'image', 'max:8192'],
+    ]);
+
+    $tourismMember->update([
+        'full_name' => $data['full_name'],
+        'designation' => $data['designation'],
+        'unit_name' => $data['unit_name'] ?? null,
+        'email' => $data['email'] ?? null,
+        'phone' => $data['phone'] ?? null,
+        'short_bio' => $data['short_bio'] ?? null,
+        'details' => $this->detailsTextToArray($data['details_text'] ?? null),
+        'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : true,
+        'is_featured' => array_key_exists('is_featured', $data) ? (bool) $data['is_featured'] : false,
+        'photo_path' => $request->hasFile('photo')
+            ? $this->replaceSingleImage($request, 'photo', 'tourism-members', $tourismMember->photo_path)
+            : $tourismMember->photo_path,
+    ]);
+
+    return response()->json([
+        'message' => 'Tourism member profile updated successfully.',
+        'item' => $this->memberRow($tourismMember->fresh()),
+    ]);
+}
+
+public function destroyTourismMember(Request $request, TourismMember $tourismMember): JsonResponse
+{
+    $this->ensureAdmin($request);
+
+    $this->deleteSingleImage($tourismMember->photo_path);
+    $id = $tourismMember->id;
+    $tourismMember->delete();
+
+    return response()->json([
+        'message' => 'Tourism member profile deleted successfully.',
+        'id' => $id,
+    ]);
+}
+
     public function updateSiteSettings(Request $request): JsonResponse
     {
         $this->ensureAdmin($request);
@@ -351,9 +442,12 @@ class AdminPublicContentController extends Controller
             'address' => ['nullable', 'string'],
             'phone' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
+            'visita_url' => ['nullable', 'string'],
+            'creative_baguio_url' => ['nullable', 'string'],
             'footer_description' => ['nullable', 'string'],
             'footer_copyright' => ['nullable', 'string', 'max:255'],
         ]);
+
 
         $settings = SiteSetting::query()->firstOrCreate([]);
 
@@ -363,9 +457,12 @@ class AdminPublicContentController extends Controller
             'address' => $data['address'] ?? null,
             'phone' => $data['phone'] ?? null,
             'email' => $data['email'] ?? null,
+            'visita_url' => $data['visita_url'] ?? null,
+            'creative_baguio_url' => $data['creative_baguio_url'] ?? null,
             'footer_description' => $data['footer_description'] ?? null,
             'footer_copyright' => $data['footer_copyright'] ?? null,
         ]);
+
 
         return response()->json([
             'message' => 'Site settings updated successfully.',
@@ -431,19 +528,22 @@ class AdminPublicContentController extends Controller
     }
 
     protected function siteSettingsPayload(): array
-    {
-        $settings = SiteSetting::query()->first();
+{
+    $settings = SiteSetting::query()->first();
 
-        return [
-            'mapEmbedUrl' => $settings?->map_embed_url ?? '',
-            'openMapUrl' => $settings?->open_map_url ?? '',
-            'address' => $settings?->address ?? '',
-            'phone' => $settings?->phone ?? '',
-            'email' => $settings?->email ?? '',
-            'footerDescription' => $settings?->footer_description ?? '',
-            'footerCopyright' => $settings?->footer_copyright ?? '',
-        ];
-    }
+    return [
+        'mapEmbedUrl' => $settings?->map_embed_url ?? '',
+        'openMapUrl' => $settings?->open_map_url ?? '',
+        'address' => $settings?->address ?? '',
+        'phone' => $settings?->phone ?? '',
+        'email' => $settings?->email ?? '',
+        'visitaUrl' => $settings?->visita_url ?? '',
+        'creativeBaguioUrl' => $settings?->creative_baguio_url ?? '',
+        'footerDescription' => $settings?->footer_description ?? '',
+        'footerCopyright' => $settings?->footer_copyright ?? '',
+    ];
+}
+
 
     protected function eventRow(PublicEvent $event): array
     {
@@ -498,6 +598,34 @@ class AdminPublicContentController extends Controller
         ];
     }
 
+    protected function membersPayload(): Collection
+{
+    return TourismMember::query()
+        ->orderByDesc('is_featured')
+        ->orderBy('sort_order')
+        ->orderBy('full_name')
+        ->get()
+        ->map(fn (TourismMember $member) => $this->memberRow($member))
+        ->values();
+}
+
+protected function memberRow(TourismMember $member): array
+{
+    return [
+        'id' => $member->id,
+        'fullName' => $member->full_name,
+        'designation' => $member->designation,
+        'unitName' => $member->unit_name ?? '',
+        'email' => $member->email ?? '',
+        'phone' => $member->phone ?? '',
+        'shortBio' => $member->short_bio ?? '',
+        'details' => is_array($member->details) ? $member->details : [],
+        'photo' => $member->photo_path ?? '',
+        'active' => (bool) $member->is_active,
+        'featured' => (bool) $member->is_featured,
+    ];
+}
+
     protected function detailsTextToArray(?string $text): array
     {
         if (! $text) {
@@ -512,13 +640,14 @@ class AdminPublicContentController extends Controller
     }
 
     protected function ensureAdmin(Request $request): void
-    {
-        $user = $request->user();
+{
+    $user = $request->user();
 
-        if (! $user || ! $user->hasAnyRole(['admin', 'manager'])) {
-            abort(403);
-        }
+    if (! $user || ! $user->hasAnyRole(['admin', 'manager'])) {
+        abort(403);
     }
+}
+
 
     protected function storeManyImages(Request $request, string $field, string $directory): array
     {

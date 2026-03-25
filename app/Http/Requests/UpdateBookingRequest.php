@@ -21,6 +21,7 @@ class UpdateBookingRequest extends FormRequest
         $payload['booking_date_from'] = $fromN;
         $payload['booking_date_to']   = $toN;
 
+        
         if (isset($payload['extra_schedules']) && is_array($payload['extra_schedules'])) {
             foreach ($payload['extra_schedules'] as $i => $row) {
                 if (!is_array($row)) continue;
@@ -34,6 +35,35 @@ class UpdateBookingRequest extends FormRequest
                 $payload['extra_schedules'][$i]['to']   = $et;
             }
         }
+
+        if (isset($payload['items']) && is_array($payload['items'])) {
+    $seen = [];
+    $normalizedItems = [];
+
+    foreach ($payload['items'] as $row) {
+        if (! is_array($row)) {
+            continue;
+        }
+
+        $serviceId = (int) ($row['service_id'] ?? 0);
+        if ($serviceId < 1) {
+            continue;
+        }
+
+        if (isset($seen[$serviceId])) {
+            continue;
+        }
+
+        $seen[$serviceId] = true;
+
+        $normalizedItems[] = [
+            'service_id' => $serviceId,
+            'quantity' => 1,
+        ];
+    }
+
+    $payload['items'] = $normalizedItems;
+}
 
         $this->merge($payload);
     }
@@ -67,7 +97,7 @@ class UpdateBookingRequest extends FormRequest
 
             'items' => ['sometimes', 'array', 'min:1'],
             'items.*.service_id' => ['required', 'integer', 'exists:services,id'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.quantity' => ['nullable', 'integer', 'min:1'],
 
             'company_name' => ['nullable', 'string', 'max:255'],
             'client_name' => ['required', 'string', 'max:255'],

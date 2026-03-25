@@ -9,6 +9,8 @@ export type SiteSettings = {
   address?: string | null;
   phone?: string | null;
   email?: string | null;
+  visitaUrl?: string | null;
+  creativeBaguioUrl?: string | null;
   footerDescription?: string | null;
   footerCopyright?: string | null;
 };
@@ -24,9 +26,7 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
   return (
     <div className="min-h-screen bg-[#f7f5ef] text-[#232320] dark:bg-[#0f1014] dark:text-white">
       <PublicHeader />
-
       <main className="pt-24">{children}</main>
-
       <PublicFooter siteSettings={siteSettings} />
     </div>
   );

@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { facilities as fallbackFacilities, type Facility } from '@/data/facilities';
 import PublicLayout from '@/layouts/public-layout';
+import PageHero from '@/components/public/page-hero';
+
 
 type FacilityShowPageProps = {
   facility?: Facility | null;
@@ -42,6 +44,19 @@ export default function FacilityShowPage({
     return (
       <PublicLayout>
         <Head title="Facility Not Found" />
+<PageHero
+  eyebrow={currentFacility.category}
+  title={currentFacility.title}
+  description={currentFacility.shortDescription}
+  backgroundImages={[
+    currentFacility.lightImage,
+    currentFacility.darkImage || currentFacility.lightImage,
+  ]}
+  actions={[
+    { label: 'Book This Space', href: '/bookings/create' },
+    { label: 'Ask About This Space', href: '/contact', variant: 'secondary' },
+  ]}
+/>
 
         <section className="mx-auto w-full max-w-4xl px-4 pb-12 sm:px-6 lg:px-8">
           <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-10 text-center shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-neutral-950 dark:shadow-[0_24px_70px_rgba(0,0,0,0.35)] sm:px-8">

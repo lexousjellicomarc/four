@@ -1,102 +1,108 @@
-import { Link } from '@inertiajs/react';
-import { CalendarDays, MapPin, Sparkles, Trees } from 'lucide-react';
-import AvailabilityStrip from '@/components/public/availability-strip';
+import { Link, usePage } from '@inertiajs/react';
+import HeroAvailabilityBar from '@/components/public/hero-availability-bar';
+import type { SiteSettings } from '@/layouts/public-layout';
 
 type VenueOption = {
-    label: string;
-    value: string;
-    category?: string | null;
-    capacity?: string | null;
+  label: string;
+  value: string;
+  category?: string | null;
+  capacity?: string | null;
 };
 
 interface HeroBannerProps {
-    venueOptions: VenueOption[];
+  venueOptions: VenueOption[];
 }
 
 export default function HeroBanner({ venueOptions }: HeroBannerProps) {
-    return (
-        <section className="px-4 pt-4 lg:px-6">
-            <div className="mx-auto max-w-7xl overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-[#16171b]">
-                <div className="relative overflow-hidden">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(39,99,73,0.18),_transparent_38%),radial-gradient(circle_at_top_right,_rgba(29,91,216,0.16),_transparent_35%),linear-gradient(135deg,_#f7f2e8_0%,_#ffffff_48%,_#eef4ff_100%)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(101,160,131,0.16),_transparent_38%),radial-gradient(circle_at_top_right,_rgba(96,132,255,0.22),_transparent_35%),linear-gradient(135deg,_#121318_0%,_#171923_48%,_#111827_100%)]" />
-                    <div className="relative grid gap-8 px-6 py-8 lg:grid-cols-[1.1fr_0.9fr] lg:px-10 lg:py-12">
-                        <div className="space-y-6">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[#174f40] backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-[#9dc0ff]">
-                                <Trees className="h-4 w-4" />
-                                Breathe Baguio
-                            </div>
+  const page = usePage<{ siteSettings?: SiteSettings }>();
+  const siteSettings = page.props.siteSettings;
 
-                            <div className="space-y-4">
-                                <h1 className="max-w-3xl text-4xl font-black tracking-tight text-[#1f1b16] sm:text-5xl lg:text-6xl dark:text-white">
-                                    Baguio Convention &amp; Cultural Center
-                                </h1>
+  return (
+    <section className="px-4 pt-4 lg:px-6">
+      <div className="relative mx-auto min-h-[calc(100vh-7.5rem)] max-w-7xl overflow-hidden rounded-[2.2rem] border border-white/20 shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
+        <img
+          src="/marketing/images/branding/noon.jpg"
+          alt="Baguio panoramic view"
+          className="absolute inset-0 h-full w-full object-cover dark:hidden"
+        />
+        <img
+          src="/marketing/images/hero/night.png"
+          alt="Baguio panoramic view"
+          className="absolute inset-0 hidden h-full w-full object-cover dark:block"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,12,18,0.18)_0%,rgba(8,12,18,0.28)_28%,rgba(8,12,18,0.62)_100%)]" />
 
-                                <p className="text-lg font-semibold text-[#1d5bd8] dark:text-[#a9c4ff]">
-                                    Events Access &amp; Scheduling Engine
-                                </p>
-
-                                <p className="max-w-2xl text-sm leading-7 text-[#5b564f] sm:text-base dark:text-[#c8c8ce]">
-                                    A cleaner public experience where guests can instantly check venue availability,
-                                    explore public schedules, and move to the formal booking workflow using the same
-                                    backend availability logic.
-                                </p>
-                            </div>
-
-                            <div className="flex flex-wrap gap-3">
-                                <Link
-                                    href="/bookings/create"
-                                    className="inline-flex items-center gap-2 rounded-full bg-[#174f40] px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-md dark:bg-[#2d47ff]"
-                                >
-                                    <CalendarDays className="h-4 w-4" />
-                                    Book Now
-                                </Link>
-
-                                <Link
-                                    href="/facilities"
-                                    className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-5 py-3 text-sm font-semibold text-[#1f1b16] transition hover:-translate-y-0.5 hover:shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-white"
-                                >
-                                    <MapPin className="h-4 w-4" />
-                                    Explore Spaces
-                                </Link>
-                            </div>
-
-                            <div className="grid gap-3 sm:grid-cols-3">
-                                <div className="rounded-2xl border border-black/10 bg-white/70 p-4 backdrop-blur dark:border-white/10 dark:bg-white/5">
-                                    <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#174f40] dark:text-[#9dc0ff]">
-                                        <Sparkles className="h-4 w-4" />
-                                        Real-time check
-                                    </p>
-                                    <p className="mt-2 text-sm text-[#5b564f] dark:text-[#c8c8ce]">
-                                        Same availability source used by booking and public display.
-                                    </p>
-                                </div>
-
-                                <div className="rounded-2xl border border-black/10 bg-white/70 p-4 backdrop-blur dark:border-white/10 dark:bg-white/5">
-                                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[#174f40] dark:text-[#9dc0ff]">
-                                        Public visibility
-                                    </p>
-                                    <p className="mt-2 text-sm text-[#5b564f] dark:text-[#c8c8ce]">
-                                        Public events stay visible while private bookings remain protected.
-                                    </p>
-                                </div>
-
-                                <div className="rounded-2xl border border-black/10 bg-white/70 p-4 backdrop-blur dark:border-white/10 dark:bg-white/5">
-                                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[#174f40] dark:text-[#9dc0ff]">
-                                        Venue-based
-                                    </p>
-                                    <p className="mt-2 text-sm text-[#5b564f] dark:text-[#c8c8ce]">
-                                        The venue picker now uses real spaces instead of an empty selector.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="lg:pl-2">
-                            <AvailabilityStrip venueOptions={venueOptions} />
-                        </div>
-                    </div>
-                </div>
+        <div className="relative flex min-h-[inherit] flex-col justify-center px-6 py-10 sm:px-8 lg:px-12">
+          <div className="mx-auto max-w-4xl text-center">
+            <div className="mx-auto inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.34em] text-white backdrop-blur">
+              Breathe Baguio
             </div>
-        </section>
-    );
+
+            <div className="mt-6 flex justify-center">
+              <img
+                src="/marketing/images/branding/breathe-light.png"
+                alt="Breathe Baguio"
+                className="max-h-44 w-auto object-contain dark:hidden sm:max-h-52"
+              />
+              <img
+                src="/marketing/images/branding/breathe-dark.png"
+                alt="Breathe Baguio"
+                className="hidden max-h-44 w-auto object-contain dark:block sm:max-h-52"
+              />
+            </div>
+
+            <p className="mx-auto mt-4 max-w-2xl text-sm leading-8 text-white/85 sm:text-base">
+              Public information, event visibility, venue discovery, and availability checking for the Baguio Convention and Cultural Center.
+            </p>
+
+            <div className="mt-7 flex flex-wrap justify-center gap-3">
+              <Link
+                href="/bookings/create"
+                className="inline-flex items-center rounded-full bg-[#0f8b6d] px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                Book Now
+              </Link>
+
+              <Link
+                href="/contact"
+                className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/15"
+              >
+                Inquire
+              </Link>
+            </div>
+
+            {(siteSettings?.visitaUrl || siteSettings?.creativeBaguioUrl) && (
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                {siteSettings?.visitaUrl ? (
+                  <a
+                    href={siteSettings.visitaUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center rounded-full border border-white/20 bg-black/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-black/30"
+                  >
+                    Accommodations & Itinerary
+                  </a>
+                ) : null}
+
+                {siteSettings?.creativeBaguioUrl ? (
+                  <a
+                    href={siteSettings.creativeBaguioUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center rounded-full border border-white/20 bg-black/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-black/30"
+                  >
+                    Creative Baguio
+                  </a>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-10">
+            <HeroAvailabilityBar venueOptions={venueOptions} />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }

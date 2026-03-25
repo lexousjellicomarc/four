@@ -246,131 +246,135 @@ class BookingService implements BookingServiceInterface
     }
 
     public function create(array $data): Booking
-    {
-        return DB::transaction(function () use ($data) {
-            $items          = $data['items'] ?? null;
-            $extraSchedules = (array)($data['extra_schedules'] ?? []);
-            unset($data['items'], $data['extra_schedules']);
+{
+    return DB::transaction(function () use ($data) {
+        $items = $this->normalizeItemsForBooking((array) ($data['items'] ?? []));
+        $extraSchedules = (array) ($data['extra_schedules'] ?? []);
+        $guestCount = (int) ($data['number_of_guests'] ?? 0);
 
-            unset($data['created_by_user_id']);
+        unset($data['items'], $data['extra_schedules']);
+        unset($data['created_by_user_id']);
 
-            if (isset($data['booking_date_from'], $data['booking_date_to'])) {
-                [$from, $to] = $this->normalizeRangeToPreferred(
-                    (string) $data['booking_date_from'],
-                    (string) $data['booking_date_to']
-                );
-                $data['booking_date_from'] = $from;
-                $data['booking_date_to']   = $to;
+        if (isset($data['booking_date_from'], $data['booking_date_to'])) {
+            [$from, $to] = $this->normalizeRangeToPreferred(
+                (string) $data['booking_date_from'],
+                (string) $data['booking_date_to']
+            );
 
-                $this->assertTimeSlotAvailable($from, $to, null);
-            }
+            $data['booking_date_from'] = $from;
+            $data['booking_date_to'] = $to;
 
-            $user = auth()->user();
+            $this->assertTimeSlotAvailable($from, $to, null);
+        }
 
-            if ($user) {
-                $data['created_by_user_id'] = $user->id;
-            }
+        $user = auth()->user();
 
-            if ($user && $user->hasRole('user')) {
-                $data['client_email']   = $user->email;
-                $data['booking_status'] = 'pending';
+        if ($user) {
+            $data['created_by_user_id'] = $user->id;
+        }
+
+        if ($user && $user->hasRole('user')) {
+            $data['client_email'] = $user->email;
+            $data['booking_status'] = 'pending';
+            $data['payment_status'] = 'unpaid';
+        } else {
+            if (! isset($data['payment_status'])) {
                 $data['payment_status'] = 'unpaid';
-            } else {
-                if (!isset($data['payment_status'])) {
-                    $data['payment_status'] = 'unpaid';
-                }
             }
+        }
 
-            $this->assertGuestCapacityForItems($guestCount, is_array($items) ? $items : []);
-            $booking = Booking::create($data);
+        $this->assertGuestCapacityForItems($guestCount, $items);
 
-            if (is_array($items)) {
-                $this->syncItems($booking, $items);
-            }
+        $data['service_id'] = $items[0]['service_id'] ?? null;
 
-            $this->recalculatePaymentStatus($booking);
+        $booking = Booking::create($data);
 
-            $this->createExtraSchedules($booking, $extraSchedules);
+        if (! empty($items)) {
+            $this->syncItems($booking, $items);
+        }
 
-            return $booking->refresh()->loadMissing(['createdBy']);
-        });
-    }
+        $this->recalculatePaymentStatus($booking);
+        $this->createExtraSchedules($booking, $extraSchedules);
+
+        return $booking->refresh()->loadMissing(['createdBy']);
+    });
+}
+
 
     public function update(Booking $booking, array $data): Booking
-    {
-        return DB::transaction(function () use ($booking, $data) {
-            $items = $data['items'] ?? null;
-            $extraSchedules = (array)($data['extra_schedules'] ?? []);
-            $guestCount = (int) ($data['number_of_guests'] ?? 0);
+{
+    return DB::transaction(function () use ($booking, $data) {
+        $itemsWasSubmitted = array_key_exists('items', $data);
+        $items = $itemsWasSubmitted
+            ? $this->normalizeItemsForBooking((array) ($data['items'] ?? []))
+            : null;
 
-            unset($data['items'], $data['extra_schedules']);
+        $extraSchedules = (array) ($data['extra_schedules'] ?? []);
+        unset($data['items'], $data['extra_schedules']);
+        unset($data['created_by_user_id']);
 
-            unset($data['created_by_user_id']);
+        $user = auth()->user();
 
-            $user = auth()->user();
+        if ($user && $user->hasRole('user')) {
+            $allowed = [
+                'client_name',
+                'company_name',
+                'client_contact_number',
+                'client_email',
+                'survey_email',
+                'survey_proof_image_path',
+                'survey_proof_image',
+                'survey_proof_image_mime',
+                'survey_proof_image_name',
+                'client_address',
+                'head_of_organization',
+                'type_of_event',
+                'number_of_guests',
+            ];
 
-            if ($user && $user->hasRole('user')) {
-                // ✅ CLIENT CAN EDIT EVERYTHING EXCEPT schedule/status/items/payment_status
-                $allowed = [
-                    'client_name',
-                    'company_name',
-                    'client_contact_number',
-                    'client_email',
-                    'survey_email',
-                    'survey_proof_image_path',
-                    'survey_proof_image',
-                    'survey_proof_image_mime',
-                    'survey_proof_image_name',
-                    'client_address',
-                    'head_of_organization',
+            $data = array_intersect_key($data, array_flip($allowed));
+            $items = null;
+            $itemsWasSubmitted = false;
+        }
 
-                    // ✅ now allowed for client (your request)
-                    'type_of_event',
-                    'number_of_guests',
-                ];
+        if (isset($data['booking_date_from'], $data['booking_date_to'])) {
+            [$from, $to] = $this->normalizeRangeToPreferred(
+                (string) $data['booking_date_from'],
+                (string) $data['booking_date_to']
+            );
 
-                $data = array_intersect_key($data, array_flip($allowed));
-                $items = null; // clients cannot edit items
-            }
+            $this->assertTimeSlotAvailable($from, $to, $booking->id);
 
-            if (isset($data['booking_date_from'], $data['booking_date_to'])) {
-                [$from, $to] = $this->normalizeRangeToPreferred(
-                    (string) $data['booking_date_from'],
-                    (string) $data['booking_date_to']
-                );
+            $data['booking_date_from'] = $from;
+            $data['booking_date_to'] = $to;
+        }
 
-                $this->assertTimeSlotAvailable($from, $to, $booking->id);
+        $guestCount = array_key_exists('number_of_guests', $data)
+            ? (int) $data['number_of_guests']
+            : (int) $booking->number_of_guests;
 
-                $data['booking_date_from'] = $from;
-                $data['booking_date_to']   = $to;
-            }
-            $guestCount = array_key_exists('number_of_guests', $data)
-                ? (int) $data['number_of_guests']
-                : (int) $booking->number_of_guests;
+        $itemsForCapacity = $itemsWasSubmitted
+            ? ($items ?? [])
+            : $this->existingItemsForCapacity($booking);
 
-            $itemsForCapacity = is_array($items)
-                ? $items
-                : $booking->bookingServices()
-                    ->get(['service_id', 'quantity'])
-                    ->map(fn ($row) => [
-                    'service_id' => (int) $row->service_id,
-                    'quantity' => (int) $row->quantity,
-                ])
-            ->all();
+        $this->assertGuestCapacityForItems($guestCount, $itemsForCapacity);
 
-            $this->assertGuestCapacityForItems($guestCount, $itemsForCapacity);
+        if ($itemsWasSubmitted) {
+            $data['service_id'] = $items[0]['service_id'] ?? null;
+        }
 
-            $booking->update($data);
+        $booking->update($data);
 
-            if (is_array($items)) {
-                $this->syncItems($booking, $items);
-            }
+        if ($itemsWasSubmitted) {
+            $this->syncItems($booking, $items ?? []);
+        }
 
-            $this->recalculatePaymentStatus($booking);
+        $this->recalculatePaymentStatus($booking);
 
-            return $booking->refresh();
-        });
-    }
+        return $booking->refresh();
+    });
+}
+
 
     public function delete(Booking $booking): void
     {
@@ -435,6 +439,47 @@ class BookingService implements BookingServiceInterface
             });
     }
     
+    protected function normalizeItemsForBooking(array $items): array
+{
+    $normalized = [];
+    $seen = [];
+
+    foreach ($items as $row) {
+        if (! is_array($row)) {
+            continue;
+        }
+
+        $serviceId = (int) ($row['service_id'] ?? 0);
+        if ($serviceId < 1) {
+            continue;
+        }
+
+        if (isset($seen[$serviceId])) {
+            continue;
+        }
+
+        $seen[$serviceId] = true;
+
+        $normalized[] = [
+            'service_id' => $serviceId,
+            'quantity' => 1,
+        ];
+    }
+
+    return array_values($normalized);
+}
+
+protected function existingItemsForCapacity(Booking $booking): array
+{
+    return $booking->bookingServices()
+        ->get(['service_id'])
+        ->map(fn ($row) => [
+            'service_id' => (int) $row->service_id,
+            'quantity' => 1,
+        ])
+        ->all();
+}
+
     protected function assertGuestCapacityForItems(int $guestCount, array $items): void
 {
     if ($guestCount <= 0 || empty($items)) {
@@ -495,40 +540,40 @@ class BookingService implements BookingServiceInterface
     }
 
     if (! empty($messages)) {
-        throw \Illuminate\Validation\ValidationException::withMessages([
+        throw ValidationException::withMessages([
             'items' => $messages,
             'number_of_guests' => $messages[0],
         ]);
     }
 }
 
+
     protected function syncItems(Booking $booking, array $items): void
-    {
-        $booking->bookingServices()->delete();
+{
+    $booking->bookingServices()->delete();
 
-        $lines = [];
-        foreach ($items as $i) {
-            if (!isset($i['service_id'])) continue;
-
-            $lines[] = [
-                'service_id' => (int) $i['service_id'],
-                'quantity'   => max(1, (int) ($i['quantity'] ?? 1)),
-            ];
-        }
-
-        if (!empty($lines)) {
-            $booking->bookingServices()->createMany($lines);
-        }
+    $lines = [];
+    foreach ($this->normalizeItemsForBooking($items) as $item) {
+        $lines[] = [
+            'service_id' => (int) $item['service_id'],
+            'quantity' => 1,
+        ];
     }
+
+    if (! empty($lines)) {
+        $booking->bookingServices()->createMany($lines);
+    }
+}
+
 
     public function recalculatePaymentStatus(Booking $booking): void
 {
     $booking->loadMissing(['bookingServices.service', 'payments']);
 
     $itemsTotal = $booking->bookingServices->reduce(function ($carry, $item) {
-        $price = $item->service->price ?? 0;
-        return $carry + ($price * (int) $item->quantity);
-    }, 0);
+        $price = (float) ($item->service->price ?? 0);
+        return $carry + $price;
+    }, 0.0);
 
     $completedPaid = $booking->payments
         ->where('status', 'confirmed')
@@ -558,6 +603,7 @@ class BookingService implements BookingServiceInterface
 
     $this->syncLifecycleStatus($booking);
 }
+
 
     public function syncLifecycleStatuses(): int
 {

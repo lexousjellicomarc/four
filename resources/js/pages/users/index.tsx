@@ -28,16 +28,14 @@ import { Trash2, Pencil, UserPlus, Search, X } from 'lucide-react';
 import type { BreadcrumbItem } from '@/types';
 import { useState } from 'react';
 
-const breadcrumbs: BreadcrumbItem[] = [
-  { title: 'Users', href: '/users' },
-];
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Users', href: '/users' }];
 
 type User = {
   id: number;
   name: string;
   email: string;
   email_verified_at: string | null;
-  roles: string[];
+  role: string | null;
   created_at: string;
 };
 
@@ -78,9 +76,7 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
   }
 
   function handleDelete(userId: number) {
-    router.delete(`/users/${userId}`, {
-      preserveScroll: true,
-    });
+    router.delete(`/users/${userId}`, { preserveScroll: true });
   }
 
   return (
@@ -104,12 +100,7 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
           <CardContent>
             <form onSubmit={handleSearch} className="flex gap-4">
               <div className="flex-1">
-                <Input
-                  placeholder="Search by name or email..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full"
-                />
+                <Input placeholder="Search by name or email..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full" />
               </div>
               <Select value={roleFilter} onValueChange={setRoleFilter}>
                 <SelectTrigger className="w-48">
@@ -118,9 +109,7 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
                   {availableRoles.map((role) => (
-                    <SelectItem key={role} value={role}>
-                      {role}
-                    </SelectItem>
+                    <SelectItem key={role} value={role}>{role}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -146,7 +135,7 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
                   <TableHead>ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Roles</TableHead>
+                  <TableHead>Role</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -154,9 +143,7 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
               <TableBody>
                 {users.data.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
-                      No users found
-                    </TableCell>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">No users found</TableCell>
                   </TableRow>
                 ) : (
                   users.data.map((user) => (
@@ -165,21 +152,9 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
                       <TableCell className="font-medium">{user.name}</TableCell>
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
-                        <div className="flex gap-1 flex-wrap">
-                          {user.roles.length === 0 ? (
-                            <span className="text-muted-foreground text-sm">No roles</span>
-                          ) : (
-                            user.roles.map((role) => (
-                              <Badge key={role} variant="secondary">
-                                {role}
-                              </Badge>
-                            ))
-                          )}
-                        </div>
+                        {user.role ? <Badge variant="secondary">{user.role}</Badge> : <span className="text-muted-foreground text-sm">No role</span>}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {user.created_at}
-                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{user.created_at}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm" asChild>
@@ -202,9 +177,7 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(user.id)}>
-                                  Delete
-                                </AlertDialogAction>
+                                <AlertDialogAction onClick={() => handleDelete(user.id)}>Delete</AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
@@ -217,10 +190,8 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
             </Table>
 
             {users.last_page > 1 && (
-              <div className="flex items-center justify-between px-4 py-4 border-t">
-                <div className="text-sm text-muted-foreground">
-                  Showing {users.data.length} of {users.total} users
-                </div>
+              <div className="flex items-center justify-between border-t px-4 py-4">
+                <div className="text-sm text-muted-foreground">Showing {users.data.length} of {users.total} users</div>
                 <div className="flex gap-1">
                   {users.links.map((link, index) => (
                     <Button

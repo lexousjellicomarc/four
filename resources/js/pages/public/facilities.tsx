@@ -3,6 +3,7 @@ import { ArrowRight, Building2, LayoutGrid, Users } from 'lucide-react';
 import { useMemo } from 'react';
 import { facilities as fallbackFacilities, type Facility } from '@/data/facilities';
 import PublicLayout from '@/layouts/public-layout';
+import PageHero from '@/components/public/page-hero';
 
 function groupFacilities(items: Facility[]) {
   const mainTitles = [
@@ -39,6 +40,20 @@ export default function FacilitiesPage({ spaces }: { spaces?: Facility[] }) {
   return (
     <PublicLayout>
       <Head title="Facilities" />
+<PageHero
+  eyebrow="Venue Spaces"
+  title="Explore the spaces of the Baguio Convention and Cultural Center"
+  description="Browse the center’s public-facing venue areas, support spaces, and assistance zones before proceeding to inquiry or booking coordination."
+  backgroundImages={[
+    '/marketing/images/branding/noon.jpg',
+    '/marketing/images/events/4.jpg',
+    '/marketing/images/events/lightmain.JPG',
+  ]}
+  actions={[
+    { label: 'Check Calendar', href: '/calendar' },
+    { label: 'Ask for Venue Assistance', href: '/contact', variant: 'secondary' },
+  ]}
+/>
 
       <section className="mx-auto w-full max-w-7xl space-y-10 px-4 pb-12 sm:px-6 lg:px-8">
         <div className="overflow-hidden rounded-[2rem] border border-black/5 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-neutral-950 dark:shadow-[0_24px_70px_rgba(0,0,0,0.35)]">
