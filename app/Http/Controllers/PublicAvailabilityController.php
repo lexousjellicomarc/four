@@ -25,6 +25,9 @@ class PublicAvailabilityController extends Controller
         $result = $this->bookings->getPublicDayStatus(
             $data['date'],
             $data['venue'],
+            null,
+            isset($data['event_type']) ? (string) $data['event_type'] : null,
+            isset($data['guests']) ? (int) $data['guests'] : null,
         );
 
         return response()->json($result);

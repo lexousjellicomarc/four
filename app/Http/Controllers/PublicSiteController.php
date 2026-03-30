@@ -247,11 +247,25 @@ class PublicSiteController extends Controller
             ->orderBy('date_from')
             ->get()
             ->map(function (CalendarBlock $block) {
+                $status = strtolower((string) ($block->public_status ?? 'red'));
+
                 return [
-                    'title' => $block->title,
-                    'area' => $block->area,
-                    'notes' => $block->notes,
-                    'publicStatus' => $block->public_status ?: 'red',
+                    'title' => match ($status) {
+                        'blue' => (string) ($block->title ?? 'Public Event Block'),
+                        'gold' => 'Private Booking',
+                        default => 'Blocked Date',
+                    },
+                    'area' => match ($status) {
+                        'blue' => (string) ($block->area ?? ''),
+                        'gold' => 'Reserved area details are hidden',
+                        default => 'Unavailable for public requests',
+                    },
+                    'notes' => match ($status) {
+                        'blue' => (string) ($block->notes ?? ''),
+                        'gold' => 'Private booking details are hidden from public view.',
+                        default => 'This date is blocked for maintenance, control, or other internal reasons.',
+                    },
+                    'publicStatus' => $status ?: 'red',
                     'dateFrom' => substr((string) $block->date_from, 0, 10),
                     'dateTo' => substr((string) $block->date_to, 0, 10),
                 ];

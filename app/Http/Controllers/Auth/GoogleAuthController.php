@@ -16,6 +16,12 @@ class GoogleAuthController extends Controller
 {
     public function redirect(): RedirectResponse
     {
+        if (! $this->googleIsConfigured()) {
+            return redirect()
+                ->route('login')
+                ->with('error', 'Google sign-in is not configured yet. Please use your email and password for now.');
+        }
+
         return Socialite::driver('google')
             ->scopes(['openid', 'profile', 'email'])
             ->redirect();
@@ -23,12 +29,20 @@ class GoogleAuthController extends Controller
 
     public function callback(): RedirectResponse
     {
+        if (! $this->googleIsConfigured()) {
+            return redirect()
+                ->route('login')
+                ->with('error', 'Google sign-in is not configured yet. Please use your email and password for now.');
+        }
+
         try {
             $googleUser = Socialite::driver('google')->stateless()->user();
         } catch (Throwable $e) {
+            report($e);
+
             return redirect()
                 ->route('login')
-                ->with('status', 'Google sign-in could not be completed. Please try again.');
+                ->with('error', 'Google sign-in could not be completed. Please try again.');
         }
 
         $email = Str::lower(trim((string) $googleUser->getEmail()));
@@ -36,18 +50,21 @@ class GoogleAuthController extends Controller
         if ($email === '') {
             return redirect()
                 ->route('login')
-                ->with('status', 'Google sign-in requires an email address.');
+                ->with('error', 'Google sign-in requires an email address.');
         }
 
         $user = DB::transaction(function () use ($googleUser, $email) {
+            $googleId = (string) $googleUser->getId();
+            $avatar = $googleUser->getAvatar();
+
             $existingByGoogle = User::query()
-                ->where('google_id', (string) $googleUser->getId())
+                ->where('google_id', $googleId)
                 ->first();
 
             if ($existingByGoogle) {
                 $existingByGoogle->forceFill([
                     'email' => $email,
-                    'google_avatar' => $googleUser->getAvatar(),
+                    'google_avatar' => $avatar,
                     'last_login_at' => now(),
                     'email_verified_at' => $existingByGoogle->email_verified_at ?? now(),
                 ])->save();
@@ -61,8 +78,8 @@ class GoogleAuthController extends Controller
 
             if ($existingByEmail) {
                 $existingByEmail->forceFill([
-                    'google_id' => (string) $googleUser->getId(),
-                    'google_avatar' => $googleUser->getAvatar(),
+                    'google_id' => $googleId,
+                    'google_avatar' => $avatar,
                     'last_login_at' => now(),
                     'email_verified_at' => $existingByEmail->email_verified_at ?? now(),
                 ])->save();
@@ -70,20 +87,19 @@ class GoogleAuthController extends Controller
                 return $existingByEmail;
             }
 
-            $fullName = trim((string) $googleUser->getName());
-            $nameParts = preg_split('/\s+/u', $fullName) ?: [];
-
-            $firstName = $nameParts[0] ?? 'Google';
-            $lastName = count($nameParts) > 1 ? (string) end($nameParts) : 'User';
+            [$firstName, $middleName, $lastName, $displayName] = $this->splitName(
+                trim((string) $googleUser->getName())
+            );
 
             $user = User::create([
-                'name' => trim($fullName) !== '' ? $fullName : trim($firstName . ' ' . $lastName),
+                'name' => $displayName,
                 'first_name' => $firstName,
+                'middle_name' => $middleName,
                 'last_name' => $lastName,
                 'email' => $email,
                 'password' => Hash::make(Str::random(40)),
-                'google_id' => (string) $googleUser->getId(),
-                'google_avatar' => $googleUser->getAvatar(),
+                'google_id' => $googleId,
+                'google_avatar' => $avatar,
                 'country' => 'Philippines',
                 'last_login_at' => now(),
                 'email_verified_at' => now(),
@@ -97,6 +113,41 @@ class GoogleAuthController extends Controller
         Auth::login($user, true);
         request()->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()
+            ->intended(route('dashboard', absolute: false))
+            ->with('success', 'Signed in with Google successfully.');
+    }
+
+    protected function googleIsConfigured(): bool
+    {
+        return filled(config('services.google.client_id'))
+            && filled(config('services.google.client_secret'))
+            && filled(config('services.google.redirect'));
+    }
+
+    /**
+     * @return array{0:string,1:?string,2:string,3:string}
+     */
+    protected function splitName(string $fullName): array
+    {
+        $clean = trim(preg_replace('/\s+/u', ' ', $fullName) ?? $fullName);
+
+        if ($clean === '') {
+            return ['Google', null, 'User', 'Google User'];
+        }
+
+        $parts = array_values(array_filter(explode(' ', $clean), fn ($part) => $part !== ''));
+
+        if (count($parts) === 1) {
+            return [$parts[0], null, 'User', trim($parts[0] . ' User')];
+        }
+
+        $firstName = array_shift($parts) ?: 'Google';
+        $lastName = array_pop($parts) ?: 'User';
+        $middleName = count($parts) > 0 ? implode(' ', $parts) : null;
+
+        $displayName = trim(implode(' ', array_filter([$firstName, $middleName, $lastName])));
+
+        return [$firstName, $middleName, $lastName, $displayName];
     }
 }

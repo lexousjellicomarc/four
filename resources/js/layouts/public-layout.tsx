@@ -24,9 +24,9 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
   const siteSettings = page.props.siteSettings;
 
   return (
-    <div className="min-h-screen bg-[#f7f5ef] text-[#232320] dark:bg-[#0f1014] dark:text-white">
+    <div className="public-shell min-h-screen overflow-x-clip text-slate-900 dark:text-white">
       <PublicHeader />
-      <main className="pt-24">{children}</main>
+      <main className="relative z-10 pt-24 md:pt-28">{children}</main>
       <PublicFooter siteSettings={siteSettings} />
     </div>
   );

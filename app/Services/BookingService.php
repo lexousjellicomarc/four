@@ -969,7 +969,13 @@ protected function determineAutomaticBookingStatus(Booking $booking): string
     ];
 }
 
-    public function getPublicDayStatus(string $date, ?string $area = null, $excludeBookingId = null): array
+    public function getPublicDayStatus(
+    string $date,
+    ?string $area = null,
+    $excludeBookingId = null,
+    ?string $eventType = null,
+    ?int $guestCount = null
+): array
 {
     $availability = $this->getDailyAvailability($date, $excludeBookingId, $area);
 
@@ -1017,6 +1023,9 @@ protected function determineAutomaticBookingStatus(Booking $booking): string
         ->filter(fn ($block) => (bool) data_get($block, 'is_available', false))
         ->count();
 
+    $capacitySummary = $this->summarizePublicCapacityForArea($area, $guestCount);
+    $eventProfile = $this->profilePublicEventType($eventType);
+
     $status = 'available';
 
     if ($hasRedBlock) {
@@ -1032,39 +1041,79 @@ protected function determineAutomaticBookingStatus(Booking $booking): string
     $title = 'Selected date is currently available';
     $description = 'No conflicting booking, public event, or admin block was found for the selected venue and date.';
     $note = 'You can continue to the formal booking workflow for final validation.';
+    $recommendedAction = 'You may continue to the booking request flow.';
 
     if ($status === 'limited') {
         $title = 'Selected date has limited availability';
         $description = 'Some time blocks are already occupied for the selected venue, but at least one block is still open.';
         $note = 'Check the AM / PM / EVE availability below before proceeding.';
+        $recommendedAction = 'Pick an open time block or choose another date if you need a whole-day schedule.';
     } elseif ($status === 'public_booked') {
         $title = 'Selected date already has a public event';
         $description = $events->isNotEmpty()
             ? 'This date is already assigned to a public-facing event for the selected venue.'
             : 'This date is marked as a public or government event by the calendar controls.';
         $note = 'Public events are visible to users and should appear consistently on the public calendar.';
+        $recommendedAction = 'Choose a different date for this request or coordinate with the admin office.';
     } elseif ($status === 'private_booked') {
         $title = 'Selected date is privately booked or fully occupied';
         $description = 'The selected venue is already occupied by a confirmed/private schedule for the checked date.';
         $note = 'Private booking details remain hidden, but the occupied time blocks are reflected in availability.';
+        $recommendedAction = 'Choose another date because the selected venue is already reserved.';
     } elseif ($status === 'blocked') {
         $title = 'Selected date is blocked and unavailable';
         $description = 'The admin calendar currently marks this venue/date as unavailable.';
         $note = 'Blocked dates should not accept new requests from the public checker.';
+        $recommendedAction = 'Choose another date or contact the office for clarification.';
+    }
+
+    if ($eventProfile['classification'] === 'public') {
+        $note .= ' The selected event type is public-facing, so final publication still depends on admin approval.';
+    } elseif ($eventProfile['classification'] === 'private') {
+        $note .= ' The selected event type is treated as private on the public layer unless the office publishes it as a public event.';
+    }
+
+    if ($capacitySummary['message']) {
+        $note .= ' ' . $capacitySummary['message'];
+    }
+
+    $canProceed = in_array($status, ['available', 'limited'], true);
+
+    if ($capacitySummary['ok'] === false) {
+        $canProceed = false;
+        $title = 'Selected date needs venue adjustment';
+        $description = 'The date may still have time availability, but the selected guest count does not fit the current venue rule for this area.';
+        $recommendedAction = 'Choose another venue/area or adjust the guest count before proceeding.';
     }
 
     return [
         'date' => $date,
         'venue' => $area,
+        'event_type' => $eventType,
+        'event_type_classification' => $eventProfile['classification'],
+        'guests' => $guestCount,
         'status' => $status,
         'title' => $title,
         'description' => $description,
         'note' => $note,
-        'blocks' => $availability['blocks'] ?? [],
-        'busy' => $availability['busy'] ?? [],
-        'free' => $availability['free'] ?? [],
+        'recommended_action' => $recommendedAction,
+        'can_proceed' => $canProceed,
+        'blocks' => array_values($availability['blocks'] ?? []),
+        'busy' => array_values($availability['busy'] ?? []),
+        'free' => array_values($availability['free'] ?? []),
         'is_fully_booked' => (bool) ($availability['is_fully_booked'] ?? false),
         'event_titles' => $events->pluck('title')->values()->all(),
+        'calendar_blocks' => $calendarBlocks->map(fn (CalendarBlock $block) => [
+            'title' => $this->publicCalendarBlockTitle($block),
+            'area' => $this->publicCalendarBlockArea($block),
+            'notes' => $this->publicCalendarBlockNotes($block),
+            'block' => (string) ($block->block ?? 'DAY'),
+            'public_status' => strtolower((string) ($block->public_status ?? 'red')),
+        ])->values()->all(),
+        'venue_capacity_ok' => $capacitySummary['ok'],
+        'venue_capacity_message' => $capacitySummary['message'],
+        'matching_services' => $capacitySummary['matching_services'],
+        'capacity_reasons' => $capacitySummary['reasons'],
     ];
 }
 
@@ -1080,6 +1129,178 @@ public function getPublicMonthCalendar(string $month, ?string $area = null): arr
     }
 
     return $days;
+}
+
+private function summarizePublicCapacityForArea(?string $area, ?int $guestCount): array
+{
+    if (! $guestCount || $guestCount < 1) {
+        return [
+            'ok' => null,
+            'message' => null,
+            'matching_services' => [],
+            'reasons' => [],
+        ];
+    }
+
+    if (! $area || $this->isWholeVenueLabel($area)) {
+        return [
+            'ok' => null,
+            'message' => 'Whole-venue and multi-area requests still need admin review for final guest-capacity planning.',
+            'matching_services' => [],
+            'reasons' => [],
+        ];
+    }
+
+    $services = \App\Models\Service::query()
+        ->with('serviceType')
+        ->orderBy('name')
+        ->get()
+        ->filter(function ($service) use ($area) {
+            return $this->labelMatchesArea((string) ($service->name ?? ''), $area)
+                || $this->labelMatchesArea((string) ($service->serviceType?->name ?? ''), $area)
+                || $this->isWholeVenueLabel((string) ($service->name ?? ''))
+                || $this->isWholeVenueLabel((string) ($service->serviceType?->name ?? ''));
+        })
+        ->values();
+
+    if ($services->isEmpty()) {
+        return [
+            'ok' => null,
+            'message' => 'No specific guest-capacity rule is configured yet for the selected area. Final validation will still happen during booking review.',
+            'matching_services' => [],
+            'reasons' => [],
+        ];
+    }
+
+    $matching = [];
+    $reasons = [];
+
+    foreach ($services as $service) {
+        $minGuests = $service->min_guests;
+        $maxGuests = $service->max_guests;
+        $capacityNote = trim((string) ($service->capacity_note ?? ''));
+        $serviceName = trim((string) ($service->name ?? 'Selected venue'));
+
+        $fitsMin = $minGuests === null || $guestCount >= (int) $minGuests;
+        $fitsMax = $maxGuests === null || $guestCount <= (int) $maxGuests;
+
+        if ($fitsMin && $fitsMax) {
+            $matching[] = $serviceName;
+            continue;
+        }
+
+        if ($minGuests !== null && $guestCount < (int) $minGuests) {
+            $reasons[] = sprintf(
+                '%s requires at least %d guest%s. You entered %d.%s',
+                $serviceName,
+                (int) $minGuests,
+                (int) $minGuests === 1 ? '' : 's',
+                $guestCount,
+                $capacityNote !== '' ? ' ' . $capacityNote : ''
+            );
+        }
+
+        if ($maxGuests !== null && $guestCount > (int) $maxGuests) {
+            $reasons[] = sprintf(
+                '%s allows a maximum of %d guest%s. You entered %d.%s',
+                $serviceName,
+                (int) $maxGuests,
+                (int) $maxGuests === 1 ? '' : 's',
+                $guestCount,
+                $capacityNote !== '' ? ' ' . $capacityNote : ''
+            );
+        }
+    }
+
+    if (! empty($matching)) {
+        $preview = collect($matching)->take(3)->implode(', ');
+
+        return [
+            'ok' => true,
+            'message' => 'Guest count fits the selected area based on the current venue rule' . ($preview !== '' ? ' (' . $preview . ').' : '.'),
+            'matching_services' => array_values(array_unique($matching)),
+            'reasons' => [],
+        ];
+    }
+
+    return [
+        'ok' => false,
+        'message' => $reasons[0] ?? 'The selected guest count does not fit the current venue rule for this area.',
+        'matching_services' => [],
+        'reasons' => array_values(array_unique($reasons)),
+    ];
+}
+
+private function profilePublicEventType(?string $eventType): array
+{
+    $label = trim((string) $eventType);
+    $normalized = mb_strtolower($label);
+
+    if ($normalized === '') {
+        return [
+            'label' => null,
+            'classification' => 'general',
+        ];
+    }
+
+    $publicWords = ['public', 'government', 'gov', 'community', 'cultural', 'city', 'festival', 'expo'];
+    $privateWords = ['private', 'wedding', 'birthday', 'debut', 'family', 'personal'];
+
+    foreach ($publicWords as $word) {
+        if (str_contains($normalized, $word)) {
+            return [
+                'label' => $label,
+                'classification' => 'public',
+            ];
+        }
+    }
+
+    foreach ($privateWords as $word) {
+        if (str_contains($normalized, $word)) {
+            return [
+                'label' => $label,
+                'classification' => 'private',
+            ];
+        }
+    }
+
+    return [
+        'label' => $label,
+        'classification' => 'general',
+    ];
+}
+
+private function publicCalendarBlockTitle(CalendarBlock $block): string
+{
+    $status = strtolower((string) ($block->public_status ?? 'red'));
+
+    return match ($status) {
+        'blue' => (string) ($block->title ?? 'Public Event Block'),
+        'gold' => 'Private Booking',
+        default => 'Blocked Date',
+    };
+}
+
+private function publicCalendarBlockArea(CalendarBlock $block): string
+{
+    $status = strtolower((string) ($block->public_status ?? 'red'));
+
+    if ($status === 'blue') {
+        return (string) ($block->area ?? '');
+    }
+
+    return $status === 'gold' ? 'Reserved area details are hidden' : 'Unavailable for public requests';
+}
+
+private function publicCalendarBlockNotes(CalendarBlock $block): string
+{
+    $status = strtolower((string) ($block->public_status ?? 'red'));
+
+    return match ($status) {
+        'blue' => (string) ($block->notes ?? ''),
+        'gold' => 'Private booking details are hidden from public view.',
+        default => 'This date is blocked for maintenance, control, or other internal reasons.',
+    };
 }
 
 private function labelMatchesArea(?string $candidate, string $selected): bool

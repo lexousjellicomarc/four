@@ -43,10 +43,6 @@ class AuthenticatedSessionController extends Controller
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
 
-        if (method_exists($user, 'hasVerifiedEmail') && ! $user->hasVerifiedEmail()) {
-            return redirect()->route('verification.notice');
-        }
-
         $adminTarget = $this->resolveAdminTarget($request, $user);
 
         if ($adminTarget) {

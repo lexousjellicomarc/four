@@ -450,35 +450,35 @@ export default function ShowBooking({ booking, services }: ShowBookingProps) {
   }, [services]);
 
   // Items editor state
-  type CartItem = { service_id: number; service_name: string; price: number; quantity: number };
+  type CartItem = { service_id: number; service_name: string; price: number };
 
   const initialItems: CartItem[] = Array.isArray(b.items)
     ? b.items.map((i) => ({
         service_id: Number(i.service_id ?? 0),
         service_name: String(i.service_name ?? '-'),
         price: Number(i.price ?? 0),
-        quantity: Math.max(1, Number(i.quantity ?? 1)),
       }))
     : [];
 
   const [confirmRemoveItemOpen, setConfirmRemoveItemOpen] = useState(false);
-  
   const [pendingRemoveServiceId, setPendingRemoveServiceId] = useState<number | null>(null);
-  
   const [confirmSaveServicesOpen, setConfirmSaveServicesOpen] = useState(false);
 
   const [cart, setCart] = useState<CartItem[]>(initialItems);
   const [addServiceId, setAddServiceId] = useState<string>('');
-  const [addQty, setAddQty] = useState<string>('1');
   const [serviceSearch, setServiceSearch] = useState('');
 
   const filteredServices = useMemo(() => {
     const term = serviceSearch.trim().toLowerCase();
-    if (!term) return services;
-    return services.filter(
-      (s) => s.name?.toLowerCase().includes(term) || s.description?.toLowerCase().includes(term),
-    );
-  }, [services, serviceSearch]);
+    const selectedIds = new Set(cart.map((item) => item.service_id));
+
+    return services.filter((s) => {
+      if (selectedIds.has(Number(s.id))) return false;
+      if (!term) return true;
+
+      return s.name?.toLowerCase().includes(term) || s.description?.toLowerCase().includes(term);
+    });
+  }, [services, serviceSearch, cart]);
 
   const duration = useMemo(() => {
     const start = parseLiteralDate(b.booking_date_from ?? undefined);
@@ -492,13 +492,6 @@ export default function ShowBooking({ booking, services }: ShowBookingProps) {
     const hours = Math.floor((diff % DAY) / HOUR);
     return { days, hours, totalHours: Math.floor(diff / HOUR) };
   }, [b.booking_date_from, b.booking_date_to]);
-
-  const updateCartQty = (service_id: number, qty: number) => {
-    if (isClient || isStaff) return; // ✅ staff cannot modify
-    setCart((prev) =>
-      prev.map((ci) => (ci.service_id === service_id ? { ...ci, quantity: Math.max(1, qty) } : ci)),
-    );
-  };
 
   const removeCartItem = (service_id: number) => {
     if (isClient || isStaff) return; // ✅ staff cannot modify
@@ -523,20 +516,19 @@ export default function ShowBooking({ booking, services }: ShowBookingProps) {
     if (!addServiceId) return;
 
     const sid = Number(addServiceId);
-    const svc = services.find((s) => s.id === sid);
+    const svc = services.find((s) => Number(s.id) === sid);
     if (!svc) return;
 
     setCart((prev) => {
-      const existing = prev.find((ci) => ci.service_id === sid);
-      const qty = Math.max(1, Number(addQty || '1'));
-      if (existing) {
-        return prev.map((ci) => (ci.service_id === sid ? { ...ci, quantity: ci.quantity + qty } : ci));
+      if (prev.some((ci) => ci.service_id === sid)) {
+        return prev;
       }
-      return [...prev, { service_id: sid, service_name: svc.name, price: Number(svc.price), quantity: qty }];
+
+      return [...prev, { service_id: sid, service_name: svc.name, price: Number(svc.price) }];
     });
 
-    setAddQty('1');
     setAddServiceId('');
+    setServiceSearch('');
   };
 
   const initialFrom = normalizeIso16(b.booking_date_from ?? '');
@@ -557,7 +549,7 @@ export default function ShowBooking({ booking, services }: ShowBookingProps) {
     number_of_guests: number | string;
     booking_status: string;
     payment_status: string;
-    items: Array<{ service_id: number; quantity: number }>;
+    items: Array<{ service_id: number; quantity: 1 }>;
   }>({
     service_id: b.service_id ?? null,
     company_name: b.company_name ?? '',
@@ -578,7 +570,7 @@ export default function ShowBooking({ booking, services }: ShowBookingProps) {
 
   const saveItems = () => {
     if (isClient || isStaff) return; // ✅ staff cannot modify
-    const items = cart.map((ci) => ({ service_id: ci.service_id, quantity: ci.quantity }));
+    const items = cart.map((ci) => ({ service_id: ci.service_id, quantity: 1 as const }));
     transform((prev) => ({ ...prev, items }));
     put(`/bookings/${b.id}`);
   };
@@ -746,14 +738,6 @@ export default function ShowBooking({ booking, services }: ShowBookingProps) {
                       setServiceSearch={setServiceSearch}
                       disabled={staffReadOnly}
                     />
-                    <Input
-                      type="number"
-                      min={1}
-                      className="w-24"
-                      value={addQty}
-                      onChange={(e) => setAddQty(e.currentTarget.value)}
-                      disabled={staffReadOnly}
-                    />
                     <Button type="button" onClick={addCartItem} size="sm" disabled={staffReadOnly || !addServiceId}>
                       Add
                     </Button>
@@ -768,8 +752,6 @@ export default function ShowBooking({ booking, services }: ShowBookingProps) {
                         {/* ✅ NEW COLUMN: service type shown as "Area" */}
                         <th className="py-2 pr-2">Area</th>
                         <th className="py-2 pr-2">Price</th>
-                        <th className="py-2 pr-2">Qty</th>
-                        <th className="py-2 pr-2 text-right">Total</th>
                         <th className="py-2 pr-2 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -796,24 +778,6 @@ export default function ShowBooking({ booking, services }: ShowBookingProps) {
                               })}
                             </td>
 
-                            <td className="py-2 pr-2">
-                              <Input
-                                type="number"
-                                min={1}
-                                className="w-24"
-                                value={i.quantity}
-                                onChange={(e) => updateCartQty(i.service_id, Number(e.currentTarget.value))}
-                                disabled={isClient || staffReadOnly}
-                              />
-                            </td>
-
-                            <td className="py-2 pr-2 text-right">
-                              {(i.price * i.quantity).toLocaleString('en-US', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </td>
-
                             <td className="py-2 pr-2 text-right">
                               {/* Non-client sees button; STAFF sees it disabled */}
                               {!isClient && (
@@ -834,7 +798,7 @@ export default function ShowBooking({ booking, services }: ShowBookingProps) {
 
                       {cart.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-muted-foreground">
+                          <td colSpan={4} className="py-6 text-center text-muted-foreground">
                             No services selected.
                           </td>
                         </tr>
@@ -844,12 +808,11 @@ export default function ShowBooking({ booking, services }: ShowBookingProps) {
                     {cart.length > 0 && (
                       <tfoot>
                         <tr className="border-t">
-                          {/* ✅ colSpan updated because we added "Area" column */}
-                          <td className="py-2 pr-2" colSpan={4}>
+                          <td className="py-2 pr-2" colSpan={2}>
                             Total Services
                           </td>
-                          <td className="py-2 pr-2 text-right">
-                            {cart.reduce((sum, i) => sum + i.price * i.quantity, 0).toLocaleString('en-US', {
+                          <td className="py-2 pr-2">
+                            {cart.reduce((sum, i) => sum + i.price, 0).toLocaleString('en-US', {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}

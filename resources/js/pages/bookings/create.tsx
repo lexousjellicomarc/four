@@ -192,6 +192,18 @@ function normalizeAssetUrl(url: string): string {
   return `/${value}`;
 }
 
+function fieldClass(hasError: boolean, extra?: string) {
+  return cn(
+    hasError && 'border-red-500 ring-2 ring-red-200/70 focus-visible:ring-red-200 dark:border-red-500 dark:ring-red-900/40',
+    extra,
+  );
+}
+
+function FieldError({ message }: { message?: string | null }) {
+  if (!message) return null;
+  return <p className="text-sm font-medium text-red-600 dark:text-red-400">{message}</p>;
+}
+
 type FormShape = {
   service_id: string | null;
   company_name: string;
@@ -489,15 +501,15 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
           <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="space-y-4 px-6 py-8 sm:px-8">
               <div className="inline-flex rounded-full border border-[#0f8b6d]/20 bg-[#eef7f4] px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-[#0f8b6d] dark:bg-[#172128] dark:text-[#9dc0ff]">
-                Booking Request
+                Booking
               </div>
 
               <div>
                 <h1 className="text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">
-                  Create a booking request
+                  Book your schedule
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300">
-                  The booking flow is now based on schedule availability and selected booking options. Services are selected one time only. No stock count and no service quantity are used.
+                  Choose your details, date, time block, and service. Your entries stay in place if you need to correct anything.
                 </p>
               </div>
 
@@ -566,7 +578,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
         <form onSubmit={submitBooking} className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Client / Organizer Details</CardTitle>
+              <CardTitle>Client details</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -576,8 +588,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   value={data.client_name}
                   onChange={(e) => setData('client_name', e.currentTarget.value)}
                   required
+                  className={fieldClass(Boolean(errors.client_name))}
                 />
-                {errors.client_name && <p className="text-sm text-red-600">{errors.client_name}</p>}
+                <FieldError message={errors.client_name} />
               </div>
 
               <div className="space-y-2">
@@ -586,8 +599,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   id="company_name"
                   value={data.company_name}
                   onChange={(e) => setData('company_name', e.currentTarget.value)}
+                  className={fieldClass(Boolean(errors.company_name))}
                 />
-                {errors.company_name && <p className="text-sm text-red-600">{errors.company_name}</p>}
+                <FieldError message={errors.company_name} />
               </div>
 
               <div className="space-y-2">
@@ -597,8 +611,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   value={data.client_contact_number}
                   onChange={(e) => setData('client_contact_number', e.currentTarget.value)}
                   required
+                  className={fieldClass(Boolean(errors.client_contact_number))}
                 />
-                {errors.client_contact_number && <p className="text-sm text-red-600">{errors.client_contact_number}</p>}
+                <FieldError message={errors.client_contact_number} />
               </div>
 
               <div className="space-y-2">
@@ -610,8 +625,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   onChange={(e) => setData('client_email', e.currentTarget.value)}
                   required
                   disabled={isClient && !!authEmail}
+                  className={fieldClass(Boolean(errors.client_email), isClient && !!authEmail ? 'bg-muted text-muted-foreground' : undefined)}
                 />
-                {errors.client_email && <p className="text-sm text-red-600">{errors.client_email}</p>}
+                <FieldError message={errors.client_email} />
               </div>
 
               <div className="space-y-2">
@@ -620,8 +636,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   id="head_of_organization"
                   value={data.head_of_organization}
                   onChange={(e) => setData('head_of_organization', e.currentTarget.value)}
+                  className={fieldClass(Boolean(errors.head_of_organization))}
                 />
-                {errors.head_of_organization && <p className="text-sm text-red-600">{errors.head_of_organization}</p>}
+                <FieldError message={errors.head_of_organization} />
               </div>
 
               <div className="space-y-2">
@@ -631,8 +648,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   value={data.type_of_event}
                   onChange={(e) => setData('type_of_event', e.currentTarget.value)}
                   required
+                  className={fieldClass(Boolean(errors.type_of_event))}
                 />
-                {errors.type_of_event && <p className="text-sm text-red-600">{errors.type_of_event}</p>}
+                <FieldError message={errors.type_of_event} />
               </div>
 
               <div className="space-y-2 md:col-span-2">
@@ -642,10 +660,10 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   value={data.client_address}
                   onChange={(e) => setData('client_address', e.currentTarget.value)}
                   rows={3}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  className={fieldClass(Boolean(errors.client_address), 'w-full rounded-md bg-background px-3 py-2 text-sm')}
                   required
                 />
-                {errors.client_address && <p className="text-sm text-red-600">{errors.client_address}</p>}
+                <FieldError message={errors.client_address} />
               </div>
 
               <div className="space-y-2">
@@ -657,8 +675,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   value={data.number_of_guests}
                   onChange={(e) => setData('number_of_guests', e.currentTarget.value)}
                   required
+                  className={fieldClass(Boolean(errors.number_of_guests))}
                 />
-                {errors.number_of_guests && <p className="text-sm text-red-600">{errors.number_of_guests}</p>}
+                <FieldError message={errors.number_of_guests} />
               </div>
 
               {!isClient && (
@@ -668,7 +687,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                     id="booking_status"
                     value={data.booking_status}
                     onChange={(e) => setData('booking_status', e.currentTarget.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    className={fieldClass(Boolean(errors.booking_status), 'h-10 w-full rounded-md bg-background px-3 text-sm')}
                   >
                     <option value="pending">Pending</option>
                     <option value="confirmed">Confirmed</option>
@@ -677,7 +696,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                     <option value="cancelled">Cancelled</option>
                     <option value="completed">Completed</option>
                   </select>
-                  {errors.booking_status && <p className="text-sm text-red-600">{errors.booking_status}</p>}
+                  <FieldError message={errors.booking_status} />
                 </div>
               )}
             </CardContent>
@@ -685,7 +704,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
 
           <Card>
             <CardHeader>
-              <CardTitle>Schedule Selection</CardTitle>
+              <CardTitle>Choose date and time</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
@@ -698,6 +717,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                     value={bookingDate}
                     onChange={(e) => setBookingDate(e.currentTarget.value)}
                     required
+                    className={fieldClass(Boolean(scheduleError || errors.booking_date_from || errors.booking_date_to))}
                   />
                 </div>
 
@@ -750,7 +770,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
               </div>
 
               {(scheduleError || errors.booking_date_from || errors.booking_date_to) && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
                   {scheduleError || errors.booking_date_from || errors.booking_date_to}
                 </div>
               )}
@@ -759,11 +779,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
 
           <Card>
             <CardHeader>
-              <CardTitle>Select Services</CardTitle>
+              <CardTitle>Choose services</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="rounded-2xl border border-[#dce9e4] bg-[#eef7f4] px-4 py-3 text-sm text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
-                Services are selected one time only. Quantity and stock are not used anymore. Availability depends on the date and schedule block of the booking.
+                Choose one or more services. Each service is added once only.
               </div>
 
               <div className="space-y-2">
@@ -774,8 +794,8 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                     id="service_search"
                     value={search}
                     onChange={(e) => setSearch(e.currentTarget.value)}
-                    className="pl-10"
-                    placeholder="Search by service name or type"
+                    className={fieldClass(Boolean(errors.service_search), 'pl-10')}
+                    placeholder="Search service or area"
                   />
                 </div>
               </div>
@@ -861,7 +881,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                       Selected Services
                     </div>
 
-                    <div className="space-y-3">
+                    <div className="max-h-[24rem] space-y-3 overflow-y-auto pr-1 scrollbar-hide">
                       {cart.length > 0 ? (
                         cart.map((item) => (
                           <div
@@ -894,7 +914,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                         ))
                       ) : (
                         <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">
-                          No services selected yet.
+                          No service selected yet.
                         </div>
                       )}
                     </div>
@@ -911,7 +931,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                     </div>
 
                     {(errors.items as any) && (
-                      <p className="mt-3 text-sm text-red-600">{String(errors.items)}</p>
+                      <FieldError message={String(errors.items)} />
                     )}
                   </div>
                 </div>
@@ -921,11 +941,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
 
           <Card>
             <CardHeader>
-              <CardTitle>Survey Requirement</CardTitle>
+              <CardTitle>Survey</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-2xl border border-black/5 bg-[#f7f5ef] px-4 py-4 text-sm leading-7 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                Complete the survey first, then provide the email used in the survey and upload the proof image.
+                Open the survey, then enter the email used and upload the proof image.
               </div>
 
               <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
@@ -969,8 +989,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                       value={data.survey_email}
                       onChange={(e) => setData('survey_email', e.currentTarget.value)}
                       required
+                      className={fieldClass(Boolean(errors.survey_email))}
                     />
-                    {errors.survey_email && <p className="text-sm text-red-600">{errors.survey_email}</p>}
+                    <FieldError message={errors.survey_email} />
                   </div>
 
                   <div className="space-y-2">
@@ -981,8 +1002,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                       accept="image/*"
                       onChange={(e) => setData('survey_proof_image', e.currentTarget.files?.[0] ?? null)}
                       required
+                      className={fieldClass(Boolean(errors.survey_proof_image))}
                     />
-                    {errors.survey_proof_image && <p className="text-sm text-red-600">{errors.survey_proof_image}</p>}
+                    <FieldError message={errors.survey_proof_image} />
                   </div>
 
                   {previewUrl && (

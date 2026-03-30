@@ -2,104 +2,114 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Inquiry;
 use App\Models\UserNotification;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
-use App\Models\Inquiry;
 
 class HandleInertiaRequests extends Middleware
 {
     /**
      * The root template that's loaded on the first page visit.
      *
-     * @see https://inertiajs.com/server-side-setup#root-template
-     *
      * @var string
      */
     protected $rootView = 'app';
 
-    /**
-     * Determines the current asset version.
-     *
-     * @see https://inertiajs.com/asset-versioning
-     */
     public function version(Request $request): ?string
     {
         return parent::version($request);
     }
 
     /**
-     * Define the props that are shared by default.
-     *
-     * @see https://inertiajs.com/shared-data
-     *
      * @return array<string, mixed>
      */
     public function share(Request $request): array
     {
-        
+        $user = $request->user();
+
         return array_merge(parent::share($request), [
             'survey' => [
                 'url' => config('survey.url'),
                 'qr_image_url' => config('survey.qr_image_url'),
             ],
-            
+
+            'features' => [
+                'googleAuthEnabled' => filled(config('services.google.client_id'))
+                    && filled(config('services.google.client_secret'))
+                    && filled(config('services.google.redirect')),
+            ],
+
             'auth' => [
-                'user' => $request->user()
+                'user' => $user
                     ? [
-                        'id'    => $request->user()->id,
-                        'name'  => $request->user()->name,
-                        'email' => $request->user()->email,
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'display_name' => $user->display_name,
+                        'first_name' => $user->first_name,
+                        'middle_name' => $user->middle_name,
+                        'last_name' => $user->last_name,
+                        'email' => $user->email,
+                        'phone_number' => $user->phone_number,
+                        'organization_name' => $user->organization_name,
+                        'organization_type' => $user->organization_type,
+                        'position_title' => $user->position_title,
+                        'address_line1' => $user->address_line1,
+                        'barangay' => $user->barangay,
+                        'city_municipality' => $user->city_municipality,
+                        'province' => $user->province,
+                        'postal_code' => $user->postal_code,
+                        'country' => $user->country,
+                        'google_avatar' => $user->google_avatar,
+                        'email_verified_at' => optional($user->email_verified_at)->toIso8601String(),
+                        'last_login_at' => optional($user->last_login_at)->toIso8601String(),
                     ]
                     : null,
-                'roles' => $request->user()
-                    ? $request->user()->getRoleNames()->toArray()
+                'roles' => $user
+                    ? $user->getRoleNames()->toArray()
                     : [],
-                'permissions' => $request->user()
-                    ? $request->user()->getAllPermissions()->pluck('name')->toArray()
+                'permissions' => $user
+                    ? $user->getAllPermissions()->pluck('name')->toArray()
                     : [],
             ],
-    
-            'notifications' => function () use ($request) {
-                $user = $request->user();
-    
+
+            'notifications' => function () use ($user) {
                 if (! $user) {
                     return [
                         'unread_count' => 0,
-                        'latest'       => [],
+                        'latest' => [],
                     ];
                 }
-    
+
                 $notifications = $user->notifications()
                     ->latest()
                     ->limit(10)
                     ->get()
                     ->map(function (UserNotification $notification) {
                         return [
-                            'id'         => $notification->id,
-                            'type'       => $notification->type,
-                            'title'      => $notification->title,
-                            'message'    => $notification->message,
-                            'link'       => $notification->link,
-                            'read_at'    => optional($notification->read_at)->toIso8601String(),
+                            'id' => $notification->id,
+                            'type' => $notification->type,
+                            'title' => $notification->title,
+                            'message' => $notification->message,
+                            'link' => $notification->link,
+                            'read_at' => optional($notification->read_at)->toIso8601String(),
                             'created_at' => optional($notification->created_at)->toIso8601String(),
                         ];
                     });
-    
+
                 return [
                     'unread_count' => $user->notifications()->whereNull('read_at')->count(),
-                    'latest'       => $notifications,
+                    'latest' => $notifications,
                 ];
             },
-            'adminInquiryCounts' => function () use ($request) {
-            $user = $request->user();
 
-            if (! $user || ! $user->hasAnyRole(['admin', 'manager'])) {
-                return [
-                    'total' => 0,
-                    'new' => 0,
-                ];
-            }
+            'adminInquiryCounts' => function () use ($user) {
+                if (! $user || ! $user->hasAnyRole(['admin', 'manager'])) {
+                    return [
+                        'total' => 0,
+                        'new' => 0,
+                    ];
+                }
 
                 return [
                     'total' => Inquiry::query()->count(),
@@ -108,12 +118,8 @@ class HandleInertiaRequests extends Middleware
             },
 
             'flash' => [
-                'success' => function () use ($request) {
-                    return $request->session()->get('success');
-                },
-                'error' => function () use ($request) {
-                    return $request->session()->get('error');
-                },
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
             ],
         ]);
     }

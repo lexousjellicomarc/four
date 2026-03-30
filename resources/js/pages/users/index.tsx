@@ -13,20 +13,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { Trash2, Pencil, UserPlus, Search, X } from 'lucide-react';
+import ConfirmActionDialog from '@/components/confirm-action-dialog';
+import { Trash2, Pencil, UserPlus, Search, X, ShieldCheck } from 'lucide-react';
 import type { BreadcrumbItem } from '@/types';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Users', href: '/users' }];
 
@@ -34,9 +24,15 @@ type User = {
   id: number;
   name: string;
   email: string;
+  phone_number: string | null;
+  organization_name: string | null;
+  organization_type: string | null;
+  position_title: string | null;
   email_verified_at: string | null;
+  last_login_at: string | null;
+  google_id: string | null;
   role: string | null;
-  created_at: string;
+  created_at: string | null;
 };
 
 type PaginatedUsers = {
@@ -49,48 +45,124 @@ type PaginatedUsers = {
 };
 
 interface UsersIndexProps {
-  users: PaginatedUsers;
-  availableRoles: string[];
-  filters: {
+  users?: PaginatedUsers;
+  availableRoles?: string[];
+  filters?: {
     search?: string;
     role?: string;
   };
 }
 
-export default function UsersIndex({ users, availableRoles, filters }: UsersIndexProps) {
-  const [search, setSearch] = useState(filters.search || '');
-  const [roleFilter, setRoleFilter] = useState(filters.role || 'all');
+function formatDateTime(value: string | null) {
+  if (!value) return '—';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString();
+}
+
+export default function UsersIndex({ users, availableRoles = [], filters }: UsersIndexProps) {
+  const safeUsers: PaginatedUsers = users ?? {
+    data: [],
+    current_page: 1,
+    last_page: 1,
+    per_page: 10,
+    total: 0,
+    links: [],
+  };
+
+  const [search, setSearch] = useState(filters?.search || '');
+  const [roleFilter, setRoleFilter] = useState(filters?.role || 'all');
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+
+  const stats = useMemo(() => {
+    return {
+      total: safeUsers.total,
+      verified: safeUsers.data.filter((user) => !!user.email_verified_at).length,
+      google: safeUsers.data.filter((user) => !!user.google_id).length,
+      admins: safeUsers.data.filter((user) => user.role === 'admin').length,
+    };
+  }, [safeUsers]);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     const params: { search?: string; role?: string } = {};
-    if (search) params.search = search;
+    if (search.trim()) params.search = search.trim();
     if (roleFilter && roleFilter !== 'all') params.role = roleFilter;
-    router.get('/users', params, { preserveState: true });
+    router.get('/users', params, { preserveState: true, preserveScroll: true });
   }
 
   function handleClearFilters() {
     setSearch('');
     setRoleFilter('all');
-    router.get('/users', {}, { preserveState: true });
+    router.get('/users', {}, { preserveState: true, preserveScroll: true });
   }
 
-  function handleDelete(userId: number) {
-    router.delete(`/users/${userId}`, { preserveScroll: true });
+  function handleDelete() {
+    if (!deleteTarget) return;
+
+    router.delete(`/users/${deleteTarget.id}`, {
+      preserveScroll: true,
+      onFinish: () => setDeleteTarget(null),
+    });
   }
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="User Management" />
+
       <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">User Management</h1>
-          <Button asChild>
-            <Link href="/users/create">
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add User
-            </Link>
-          </Button>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">User Management</h1>
+            <p className="text-sm text-muted-foreground">
+              Admin-side account records now match the richer profile fields used in the frontend.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/users/roles">
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                Manage Roles
+              </Link>
+            </Button>
+
+            <Button asChild>
+              <Link href="/users/create">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add User
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Card>
+            <CardContent className="p-5">
+              <div className="text-sm text-muted-foreground">Total Users</div>
+              <div className="mt-2 text-2xl font-bold">{stats.total}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-5">
+              <div className="text-sm text-muted-foreground">Verified on This Page</div>
+              <div className="mt-2 text-2xl font-bold">{stats.verified}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-5">
+              <div className="text-sm text-muted-foreground">Google Accounts on This Page</div>
+              <div className="mt-2 text-2xl font-bold">{stats.google}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-5">
+              <div className="text-sm text-muted-foreground">Admins on This Page</div>
+              <div className="mt-2 text-2xl font-bold">{stats.admins}</div>
+            </CardContent>
+          </Card>
         </div>
 
         <Card>
@@ -98,18 +170,22 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
             <CardTitle>Filter Users</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSearch} className="flex gap-4">
-              <div className="flex-1">
-                <Input placeholder="Search by name or email..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full" />
-              </div>
+            <form onSubmit={handleSearch} className="grid gap-3 md:grid-cols-[1fr_220px_auto_auto]">
+              <Input
+                placeholder="Search by name, email, phone, organization, or position..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
               <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger>
                   <SelectValue placeholder="Filter by role" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
                   {availableRoles.map((role) => (
-                    <SelectItem key={role} value={role}>{role}</SelectItem>
+                    <SelectItem key={role} value={role}>
+                      {role}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -128,33 +204,66 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
         </Card>
 
         <Card>
-          <CardContent>
+          <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
+                  <TableHead>User</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Organization</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Account Status</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.data.length === 0 ? (
+                {safeUsers.data.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">No users found</TableCell>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">No users found.</TableCell>
                   </TableRow>
                 ) : (
-                  users.data.map((user) => (
+                  safeUsers.data.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell>{user.id}</TableCell>
-                      <TableCell className="font-medium">{user.name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
                       <TableCell>
-                        {user.role ? <Badge variant="secondary">{user.role}</Badge> : <span className="text-muted-foreground text-sm">No role</span>}
+                        <div className="space-y-1">
+                          <div className="font-medium">{user.name}</div>
+                          <div className="text-xs text-muted-foreground">ID #{user.id}</div>
+                        </div>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{user.created_at}</TableCell>
+
+                      <TableCell>
+                        <div className="space-y-1 text-sm">
+                          <div>{user.email}</div>
+                          <div className="text-muted-foreground">{user.phone_number || 'No phone number'}</div>
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="space-y-1 text-sm">
+                          <div>{user.organization_name || '—'}</div>
+                          <div className="text-muted-foreground">
+                            {[user.organization_type, user.position_title].filter(Boolean).join(' • ') || 'No organization details'}
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        {user.role ? <Badge variant="secondary">{user.role}</Badge> : <span className="text-sm text-muted-foreground">No role</span>}
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex flex-col gap-1 text-sm">
+                          <div className="flex flex-wrap gap-1">
+                            {user.email_verified_at ? <Badge>Email verified</Badge> : <Badge variant="outline">Unverified</Badge>}
+                            {user.google_id ? <Badge variant="secondary">Google</Badge> : <Badge variant="outline">Manual</Badge>}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Last login: {formatDateTime(user.last_login_at)}</div>
+                        </div>
+                      </TableCell>
+
+                      <TableCell className="text-sm text-muted-foreground">{user.created_at ?? '—'}</TableCell>
+
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm" asChild>
@@ -162,25 +271,10 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
                               <Pencil className="h-4 w-4" />
                             </Link>
                           </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="destructive" size="sm">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete User</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to delete <strong>{user.name}</strong>? This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(user.id)}>Delete</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+
+                          <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(user)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -189,11 +283,11 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
               </TableBody>
             </Table>
 
-            {users.last_page > 1 && (
-              <div className="flex items-center justify-between border-t px-4 py-4">
-                <div className="text-sm text-muted-foreground">Showing {users.data.length} of {users.total} users</div>
-                <div className="flex gap-1">
-                  {users.links.map((link, index) => (
+            {safeUsers.last_page > 1 && (
+              <div className="flex flex-col gap-3 border-t px-4 py-4 md:flex-row md:items-center md:justify-between">
+                <div className="text-sm text-muted-foreground">Showing {safeUsers.data.length} of {safeUsers.total} users</div>
+                <div className="flex flex-wrap gap-1">
+                  {safeUsers.links.map((link, index) => (
                     <Button
                       key={index}
                       variant={link.active ? 'default' : 'outline'}
@@ -209,6 +303,17 @@ export default function UsersIndex({ users, availableRoles, filters }: UsersInde
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmActionDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete user?"
+        description={deleteTarget ? `This will permanently delete ${deleteTarget.name}. This action cannot be undone.` : 'This action cannot be undone.'}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={handleDelete}
+        variant="destructive"
+      />
     </AppLayout>
   );
 }

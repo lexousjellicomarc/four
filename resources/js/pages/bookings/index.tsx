@@ -420,7 +420,7 @@ export default function Bookings(props: BookingsPageProps) {
             </div>
 
             {/* Status summary */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
               {[
                 { key: 'all', label: 'All', count: statusCounts.all },
                 { key: 'pending', label: 'Pending', count: statusCounts.pending },
@@ -455,7 +455,7 @@ export default function Bookings(props: BookingsPageProps) {
 
             {/* Filters + Sort */}
             <form
-              className="grid grid-cols-1 md:grid-cols-8 gap-2"
+              className="grid grid-cols-1 gap-2 lg:grid-cols-8"
               onSubmit={(e) => {
                 e.preventDefault();
                 applyQuery();
@@ -564,7 +564,7 @@ export default function Bookings(props: BookingsPageProps) {
 
           <CardContent>
             <Table>
-              <TableCaption>A list of customer bookings.</TableCaption>
+              <TableCaption>Bookings list</TableCaption>
 
               <TableHeader>
                 <TableRow>

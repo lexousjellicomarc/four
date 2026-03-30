@@ -1,88 +1,43 @@
-import { useEffect, useRef, useState } from 'react';
-import { stats as fallbackStats, type StatItem } from '@/data/stats';
+import type { HomepageStatItem } from '@/types/public-content';
 
-function CountUpStat({
-  value,
-  suffix,
-  label,
-  start,
-}: StatItem & { start: boolean }) {
-  const target = Number(value);
-  const [displayValue, setDisplayValue] = useState(0);
+type Props = {
+  items?: HomepageStatItem[];
+};
 
-  useEffect(() => {
-    if (!start || Number.isNaN(target)) return;
+const fallbackStats: HomepageStatItem[] = [
+  { id: '1', value: '2000', suffix: '+', label: 'Seating Capacity' },
+  { id: '2', value: '50', suffix: '+', label: 'Parking Spaces' },
+  { id: '3', value: '1000', suffix: '+', label: 'Events Hosted' },
+  { id: '4', value: '48', suffix: '', label: 'Years of Experience' },
+];
 
-    let frame = 0;
-    const totalFrames = 45;
-    const counter = window.setInterval(() => {
-      frame += 1;
-      const progress = frame / totalFrames;
-      const current = Math.round(target * progress);
-
-      setDisplayValue(current);
-
-      if (frame >= totalFrames) {
-        window.clearInterval(counter);
-        setDisplayValue(target);
-      }
-    }, 24);
-
-    return () => window.clearInterval(counter);
-  }, [start, target]);
+export default function StatsBanner({ items = [] }: Props) {
+  const source = items.length > 0 ? items : fallbackStats;
 
   return (
-    <div className="rounded-3xl border border-black/5 bg-white/70 px-5 py-6 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5">
-      <div className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-4xl">
-        {displayValue}
-        {suffix}
-      </div>
-      <div className="mt-2 text-sm font-medium uppercase tracking-[0.28em] text-slate-500 dark:text-slate-300">
-        {label}
-      </div>
-    </div>
-  );
-}
+    <section className="public-container mt-12">
+      <div className="relative overflow-hidden rounded-[2.2rem] border border-white/10">
+        <img
+          src="/marketing/images/events/lightmain.JPG"
+          alt="BCCC exterior"
+          className="absolute inset-0 h-full w-full object-cover dark:hidden"
+        />
+        <img
+          src="/marketing/images/events/darkmain.JPG"
+          alt="BCCC exterior"
+          className="absolute inset-0 hidden h-full w-full object-cover dark:block"
+        />
+        <div className="absolute inset-0 bg-slate-950/48 dark:bg-slate-950/62" />
 
-export default function StatsBanner({ items }: { items?: StatItem[] }) {
-  const stats = items && items.length > 0 ? items : fallbackStats;
-  const sectionRef = useRef<HTMLElement | null>(null);
-  const [startAnimation, setStartAnimation] = useState(false);
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setStartAnimation(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.35 },
-    );
-
-    observer.observe(section);
-
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <section
-      ref={sectionRef}
-      className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8"
-    >
-      <div className="rounded-[2rem] border border-black/5 bg-gradient-to-br from-emerald-50 via-white to-slate-100 px-6 py-8 shadow-[0_25px_80px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-gradient-to-br dark:from-emerald-500/10 dark:via-slate-950 dark:to-slate-900 dark:shadow-[0_25px_80px_rgba(0,0,0,0.35)] sm:px-8 lg:px-10">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {stats.map((stat) => (
-            <CountUpStat
-              key={stat.label}
-              value={stat.value}
-              suffix={stat.suffix}
-              label={stat.label}
-              start={startAnimation}
-            />
+        <div className="relative grid gap-4 px-5 py-8 text-center text-white md:grid-cols-4 md:px-8 md:py-12">
+          {source.slice(0, 4).map((item) => (
+            <div key={item.id} className="rounded-[1.5rem] bg-white/10 px-4 py-5 backdrop-blur-md">
+              <div className="text-4xl font-semibold tracking-tight">
+                {item.value}
+                {item.suffix}
+              </div>
+              <div className="mt-2 text-sm uppercase tracking-[0.24em] text-white/80">{item.label}</div>
+            </div>
           ))}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react';
+import { CircleAlert, Info, LoaderCircle } from 'lucide-react';
 
 type VenueOption = {
   label: string;
@@ -36,20 +37,14 @@ const eventTypeOptions = [
 ];
 
 function getCsrfToken() {
-  return (
-    document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')?.trim() ?? ''
-  );
+  return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')?.trim() ?? '';
 }
 
 async function parseResponse(response: Response) {
   const contentType = response.headers.get('content-type') ?? '';
-
-  if (contentType.includes('application/json')) {
-    return response.json();
-  }
+  if (contentType.includes('application/json')) return response.json();
 
   const text = await response.text();
-
   try {
     return JSON.parse(text);
   } catch {
@@ -57,18 +52,18 @@ async function parseResponse(response: Response) {
   }
 }
 
-function resultTone(status: AvailabilityStatus) {
+function tone(status: AvailabilityStatus) {
   switch (status) {
     case 'available':
-      return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+      return 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200';
     case 'limited':
-      return 'border-amber-200 bg-amber-50 text-amber-800';
+      return 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200';
     case 'public_booked':
-      return 'border-blue-200 bg-blue-50 text-blue-800';
+      return 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-200';
     case 'private_booked':
-      return 'border-yellow-200 bg-yellow-50 text-yellow-800';
+      return 'border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-900/50 dark:bg-yellow-950/40 dark:text-yellow-200';
     default:
-      return 'border-red-200 bg-red-50 text-red-800';
+      return 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200';
   }
 }
 
@@ -81,7 +76,7 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
   const [validationMessage, setValidationMessage] = useState('');
   const [result, setResult] = useState<AvailabilityResult | null>(null);
 
-  const selectedVenueMeta = useMemo(
+  const selectedVenue = useMemo(
     () => venueOptions.find((item) => item.value === venue) ?? null,
     [venue, venueOptions],
   );
@@ -90,7 +85,7 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
     e.preventDefault();
 
     if (!date || !eventType || !venue || !guests) {
-      setValidationMessage('Complete the date, event type, venue, and guest count first.');
+      setValidationMessage('Please complete the date, event type, area, and guest count.');
       return;
     }
 
@@ -131,10 +126,10 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
   };
 
   return (
-    <div className="rounded-[2rem] border border-white/15 bg-white/10 p-3 backdrop-blur-md">
-      <form onSubmit={handleSubmit} className="grid gap-2 md:grid-cols-[1.1fr_1.1fr_1.2fr_1fr_auto]">
-        <label className="rounded-[1.4rem] bg-white/90 px-4 py-3 text-left text-[#1f1f1c]">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+    <div className="glass-card rounded-[1.75rem] p-3 shadow-[0_18px_40px_rgba(15,23,42,0.12)] dark:shadow-[0_18px_40px_rgba(2,8,23,0.42)]">
+      <form onSubmit={handleSubmit} className="grid gap-2 lg:grid-cols-[1.08fr_1.08fr_1.1fr_0.95fr_auto]">
+        <label className="rounded-[1.25rem] bg-white/85 px-4 py-3 text-slate-800 dark:bg-slate-900/80 dark:text-white">
+          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
             Event Date
           </div>
           <input
@@ -145,8 +140,8 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
           />
         </label>
 
-        <label className="rounded-[1.4rem] bg-white/90 px-4 py-3 text-left text-[#1f1f1c]">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+        <label className="rounded-[1.25rem] bg-white/85 px-4 py-3 text-slate-800 dark:bg-slate-900/80 dark:text-white">
+          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
             Event Type
           </div>
           <select
@@ -163,8 +158,8 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
           </select>
         </label>
 
-        <label className="rounded-[1.4rem] bg-white/90 px-4 py-3 text-left text-[#1f1f1c]">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+        <label className="rounded-[1.25rem] bg-white/85 px-4 py-3 text-slate-800 dark:bg-slate-900/80 dark:text-white">
+          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
             Select Area
           </div>
           <select
@@ -181,8 +176,8 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
           </select>
         </label>
 
-        <label className="rounded-[1.4rem] bg-white/90 px-4 py-3 text-left text-[#1f1f1c]">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+        <label className="rounded-[1.25rem] bg-white/85 px-4 py-3 text-slate-800 dark:bg-slate-900/80 dark:text-white">
+          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
             Guests Count
           </div>
           <input
@@ -190,7 +185,7 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
             min={1}
             value={guests}
             onChange={(e) => setGuests(e.target.value)}
-            placeholder="Estimated guest count"
+            placeholder="Estimated guests"
             className="mt-1 w-full bg-transparent text-sm font-semibold outline-none"
           />
         </label>
@@ -198,30 +193,43 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
         <button
           type="submit"
           disabled={loading}
-          className="rounded-[1.4rem] bg-[#0f8b6d] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-70"
+          className="rounded-[1.25rem] bg-[#0f8b6d] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-70 dark:bg-[#294CFF]"
         >
-          {loading ? 'Checking...' : 'Check Availability'}
+          {loading ? (
+            <span className="inline-flex items-center gap-2">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              Checking
+            </span>
+          ) : (
+            'Check Availability'
+          )}
         </button>
       </form>
 
-      {selectedVenueMeta ? (
-        <div className="mt-2 rounded-[1.2rem] border border-white/10 bg-black/20 px-4 py-3 text-xs text-white/90">
-          {selectedVenueMeta.label}
-          {selectedVenueMeta.category ? ` • ${selectedVenueMeta.category}` : ''}
-          {selectedVenueMeta.capacity ? ` • Capacity: ${selectedVenueMeta.capacity}` : ''}
+      {selectedVenue ? (
+        <div className="mt-2 flex flex-wrap gap-2 rounded-[1rem] bg-black/5 px-4 py-3 text-xs text-slate-700 dark:bg-white/5 dark:text-slate-200">
+          <span className="font-semibold">{selectedVenue.label}</span>
+          {selectedVenue.category ? <span>• {selectedVenue.category}</span> : null}
+          {selectedVenue.capacity ? <span>• Capacity: {selectedVenue.capacity}</span> : null}
         </div>
       ) : null}
 
       {validationMessage ? (
-        <div className="mt-2 rounded-[1.2rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {validationMessage}
+        <div className="mt-2 inline-flex w-full items-start gap-2 rounded-[1rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{validationMessage}</span>
         </div>
       ) : null}
 
       {result ? (
-        <div className={`mt-2 rounded-[1.2rem] border px-4 py-3 text-sm ${resultTone(result.status)}`}>
-          <div className="font-semibold">{result.title}</div>
-          <div className="mt-1">{result.note}</div>
+        <div className={`mt-2 rounded-[1rem] border px-4 py-3 text-sm ${tone(result.status)}`}>
+          <div className="flex items-start gap-2">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <div className="font-semibold">{result.title}</div>
+              <div className="mt-1 text-sm/6">{result.note || result.description}</div>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

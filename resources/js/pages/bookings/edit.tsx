@@ -129,6 +129,18 @@ function getOptionalString(obj: unknown, key: string): string {
   return typeof v === 'string' ? v : '';
 }
 
+function fieldClass(disabled: boolean, hasError: boolean) {
+  return cn(
+    disabled && 'bg-muted text-muted-foreground',
+    hasError && 'border-red-500 ring-2 ring-red-200/70 focus-visible:ring-red-200 dark:border-red-500 dark:ring-red-900/40',
+  );
+}
+
+function FieldError({ message }: { message?: string | null }) {
+  if (!message) return null;
+  return <p className="text-sm font-medium text-red-600 dark:text-red-400">{message}</p>;
+}
+
 export type BookingPayload = {
   service_id: number | string | null;
   company_name: string;
@@ -535,7 +547,7 @@ export default function EditBooking({ booking }: EditBookingProps) {
     setData('survey_proof_image', file);
   };
 
-  const roCls = (disabled: boolean) => (disabled ? 'bg-muted text-muted-foreground' : '');
+  const roCls = (disabled: boolean, hasError = false) => fieldClass(disabled, hasError);
 
   const bookingDetailsDisabled = !canEditBookingDetails;
   const scheduleDisabled = !canEditSchedule;
@@ -602,13 +614,13 @@ export default function EditBooking({ booking }: EditBookingProps) {
 
         <Card className="max-w-4xl mx-auto w-full">
           <CardHeader>
-            <CardTitle>Edit Booking</CardTitle>
+            <CardTitle>Edit booking</CardTitle>
 
             {isClient && (
               <div className="mt-2 rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
                 <div className="font-semibold text-foreground">Note</div>
                 <div className="mt-1">
-                  Schedule and booking status changes are not available here. If you need changes, please contact us at{' '}
+                  Schedule and status changes are not available here. Please contact{' '}
                   <a href={contactHref} className="text-primary underline underline-offset-2 font-medium">
                     {CONTACT_US_NUMBER}
                   </a>
@@ -626,7 +638,7 @@ export default function EditBooking({ booking }: EditBookingProps) {
             <form onSubmit={onSubmit} className="grid gap-5">
               {/* Booking details (CLIENT CAN EDIT ✅) */}
               <div className="rounded-md border p-4 bg-muted/5 grid gap-4">
-                <div className="text-sm font-semibold">Booking Details</div>
+                <div className="text-sm font-semibold">Booking details</div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="grid gap-2">
@@ -637,9 +649,9 @@ export default function EditBooking({ booking }: EditBookingProps) {
                       onChange={(e) => setData('client_name', e.currentTarget.value)}
                       required
                       disabled={bookingDetailsDisabled}
-                      className={roCls(bookingDetailsDisabled)}
+                      className={roCls(bookingDetailsDisabled, Boolean(errors.client_name))}
                     />
-                    {errors.client_name && <p className="text-destructive text-sm">{errors.client_name}</p>}
+                    <FieldError message={errors.client_name} />
                   </div>
 
                   <div className="grid gap-2">
@@ -649,9 +661,9 @@ export default function EditBooking({ booking }: EditBookingProps) {
                       value={data.company_name}
                       onChange={(e) => setData('company_name', e.currentTarget.value)}
                       disabled={bookingDetailsDisabled}
-                      className={roCls(bookingDetailsDisabled)}
+                      className={roCls(bookingDetailsDisabled, Boolean(errors.company_name))}
                     />
-                    {errors.company_name && <p className="text-destructive text-sm">{errors.company_name}</p>}
+                    <FieldError message={errors.company_name} />
                   </div>
 
                   <div className="grid gap-2">
@@ -662,11 +674,9 @@ export default function EditBooking({ booking }: EditBookingProps) {
                       onChange={(e) => setData('client_contact_number', e.currentTarget.value)}
                       required
                       disabled={bookingDetailsDisabled}
-                      className={roCls(bookingDetailsDisabled)}
+                      className={roCls(bookingDetailsDisabled, Boolean(errors.client_contact_number))}
                     />
-                    {errors.client_contact_number && (
-                      <p className="text-destructive text-sm">{errors.client_contact_number}</p>
-                    )}
+                    <FieldError message={errors.client_contact_number} />
                   </div>
 
                   <div className="grid gap-2">
@@ -678,9 +688,9 @@ export default function EditBooking({ booking }: EditBookingProps) {
                       onChange={(e) => setData('client_email', e.currentTarget.value)}
                       required
                       disabled={bookingDetailsDisabled}
-                      className={roCls(bookingDetailsDisabled)}
+                      className={roCls(bookingDetailsDisabled, Boolean(errors.client_email))}
                     />
-                    {errors.client_email && <p className="text-destructive text-sm">{errors.client_email}</p>}
+                    <FieldError message={errors.client_email} />
                   </div>
 
                   <div className="grid gap-2 sm:col-span-2">
@@ -691,9 +701,9 @@ export default function EditBooking({ booking }: EditBookingProps) {
                       onChange={(e) => setData('client_address', e.currentTarget.value)}
                       required
                       disabled={bookingDetailsDisabled}
-                      className={roCls(bookingDetailsDisabled)}
+                      className={roCls(bookingDetailsDisabled, Boolean(errors.client_address))}
                     />
-                    {errors.client_address && <p className="text-destructive text-sm">{errors.client_address}</p>}
+                    <FieldError message={errors.client_address} />
                   </div>
 
                   <div className="grid gap-2 sm:col-span-2">
@@ -703,11 +713,9 @@ export default function EditBooking({ booking }: EditBookingProps) {
                       value={data.head_of_organization}
                       onChange={(e) => setData('head_of_organization', e.currentTarget.value)}
                       disabled={bookingDetailsDisabled}
-                      className={roCls(bookingDetailsDisabled)}
+                      className={roCls(bookingDetailsDisabled, Boolean(errors.head_of_organization))}
                     />
-                    {errors.head_of_organization && (
-                      <p className="text-destructive text-sm">{errors.head_of_organization}</p>
-                    )}
+                    <FieldError message={errors.head_of_organization} />
                   </div>
 
                   <div className="grid gap-2 sm:col-span-2">
@@ -718,9 +726,9 @@ export default function EditBooking({ booking }: EditBookingProps) {
                       onChange={(e) => setData('type_of_event', e.currentTarget.value)}
                       required
                       disabled={bookingDetailsDisabled}
-                      className={roCls(bookingDetailsDisabled)}
+                      className={roCls(bookingDetailsDisabled, Boolean(errors.type_of_event))}
                     />
-                    {errors.type_of_event && <p className="text-destructive text-sm">{errors.type_of_event}</p>}
+                    <FieldError message={errors.type_of_event} />
                   </div>
 
                   <div className="grid gap-2 sm:col-span-2">
@@ -734,9 +742,9 @@ export default function EditBooking({ booking }: EditBookingProps) {
                       onChange={(e) => setData('number_of_guests', e.currentTarget.value)}
                       required
                       disabled={bookingDetailsDisabled}
-                      className={roCls(bookingDetailsDisabled)}
+                      className={roCls(bookingDetailsDisabled, Boolean(errors.number_of_guests))}
                     />
-                    {errors.number_of_guests && <p className="text-destructive text-sm">{errors.number_of_guests}</p>}
+                    <FieldError message={errors.number_of_guests} />
                   </div>
                 </div>
               </div>
@@ -744,9 +752,9 @@ export default function EditBooking({ booking }: EditBookingProps) {
               {/* Survey section (CLIENT CAN EDIT ✅) */}
               <div className="rounded-md border p-4 space-y-4 bg-muted/10">
                 <div className="space-y-1">
-                  <div className="text-sm font-semibold">Required Google Survey</div>
+                  <div className="text-sm font-semibold">Survey</div>
                   <p className="text-xs text-muted-foreground">
-                    Complete the survey, then provide the email you used and upload a screenshot/photo as proof.
+                    Open the survey, enter the email used, and upload the proof image.
                   </p>
                 </div>
 
@@ -791,9 +799,9 @@ export default function EditBooking({ booking }: EditBookingProps) {
                           onChange={(e) => setData('survey_email', e.currentTarget.value)}
                           required
                           disabled={surveyEmailDisabled}
-                          className={roCls(surveyEmailDisabled)}
+                          className={roCls(surveyEmailDisabled, Boolean(errors.survey_email))}
                         />
-                        {errors.survey_email && <p className="text-destructive text-sm">{errors.survey_email}</p>}
+                        <FieldError message={errors.survey_email} />
                       </div>
 
                       <div className="grid gap-2">
@@ -804,17 +812,15 @@ export default function EditBooking({ booking }: EditBookingProps) {
                           accept="image/png,image/jpeg,image/webp"
                           onChange={(e) => handleProofFileChange(e.currentTarget.files?.[0] ?? null)}
                           disabled={surveyProofDisabled}
-                          className={roCls(surveyProofDisabled)}
+                          className={roCls(surveyProofDisabled, Boolean(errors.survey_proof_image) || Boolean(surveyProofFileError))}
                           required={!existingSurveyProofUrl}
                         />
                         <p className="text-xs text-muted-foreground">
                           {existingSurveyProofUrl ? 'Leave blank to keep the existing proof.' : 'Required.'}
                         </p>
 
-                        {surveyProofFileError && <p className="text-destructive text-sm">{surveyProofFileError}</p>}
-                        {errors.survey_proof_image && (
-                          <p className="text-destructive text-sm">{errors.survey_proof_image}</p>
-                        )}
+                        <FieldError message={surveyProofFileError} />
+                        <FieldError message={errors.survey_proof_image} />
                       </div>
                     </div>
 
@@ -850,7 +856,7 @@ export default function EditBooking({ booking }: EditBookingProps) {
                       if (!scheduleDisabled) setScheduleTouched(true);
                     }}
                     disabled={scheduleDisabled}
-                    className={roCls(scheduleDisabled)}
+                    className={roCls(scheduleDisabled, Boolean(scheduleError || errors.booking_date_from || errors.booking_date_to))}
                   />
                 </div>
 
@@ -882,7 +888,7 @@ export default function EditBooking({ booking }: EditBookingProps) {
                     })}
                   </div>
 
-                  {scheduleError && <p className="text-destructive text-sm">{scheduleError}</p>}
+                  <FieldError message={scheduleError} />
 
                   {canEditSchedule && rangePreview && (
                     <div className="rounded-md border p-3 bg-muted/30 text-sm">
@@ -910,17 +916,18 @@ export default function EditBooking({ booking }: EditBookingProps) {
                 </div>
               </div>
 
-              {/* Booking Status (DISABLED FOR CLIENT ✅) */}
+              {/* Status (DISABLED FOR CLIENT ✅) */}
               <div className="rounded-md border p-4 bg-muted/5 grid gap-4">
-                <div className="text-sm font-semibold">Booking Status</div>
+                <div className="text-sm font-semibold">Status</div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="booking_status">Booking Status</Label>
+                  <Label htmlFor="booking_status">Status</Label>
                   <select
                     id="booking_status"
                     className={cn(
                       'border bg-background rounded-md px-2 py-2 text-sm disabled:opacity-60',
                       bookingStatusDisabled && 'bg-muted text-muted-foreground',
+                      errors.booking_status && 'border-red-500 ring-2 ring-red-200/70 dark:border-red-500 dark:ring-red-900/40',
                     )}
                     value={data.booking_status}
                     onChange={(e) => setData('booking_status', toBookingStatus(e.currentTarget.value))}
@@ -934,11 +941,11 @@ export default function EditBooking({ booking }: EditBookingProps) {
                     <option value="completed">Completed</option>
                   </select>
 
-                  {errors.booking_status && <p className="text-destructive text-sm">{errors.booking_status}</p>}
+                  <FieldError message={errors.booking_status} />
 
                   {isClient && (
                     <p className="text-xs text-muted-foreground">
-                      Need to change schedule/status? Contact us at{' '}
+                      Need schedule or status changes? Contact{' '}
                       <a href={contactHref} className="text-primary underline underline-offset-2 font-medium">
                         {CONTACT_US_NUMBER}
                       </a>

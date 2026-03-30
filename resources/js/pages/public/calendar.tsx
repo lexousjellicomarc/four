@@ -1,20 +1,9 @@
 import { Head, Link } from '@inertiajs/react';
-import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  CircleAlert,
-  Clock3,
-  Lock,
-  MapPin,
-} from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Lock, MapPin } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { events as fallbackEvents, type EventItem } from '@/data/events';
-import PublicLayout from '@/layouts/public-layout';
 import PageHero from '@/components/public/page-hero';
-
-
-type CalendarStatus = 'available' | 'public_booked' | 'private_booked' | 'blocked';
+import PublicLayout from '@/layouts/public-layout';
+import type { PublicEventItem } from '@/types/public-content';
 
 type CalendarBlockItem = {
   title: string;
@@ -25,498 +14,261 @@ type CalendarBlockItem = {
   dateTo: string;
 };
 
-type CalendarEvent = EventItem & {
-  dateKey?: string;
-};
+type CalendarStatus = 'available' | 'public_booked' | 'private_booked' | 'blocked';
 
-function formatDateKey(date: Date): string {
+function formatDateKey(date: Date) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
-function formatLongDate(date: Date) {
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date);
-}
-
-function monthLabel(date: Date) {
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    year: 'numeric',
-  }).format(date);
+function expandDateRange(start: string, end: string) {
+  const list: string[] = [];
+  const current = new Date(`${start}T00:00:00`);
+  const last = new Date(`${end}T00:00:00`);
+  while (current.getTime() <= last.getTime()) {
+    list.push(formatDateKey(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return list;
 }
 
 function getMonthMatrix(baseDate: Date) {
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
   const firstDay = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0);
-  const totalDays = lastDay.getDate();
-  const mondayFirstIndex = (firstDay.getDay() + 6) % 7;
+  const totalDays = new Date(year, month + 1, 0).getDate();
+  const sundayFirstIndex = firstDay.getDay();
   const cells: Array<Date | null> = [];
 
-  for (let i = 0; i < mondayFirstIndex; i += 1) {
-    cells.push(null);
-  }
-
-  for (let day = 1; day <= totalDays; day += 1) {
-    cells.push(new Date(year, month, day));
-  }
-
-  while (cells.length % 7 !== 0) {
-    cells.push(null);
-  }
+  for (let i = 0; i < sundayFirstIndex; i += 1) cells.push(null);
+  for (let day = 1; day <= totalDays; day += 1) cells.push(new Date(year, month, day));
+  while (cells.length % 7 !== 0) cells.push(null);
 
   return cells;
 }
 
-function expandDateRange(start: string, end: string) {
-  const output: string[] = [];
-  const current = new Date(`${start}T00:00:00`);
-  const last = new Date(`${end}T00:00:00`);
-
-  while (current.getTime() <= last.getTime()) {
-    output.push(formatDateKey(current));
-    current.setDate(current.getDate() + 1);
-  }
-
-  return output;
+function monthLabel(date: Date) {
+  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(date);
 }
 
-function statusStyles(status: CalendarStatus, selected: boolean) {
-  if (status === 'private_booked') {
-    return selected
-      ? 'border-[#b58922] bg-[#b58922] text-white'
-      : 'border-[#d7b14b] bg-[#f4e2ac] text-[#6a4f00]';
-  }
-
-  if (status === 'public_booked') {
-    return selected
-      ? 'border-[#1d5bd8] bg-[#1d5bd8] text-white'
-      : 'border-[#8eb2ff] bg-[#e4eeff] text-[#1645ac]';
-  }
-
-  if (status === 'blocked') {
-    return selected
-      ? 'border-[#c53434] bg-[#c53434] text-white'
-      : 'border-[#f1aaaa] bg-[#ffe5e5] text-[#a52a2a]';
-  }
-
-  return selected
-    ? 'border-[#174f40] bg-[#174f40] text-white dark:border-[#2d47ff] dark:bg-[#2d47ff]'
-    : 'border-black/10 bg-white text-[#22221f] dark:border-white/10 dark:bg-[#17181c] dark:text-white';
+function longDate(date: Date | null) {
+  if (!date) return '';
+  return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date);
 }
 
-const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function CalendarPage({
-  events,
-  calendarBlocks,
+  events = [],
+  calendarBlocks = [],
 }: {
-  events?: CalendarEvent[];
+  events?: Array<PublicEventItem & { dateKey?: string }>;
   calendarBlocks?: CalendarBlockItem[];
 }) {
-  const sourceEvents = events && events.length > 0 ? events : fallbackEvents;
-  const sourceBlocks = calendarBlocks ?? [];
-
-  const publicEventsByDate = useMemo(() => {
-    const map = new Map<string, CalendarEvent[]>();
-
-    sourceEvents
-      .filter((item) => item.isPublic)
-      .forEach((item) => {
-        const key =
-          item.dateKey ??
-          (() => {
-            const parsed = new Date(item.date);
-            return Number.isNaN(parsed.getTime()) ? null : formatDateKey(parsed);
-          })();
-
-        if (!key) return;
-
-        const existing = map.get(key) ?? [];
-        existing.push(item);
-        map.set(key, existing);
-      });
-
-    return map;
-  }, [sourceEvents]);
-
-  const blockStatusByDate = useMemo(() => {
-    const map = new Map<string, CalendarBlockItem[]>();
-
-    sourceBlocks.forEach((block) => {
-      expandDateRange(block.dateFrom, block.dateTo).forEach((dateKey) => {
-        const existing = map.get(dateKey) ?? [];
-        existing.push(block);
-        map.set(dateKey, existing);
-      });
-    });
-
-    return map;
-  }, [sourceBlocks]);
-
   const today = new Date();
-  const [currentMonth, setCurrentMonth] = useState(
-    new Date(today.getFullYear(), today.getMonth(), 1),
-  );
+  const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDateKey, setSelectedDateKey] = useState(formatDateKey(today));
 
-  const monthCells = useMemo(() => getMonthMatrix(currentMonth), [currentMonth]);
+  const eventMap = useMemo(() => {
+    const map = new Map<string, PublicEventItem[]>();
+    events.forEach((event) => {
+      const key = event.dateKey || (() => {
+        const parsed = new Date(event.date);
+        return Number.isNaN(parsed.getTime()) ? '' : formatDateKey(parsed);
+      })();
+      if (!key) return;
+      const list = map.get(key) ?? [];
+      list.push(event);
+      map.set(key, list);
+    });
+    return map;
+  }, [events]);
 
-  const getDateStatus = (dateKey: string): CalendarStatus => {
-    const blocks = blockStatusByDate.get(dateKey) ?? [];
+  const blockMap = useMemo(() => {
+    const map = new Map<string, CalendarBlockItem[]>();
+    calendarBlocks.forEach((block) => {
+      expandDateRange(block.dateFrom, block.dateTo).forEach((key) => {
+        const list = map.get(key) ?? [];
+        list.push(block);
+        map.set(key, list);
+      });
+    });
+    return map;
+  }, [calendarBlocks]);
 
+  const getDateStatus = (key: string): CalendarStatus => {
+    const blocks = blockMap.get(key) ?? [];
     if (blocks.some((item) => item.publicStatus === 'red')) return 'blocked';
     if (blocks.some((item) => item.publicStatus === 'gold')) return 'private_booked';
     if (blocks.some((item) => item.publicStatus === 'blue')) return 'public_booked';
-    if (publicEventsByDate.has(dateKey)) return 'public_booked';
-
+    if (eventMap.has(key)) return 'public_booked';
     return 'available';
   };
 
-  const selectedDate = useMemo(() => {
-    const parsed = new Date(`${selectedDateKey}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }, [selectedDateKey]);
+  const cells = useMemo(() => getMonthMatrix(currentMonth), [currentMonth]);
+  const selectedDate = useMemo(() => new Date(`${selectedDateKey}T00:00:00`), [selectedDateKey]);
+  const selectedStatus = getDateStatus(selectedDateKey);
+  const selectedEvents = eventMap.get(selectedDateKey) ?? [];
+  const selectedBlocks = blockMap.get(selectedDateKey) ?? [];
 
-  const selectedStatus = selectedDate ? getDateStatus(selectedDateKey) : 'available';
-  const selectedEvents = publicEventsByDate.get(selectedDateKey) ?? [];
-  const selectedBlocks = blockStatusByDate.get(selectedDateKey) ?? [];
+  const canOpenDate = (status: CalendarStatus) => status !== 'private_booked' && status !== 'blocked';
 
-  const monthlyHighlights = useMemo(() => {
-    return sourceEvents.filter((item) => {
-      const parsed = new Date(item.dateKey ?? item.date);
-      if (Number.isNaN(parsed.getTime()) || !item.isPublic) return false;
-
-      return (
-        parsed.getFullYear() === currentMonth.getFullYear() &&
-        parsed.getMonth() === currentMonth.getMonth()
-      );
-    });
-  }, [currentMonth, sourceEvents]);
-
-  const handleDateClick = (date: Date) => {
-    setSelectedDateKey(formatDateKey(date));
+  const styleFor = (status: CalendarStatus, selected: boolean) => {
+    if (status === 'private_booked') return selected ? 'bg-[#B88B14] text-white border-[#B88B14]' : 'bg-[#F4E3AF] text-[#7B5B00] border-[#D7B14B]';
+    if (status === 'public_booked') return selected ? 'bg-[#174fda] text-white border-[#174fda]' : 'bg-[#E2EEFF] text-[#174fda] border-[#9BBEFF]';
+    if (status === 'blocked') return selected ? 'bg-[#C73333] text-white border-[#C73333]' : 'bg-[#FFE4E4] text-[#A62323] border-[#F2B1B1]';
+    return selected ? 'bg-[#0f8b6d] text-white border-[#0f8b6d] dark:bg-[#294CFF] dark:border-[#294CFF]' : 'bg-white/80 text-slate-800 border-black/10 dark:bg-white/5 dark:text-white dark:border-white/10';
   };
 
   return (
     <PublicLayout>
       <Head title="Calendar" />
-<PageHero
-  eyebrow="Calendar"
-  title="Simple public schedule visibility"
-  description="A clearer and easier public calendar for checking visible event dates, public bookings, and blocked days."
-  backgroundImages={[
-    '/marketing/images/events/lightmain.JPG',
-    '/marketing/images/branding/noon.jpg',
-    '/marketing/images/events/5.jpg',
-  ]}
-  actions={[
-    { label: 'View Events', href: '/events' },
-    { label: 'Send Inquiry', href: '/contact', variant: 'secondary' },
-  ]}
-/>
 
-      <section className="mx-auto w-full max-w-7xl space-y-10 px-4 pb-12 sm:px-6 lg:px-8">
-        <div className="overflow-hidden rounded-[2rem] border border-black/5 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-neutral-950 dark:shadow-[0_24px_70px_rgba(0,0,0,0.35)]">
-          <div className="grid gap-0 lg:grid-cols-[1.08fr_0.92fr]">
-            <div className="space-y-5 px-6 py-8 sm:px-8 sm:py-10">
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.32em] text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                Public Calendar
-              </span>
+      <PageHero
+        eyebrow="Calendar"
+        title="View public schedule colors, event dates, and visible venue activity."
+        description="Blue dates show public events or visible public use, gold dates are privately booked and locked, and red dates are blocked."
+        backgroundImages={['/marketing/images/events/lightmain.JPG', '/marketing/images/events/darkmain.JPG']}
+        actions={[
+          { label: 'View Events', href: '/events' },
+          { label: 'Ask About Availability', href: '/contact', variant: 'secondary' },
+        ]}
+      />
 
-              <div className="space-y-3">
-                <h1 className="text-4xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-5xl">
-                  Public venue status, monthly events, and schedule highlights
-                </h1>
-                <p className="max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
-                  Gold means privately booked and locked to public users, blue
-                  means a public or government event, red means admin-blocked and
-                  unavailable, and neutral means open on the public layer.
-                </p>
-              </div>
+      <section className="public-container mt-10 space-y-8 pb-12">
+        <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+          <div className="rounded-[2rem] border border-black/5 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
+            <div className="mb-5 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 dark:border-white/10"
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
 
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  href="/contact"
-                  className="inline-flex items-center gap-2 rounded-full bg-[#174f40] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-[#2d47ff]"
-                >
-                  <CalendarDays className="h-4 w-4" />
-                  Ask About Availability
-                </Link>
+              <div className="text-xl font-semibold">{monthLabel(currentMonth)}</div>
 
-                <Link
-                  href="/events"
-                  className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-                >
-                  View Public Events
-                </Link>
-              </div>
+              <button
+                type="button"
+                onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 dark:border-white/10"
+                aria-label="Next month"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
             </div>
 
-            <div className="border-t border-black/5 bg-[#f7f5ef] px-6 py-8 dark:border-white/10 dark:bg-white/5 lg:border-l lg:border-t-0">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-[#8eb2ff] bg-[#e4eeff] px-4 py-4 text-sm text-[#1645ac]">
-                  <div className="font-semibold">Blue</div>
-                  <div className="mt-1">Public event</div>
-                </div>
-                <div className="rounded-2xl border border-[#d7b14b] bg-[#f4e2ac] px-4 py-4 text-sm text-[#6a4f00]">
-                  <div className="font-semibold">Gold</div>
-                  <div className="mt-1">Private booking</div>
-                </div>
-                <div className="rounded-2xl border border-[#f1aaaa] bg-[#ffe5e5] px-4 py-4 text-sm text-[#a52a2a]">
-                  <div className="font-semibold">Red</div>
-                  <div className="mt-1">Blocked / unavailable</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-neutral-950">
-            <div className="mb-6 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-300">
-                  Monthly View
-                </div>
-                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                  {monthLabel(currentMonth)}
-                </h2>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCurrentMonth(
-                      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1),
-                    )
-                  }
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 dark:border-white/10"
-                  aria-label="Previous month"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCurrentMonth(
-                      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1),
-                    )
-                  }
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 dark:border-white/10"
-                  aria-label="Next month"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
               {weekdayLabels.map((label) => (
-                <div
-                  key={label}
-                  className="pb-2 text-center text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-300"
-                >
-                  {label}
-                </div>
+                <div key={label} className="pb-1">{label}</div>
               ))}
+            </div>
 
-              {monthCells.map((cell, index) => {
-                if (!cell) {
-                  return <div key={`empty-${index}`} className="aspect-square" />;
+            <div className="mt-2 grid grid-cols-7 gap-2">
+              {cells.map((date, index) => {
+                if (!date) {
+                  return <div key={`empty-${index}`} className="aspect-square rounded-[1.2rem] bg-black/[0.03] dark:bg-white/[0.03]" />;
                 }
 
-                const key = formatDateKey(cell);
+                const key = formatDateKey(date);
                 const status = getDateStatus(key);
-                const selected = key === selectedDateKey;
+                const selected = selectedDateKey === key;
+                const disabled = !canOpenDate(status);
 
                 return (
                   <button
                     key={key}
                     type="button"
-                    onClick={() => handleDateClick(cell)}
-                    className={`aspect-square rounded-2xl border text-sm font-semibold transition ${statusStyles(
-                      status,
-                      selected,
-                    )}`}
+                    disabled={disabled}
+                    onClick={() => setSelectedDateKey(key)}
+                    className={`aspect-square rounded-[1.2rem] border text-sm font-semibold transition ${styleFor(status, selected)} ${disabled ? 'cursor-not-allowed opacity-90' : 'hover:-translate-y-0.5'}`}
                   >
-                    {cell.getDate()}
+                    {date.getDate()}
                   </button>
                 );
               })}
             </div>
+
+            <div className="scrollbar-hide mt-5 flex gap-3 overflow-x-auto pb-1 text-xs font-semibold">
+              <div className="shrink-0 rounded-full border border-[#9BBEFF] bg-[#E2EEFF] px-3 py-2 text-[#174fda]">Blue • Public</div>
+              <div className="shrink-0 rounded-full border border-[#D7B14B] bg-[#F4E3AF] px-3 py-2 text-[#7B5B00]">Gold • Private</div>
+              <div className="shrink-0 rounded-full border border-[#F2B1B1] bg-[#FFE4E4] px-3 py-2 text-[#A62323]">Red • Blocked</div>
+              <div className="shrink-0 rounded-full border border-black/10 bg-white px-3 py-2 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">Neutral • Available</div>
+            </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-neutral-950">
-              <div className="space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-300">
-                  Selected Date
-                </div>
-                <h2 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                  {selectedDate ? formatLongDate(selectedDate) : 'No date selected'}
-                </h2>
-              </div>
+          <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
+            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-300">
+              Selected Date
+            </div>
+            <h2 className="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{longDate(selectedDate)}</h2>
 
-              <div className="mt-4">
-                {selectedStatus === 'available' && (
-                  <div className="rounded-2xl border border-black/5 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                    This date is currently available on the public calendar layer.
-                  </div>
-                )}
-
-                {selectedStatus === 'private_booked' && (
-                  <div className="rounded-2xl border border-[#d7b14b] bg-[#f4e2ac] px-4 py-4 text-sm text-[#6a4f00]">
-                    This date is reserved for a private booking window, so public
-                    details remain hidden.
-                  </div>
-                )}
-
-                {selectedStatus === 'blocked' && (
-                  <div className="rounded-2xl border border-[#f1aaaa] bg-[#ffe5e5] px-4 py-4 text-sm text-[#a52a2a]">
-                    This date is blocked by the admin side for maintenance,
-                    control, or other non-public restrictions.
-                  </div>
-                )}
-
-                {selectedStatus === 'public_booked' && (
-                  <div className="rounded-2xl border border-[#8eb2ff] bg-[#e4eeff] px-4 py-4 text-sm text-[#1645ac]">
-                    This date already contains a public event or a blue public-status block.
-                  </div>
-                )}
-              </div>
-
-              {selectedEvents.length > 0 && (
-                <div className="mt-6 space-y-4">
-                  <div className="text-sm font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-300">
-                    Public Events
-                  </div>
-
-                  {selectedEvents.map((event) => (
-                    <div
-                      key={`${event.scope}-${event.title}`}
-                      className="rounded-2xl border border-black/5 bg-slate-50 px-4 py-4 dark:border-white/10 dark:bg-white/5"
-                    >
-                      <div className="space-y-2">
-                        <div className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-700 dark:text-emerald-300">
-                          {event.category}
-                        </div>
-                        <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
-                          {event.title}
-                        </h3>
-                        <div className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-300">
-                          <MapPin className="h-4 w-4" />
-                          {event.venue}
-                        </div>
-                        <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
-                          {event.summary}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {selectedBlocks.length > 0 && (
-                <div className="mt-6 space-y-4">
-                  <div className="text-sm font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-300">
-                    Calendar Blocks
-                  </div>
-
-                  {selectedBlocks.map((block, index) => (
-                    <div
-                      key={`${block.title}-${index}`}
-                      className="rounded-2xl border border-black/5 bg-slate-50 px-4 py-4 dark:border-white/10 dark:bg-white/5"
-                    >
-                      <div className="space-y-2">
-                        <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
-                          {block.title}
-                        </h3>
-                        <div className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-300">
-                          <MapPin className="h-4 w-4" />
-                          {block.area}
-                        </div>
-                        {block.notes && (
-                          <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
-                            {block.notes}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="mt-4">
+              <span className={`inline-flex rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.22em] ${
+                selectedStatus === 'available'
+                  ? 'bg-[#0f8b6d]/10 text-[#0f8b6d] dark:bg-[#8ea3ff]/10 dark:text-[#b6c6ff]'
+                  : selectedStatus === 'public_booked'
+                  ? 'bg-[#174fda]/10 text-[#174fda]'
+                  : selectedStatus === 'private_booked'
+                  ? 'bg-[#B88B14]/10 text-[#7B5B00] dark:text-[#F1D580]'
+                  : 'bg-[#C73333]/10 text-[#A62323] dark:text-[#FFB1B1]'
+              }`}>
+                {selectedStatus.replace('_', ' ')}
+              </span>
             </div>
 
-            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-neutral-950">
-              <div className="space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-300">
-                  Monthly Highlights
+            {(selectedStatus === 'private_booked' || selectedStatus === 'blocked') ? (
+              <div className="mt-5 rounded-[1.5rem] bg-[#f8f4ea] p-4 text-sm leading-7 text-slate-600 dark:bg-slate-900/70 dark:text-slate-300">
+                <div className="inline-flex items-center gap-2 font-semibold">
+                  <Lock className="h-4 w-4" />
+                  Details are not shown publicly for this date.
                 </div>
-                <h2 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                  Events this month
-                </h2>
               </div>
-
+            ) : (
               <div className="mt-5 space-y-4">
-                {monthlyHighlights.length > 0 ? (
-                  monthlyHighlights.map((event) => (
-                    <div
-                      key={`${event.scope}-${event.title}`}
-                      className="rounded-2xl border border-black/5 bg-slate-50 px-4 py-4 dark:border-white/10 dark:bg-white/5"
-                    >
-                      <div className="space-y-2">
-                        <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                          {event.title}
-                        </h3>
-                        <div className="flex flex-wrap gap-4 text-sm text-slate-500 dark:text-slate-300">
-                          <div className="inline-flex items-center gap-2">
-                            <Clock3 className="h-4 w-4" />
-                            {event.date}
-                          </div>
-                          <div className="inline-flex items-center gap-2">
-                            <MapPin className="h-4 w-4" />
-                            {event.venue}
-                          </div>
-                        </div>
-                      </div>
+                {selectedEvents.map((event, index) => (
+                  <div key={`${event.title}-${index}`} className="rounded-[1.4rem] bg-[#f8f4ea] p-4 dark:bg-slate-900/70">
+                    <div className="text-lg font-semibold text-slate-900 dark:text-white">{event.title}</div>
+                    <div className="mt-2 inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                      <MapPin className="h-4 w-4" />
+                      {event.venue}
                     </div>
-                  ))
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">
-                    No public event highlights are scheduled for this month yet.
+                    <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">{event.summary || event.description}</p>
                   </div>
-                )}
+                ))}
+
+                {selectedBlocks
+                  .filter((block) => block.publicStatus === 'blue')
+                  .map((block, index) => (
+                    <div key={`${block.title}-${index}`} className="rounded-[1.4rem] bg-[#f8f4ea] p-4 dark:bg-slate-900/70">
+                      <div className="text-lg font-semibold text-slate-900 dark:text-white">{block.title}</div>
+                      <div className="mt-2 inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                        <CalendarDays className="h-4 w-4" />
+                        {block.area}
+                      </div>
+                      {block.notes ? <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">{block.notes}</p> : null}
+                    </div>
+                  ))}
+
+                {selectedEvents.length === 0 && selectedBlocks.filter((block) => block.publicStatus === 'blue').length === 0 ? (
+                  <div className="rounded-[1.4rem] bg-[#f8f4ea] p-4 text-sm leading-7 text-slate-600 dark:bg-slate-900/70 dark:text-slate-300">
+                    No public details are posted for this date yet.
+                  </div>
+                ) : null}
               </div>
-            </div>
+            )}
 
-            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-neutral-950">
-              <div className="space-y-3">
-                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-300">
-                  Public Notes
-                </div>
-
-                <div className="flex items-start gap-3 rounded-2xl border border-black/5 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                  <Lock className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>Private bookings stay hidden from public event details.</span>
-                </div>
-
-                <div className="flex items-start gap-3 rounded-2xl border border-black/5 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                  <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>
-                    Final availability remains subject to admin validation and the official booking workflow.
-                  </span>
-                </div>
-              </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link href="/events" className="rounded-full bg-[#0f8b6d] px-5 py-3 text-sm font-semibold text-white dark:bg-[#294CFF]">
+                View Events
+              </Link>
+              <Link href="/contact" className="rounded-full border border-black/10 px-5 py-3 text-sm font-semibold dark:border-white/10">
+                Ask About This Date
+              </Link>
             </div>
           </div>
         </div>

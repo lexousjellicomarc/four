@@ -9,61 +9,56 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
 import { Link } from '@inertiajs/react';
 import {
-  LayoutGrid,
   ClipboardList,
+  ShieldCheck,
   Tags,
   CalendarDays,
   Users,
   Calendar,
 } from 'lucide-react';
-import bookings from '@/routes/bookings';
-import users from '@/routes/users';
 import AppLogo from './app-logo';
-
-const services = {
-  index: () => '/services',         
-};
-
-const serviceTypes = {
-  index: () => '/service-types',   
-};
+import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
   {
     title: 'Calendar',
-    href: dashboard(),
+    href: '/dashboard',
     icon: Calendar,
     permission: 'dashboard.view',
   },
   {
     title: 'Bookings',
-    href: bookings.index(),
+    href: '/bookings',
     icon: CalendarDays,
     permission: 'bookings.view',
   },
   {
     title: 'Services',
-    href: services.index(),
+    href: '/services',
     icon: ClipboardList,
     permission: 'services.manage',
   },
   {
     title: 'Service Types',
-    href: serviceTypes.index(),
+    href: '/service-types',
     icon: Tags,
     permission: 'service_types.manage',
   },
   {
     title: 'Users',
-    href: users.index(),
+    href: '/users',
     icon: Users,
     permission: 'users.manage',
   },
+  {
+    title: 'Roles',
+    href: '/users/roles',
+    icon: ShieldCheck,
+    permission: 'users.manage',
+  },
 ];
-
 
 export function AppSidebar() {
   return (
@@ -72,7 +67,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href={dashboard()} prefetch>
+              <Link href="/dashboard" prefetch>
                 <AppLogo />
               </Link>
             </SidebarMenuButton>

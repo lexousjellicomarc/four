@@ -7,6 +7,7 @@ use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -22,14 +23,20 @@ class UserController extends Controller
     {
         $query = User::query();
 
-        if ($search = $request->input('search')) {
+        if ($search = trim((string) $request->input('search', ''))) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('first_name', 'like', "%{$search}%")
+                    ->orWhere('middle_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('phone_number', 'like', "%{$search}%")
+                    ->orWhere('organization_name', 'like', "%{$search}%")
+                    ->orWhere('position_title', 'like', "%{$search}%");
             });
         }
 
-        if ($role = $request->input('role')) {
+        if ($role = trim((string) $request->input('role', ''))) {
             $query->whereHas('roles', function ($q) use ($role) {
                 $q->where('name', $role);
             });
@@ -41,15 +48,24 @@ class UserController extends Controller
             ->through(function (User $user) {
                 return [
                     'id' => $user->id,
-                    'name' => $user->name,
+                    'name' => $user->display_name,
+                    'first_name' => $user->first_name,
+                    'middle_name' => $user->middle_name,
+                    'last_name' => $user->last_name,
                     'email' => $user->email,
-                    'email_verified_at' => $user->email_verified_at,
+                    'phone_number' => $user->phone_number,
+                    'organization_name' => $user->organization_name,
+                    'organization_type' => $user->organization_type,
+                    'position_title' => $user->position_title,
+                    'email_verified_at' => $user->email_verified_at?->toIso8601String(),
+                    'last_login_at' => $user->last_login_at?->toIso8601String(),
+                    'google_id' => $user->google_id,
                     'role' => $user->roles->pluck('name')->first(),
                     'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
                 ];
             });
 
-        $availableRoles = Role::query()->pluck('name')->all();
+        $availableRoles = Role::query()->orderBy('name')->pluck('name')->all();
 
         return Inertia::render('users/index', [
             'users' => $users,
@@ -64,33 +80,49 @@ class UserController extends Controller
     public function create(): Response
     {
         return Inertia::render('users/create', [
-            'availableRoles' => Role::query()->pluck('name')->all(),
+            'availableRoles' => Role::query()->orderBy('name')->pluck('name')->all(),
+            'defaults' => [
+                'country' => 'Philippines',
+                'email_is_verified' => true,
+            ],
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $actor = $request->user();
-
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', Password::defaults(), 'confirmed'],
-            'role' => ['nullable', 'string', 'exists:roles,name'],
-        ]);
+        $payload = $this->validatedPayload($request);
 
         $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => Hash::make($data['password']),
+            'name' => $this->buildFullName(
+                $payload['first_name'],
+                $payload['middle_name'] ?? null,
+                $payload['last_name']
+            ),
+            'first_name' => $payload['first_name'],
+            'middle_name' => $payload['middle_name'] ?? null,
+            'last_name' => $payload['last_name'],
+            'email' => $payload['email'],
+            'password' => Hash::make($payload['password']),
+            'phone_number' => $payload['phone_number'] ?? null,
+            'organization_name' => $payload['organization_name'] ?? null,
+            'organization_type' => $payload['organization_type'] ?? null,
+            'position_title' => $payload['position_title'] ?? null,
+            'address_line1' => $payload['address_line1'] ?? null,
+            'barangay' => $payload['barangay'] ?? null,
+            'city_municipality' => $payload['city_municipality'] ?? null,
+            'province' => $payload['province'] ?? null,
+            'postal_code' => $payload['postal_code'] ?? null,
+            'country' => $payload['country'] ?? 'Philippines',
+            'email_verified_at' => ($payload['email_is_verified'] ?? false) ? now() : null,
         ]);
 
         $oldRoles = [];
         $newRoles = [];
 
-        if (! empty($data['role'])) {
-            $user->syncRoles([$data['role']]);
-            $newRoles = [$data['role']];
+        if (!empty($payload['role'])) {
+            $user->syncRoles([$payload['role']]);
+            $newRoles = [$payload['role']];
         } else {
             $user->syncRoles([]);
         }
@@ -98,7 +130,7 @@ class UserController extends Controller
         if ($actor) {
             $this->notifications->userCreated($user, $actor);
 
-            if (! empty($newRoles)) {
+            if (!empty($newRoles)) {
                 $this->notifications->userRolesUpdated($user, $actor, $oldRoles, $newRoles);
             }
         }
@@ -107,47 +139,109 @@ class UserController extends Controller
             ->with('success', 'User created successfully.');
     }
 
+    public function show(User $user): Response
+    {
+        $user->load('roles');
+
+        return Inertia::render('users/show', [
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->display_name,
+                'first_name' => $user->first_name,
+                'middle_name' => $user->middle_name,
+                'last_name' => $user->last_name,
+                'email' => $user->email,
+                'phone_number' => $user->phone_number,
+                'organization_name' => $user->organization_name,
+                'organization_type' => $user->organization_type,
+                'position_title' => $user->position_title,
+                'address_line1' => $user->address_line1,
+                'barangay' => $user->barangay,
+                'city_municipality' => $user->city_municipality,
+                'province' => $user->province,
+                'postal_code' => $user->postal_code,
+                'country' => $user->country ?: 'Philippines',
+                'role' => $user->roles->pluck('name')->first(),
+                'email_is_verified' => (bool) $user->email_verified_at,
+                'email_verified_at' => $user->email_verified_at?->format('Y-m-d H:i:s'),
+                'google_id' => $user->google_id,
+                'last_login_at' => $user->last_login_at?->format('Y-m-d H:i:s'),
+                'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
+                'updated_at' => $user->updated_at?->format('Y-m-d H:i:s'),
+            ],
+        ]);
+    }
+
     public function edit(User $user): Response
     {
         return Inertia::render('users/edit', [
             'user' => [
                 'id' => $user->id,
-                'name' => $user->name,
+                'name' => $user->display_name,
+                'first_name' => $user->first_name,
+                'middle_name' => $user->middle_name,
+                'last_name' => $user->last_name,
                 'email' => $user->email,
+                'phone_number' => $user->phone_number,
+                'organization_name' => $user->organization_name,
+                'organization_type' => $user->organization_type,
+                'position_title' => $user->position_title,
+                'address_line1' => $user->address_line1,
+                'barangay' => $user->barangay,
+                'city_municipality' => $user->city_municipality,
+                'province' => $user->province,
+                'postal_code' => $user->postal_code,
+                'country' => $user->country ?: 'Philippines',
+                'email_is_verified' => (bool) $user->email_verified_at,
+                'email_verified_at' => $user->email_verified_at?->format('Y-m-d H:i:s'),
+                'google_id' => $user->google_id,
+                'last_login_at' => $user->last_login_at?->format('Y-m-d H:i:s'),
                 'role' => $user->roles->pluck('name')->first(),
                 'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
             ],
-            'availableRoles' => Role::query()->pluck('name')->all(),
+            'availableRoles' => Role::query()->orderBy('name')->pluck('name')->all(),
         ]);
     }
 
     public function update(Request $request, User $user): RedirectResponse
     {
         $actor = $request->user();
-
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
-            'password' => ['nullable', 'string', Password::defaults(), 'confirmed'],
-            'role' => ['nullable', 'string', 'exists:roles,name'],
-        ]);
+        $payload = $this->validatedPayload($request, $user);
 
         $original = $user->getOriginal();
         $oldRoles = $user->roles->pluck('name')->all();
 
         $user->update([
-            'name' => $data['name'],
-            'email' => $data['email'],
+            'name' => $this->buildFullName(
+                $payload['first_name'],
+                $payload['middle_name'] ?? null,
+                $payload['last_name']
+            ),
+            'first_name' => $payload['first_name'],
+            'middle_name' => $payload['middle_name'] ?? null,
+            'last_name' => $payload['last_name'],
+            'email' => $payload['email'],
+            'phone_number' => $payload['phone_number'] ?? null,
+            'organization_name' => $payload['organization_name'] ?? null,
+            'organization_type' => $payload['organization_type'] ?? null,
+            'position_title' => $payload['position_title'] ?? null,
+            'address_line1' => $payload['address_line1'] ?? null,
+            'barangay' => $payload['barangay'] ?? null,
+            'city_municipality' => $payload['city_municipality'] ?? null,
+            'province' => $payload['province'] ?? null,
+            'postal_code' => $payload['postal_code'] ?? null,
+            'country' => $payload['country'] ?? 'Philippines',
+            'email_verified_at' => ($payload['email_is_verified'] ?? false) ? ($user->email_verified_at ?: now()) : null,
         ]);
 
-        if (! empty($data['password'])) {
+        if (!empty($payload['password'])) {
             $user->update([
-                'password' => Hash::make($data['password']),
+                'password' => Hash::make($payload['password']),
             ]);
         }
 
-        if (! empty($data['role'])) {
-            $user->syncRoles([$data['role']]);
+        if (!empty($payload['role'])) {
+            $user->syncRoles([$payload['role']]);
         } else {
             $user->syncRoles([]);
         }
@@ -157,7 +251,7 @@ class UserController extends Controller
 
         $changes = [];
         foreach ($user->getAttributes() as $field => $newVal) {
-            if (! array_key_exists($field, $original)) {
+            if (!array_key_exists($field, $original)) {
                 continue;
             }
 
@@ -166,7 +260,7 @@ class UserController extends Controller
                 continue;
             }
 
-            if (in_array($field, ['password', 'remember_token'], true)) {
+            if (in_array($field, ['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'], true)) {
                 $changes[$field] = ['(hidden)', '(hidden)'];
                 continue;
             }
@@ -197,6 +291,10 @@ class UserController extends Controller
             return back()->with('error', 'You cannot delete your own account.');
         }
 
+        if ($user->hasRole('admin') && User::role('admin')->count() <= 1) {
+            return back()->with('error', 'You cannot delete the last admin account.');
+        }
+
         if ($request->user()) {
             $this->notifications->userDeleted($user, $request->user());
         }
@@ -205,5 +303,92 @@ class UserController extends Controller
 
         return redirect()->route('users.index')
             ->with('success', 'User deleted successfully.');
+    }
+
+    protected function validatedPayload(Request $request, ?User $user = null): array
+    {
+        $phoneNumber = $this->normalizePhoneNumber($request->input('phone_number'));
+
+        $data = $request->merge([
+            'first_name' => $this->trimNullable($request->input('first_name')),
+            'middle_name' => $this->trimNullable($request->input('middle_name')),
+            'last_name' => $this->trimNullable($request->input('last_name')),
+            'email' => strtolower(trim((string) $request->input('email'))),
+            'phone_number' => $phoneNumber,
+            'organization_name' => $this->trimNullable($request->input('organization_name')),
+            'organization_type' => $this->trimNullable($request->input('organization_type')),
+            'position_title' => $this->trimNullable($request->input('position_title')),
+            'address_line1' => $this->trimNullable($request->input('address_line1')),
+            'barangay' => $this->trimNullable($request->input('barangay')),
+            'city_municipality' => $this->trimNullable($request->input('city_municipality')),
+            'province' => $this->trimNullable($request->input('province')),
+            'postal_code' => $this->trimNullable($request->input('postal_code')),
+            'country' => $this->trimNullable($request->input('country')) ?: 'Philippines',
+            'email_is_verified' => $request->boolean('email_is_verified'),
+        ])->all();
+
+        $passwordRules = $user
+            ? ['nullable', 'string', Password::defaults(), 'confirmed']
+            : ['required', 'string', Password::defaults(), 'confirmed'];
+
+        return validator($data, [
+            'first_name' => ['required', 'string', 'max:255'],
+            'middle_name' => ['nullable', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user?->id)],
+            'phone_number' => ['nullable', 'regex:/^(09\d{9})$/', Rule::unique('users', 'phone_number')->ignore($user?->id)],
+            'organization_name' => ['nullable', 'string', 'max:255'],
+            'organization_type' => ['nullable', 'string', 'max:255'],
+            'position_title' => ['nullable', 'string', 'max:255'],
+            'address_line1' => ['nullable', 'string', 'max:255'],
+            'barangay' => ['nullable', 'string', 'max:255'],
+            'city_municipality' => ['nullable', 'string', 'max:255'],
+            'province' => ['nullable', 'string', 'max:255'],
+            'postal_code' => ['nullable', 'string', 'max:20'],
+            'country' => ['nullable', 'string', 'max:120'],
+            'password' => $passwordRules,
+            'role' => ['nullable', 'string', 'exists:roles,name'],
+            'email_is_verified' => ['nullable', 'boolean'],
+        ])->validate();
+    }
+
+    protected function normalizePhoneNumber(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+        if ($digits === '') {
+            return null;
+        }
+
+        if (str_starts_with($digits, '639') && strlen($digits) === 12) {
+            return '0' . substr($digits, 2);
+        }
+
+        if (str_starts_with($digits, '9') && strlen($digits) === 10) {
+            return '0' . $digits;
+        }
+
+        return $digits;
+    }
+
+    protected function trimNullable(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        return $trimmed === '' ? null : $trimmed;
+    }
+
+    protected function buildFullName(string $firstName, ?string $middleName, string $lastName): string
+    {
+        return trim(implode(' ', array_filter([$firstName, $middleName, $lastName], function ($value) {
+            return is_string($value) && trim($value) !== '';
+        })));
     }
 }

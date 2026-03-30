@@ -1,10 +1,8 @@
-import { ChangeEvent, FormEvent, useState } from 'react';
-import { Edit3, Image as ImageIcon, Plus, Save, Trash2, X } from 'lucide-react';
-
-type RowId = number | string;
+import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
+import { Edit3, Mail, Phone, Plus, Trash2, X } from 'lucide-react';
 
 export type TourismMemberRow = {
-  id: RowId;
+  id: number | string;
   fullName: string;
   designation: string;
   unitName: string;
@@ -17,7 +15,7 @@ export type TourismMemberRow = {
   featured: boolean;
 };
 
-type TourismMemberFormState = {
+type FormState = {
   fullName: string;
   designation: string;
   unitName: string;
@@ -30,11 +28,11 @@ type TourismMemberFormState = {
   featured: boolean;
 };
 
-type NoticeState =
-  | { type: 'success' | 'error'; text: string }
-  | null;
+type FieldErrors = Record<string, string>;
 
-const emptyForm: TourismMemberFormState = {
+type NoticeState = { type: 'success' | 'error'; text: string } | null;
+
+const emptyForm: FormState = {
   fullName: '',
   designation: '',
   unitName: '',
@@ -48,20 +46,13 @@ const emptyForm: TourismMemberFormState = {
 };
 
 function getCsrfToken() {
-  return (
-    document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')?.trim() ?? ''
-  );
+  return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')?.trim() ?? '';
 }
 
 async function parseApiResponse(response: Response) {
   const contentType = response.headers.get('content-type') ?? '';
-
-  if (contentType.includes('application/json')) {
-    return response.json();
-  }
-
+  if (contentType.includes('application/json')) return response.json();
   const text = await response.text();
-
   try {
     return JSON.parse(text);
   } catch {
@@ -69,16 +60,9 @@ async function parseApiResponse(response: Response) {
   }
 }
 
-async function apiFormSubmit<T>(
-  url: string,
-  formData: FormData,
-  method: 'POST' | 'PUT' = 'POST',
-): Promise<T> {
+async function apiFormSubmit<T>(url: string, formData: FormData, method: 'POST' | 'PUT' = 'POST'): Promise<T> {
   const csrf = getCsrfToken();
-
-  if (method !== 'POST') {
-    formData.append('_method', method);
-  }
+  if (method !== 'POST') formData.append('_method', method);
 
   const response = await fetch(url, {
     method: 'POST',
@@ -92,17 +76,12 @@ async function apiFormSubmit<T>(
   });
 
   const payload = await parseApiResponse(response);
-
-  if (!response.ok) {
-    throw payload;
-  }
-
+  if (!response.ok) throw payload;
   return payload as T;
 }
 
 async function apiDelete<T>(url: string): Promise<T> {
   const csrf = getCsrfToken();
-
   const response = await fetch(url, {
     method: 'DELETE',
     credentials: 'same-origin',
@@ -112,64 +91,100 @@ async function apiDelete<T>(url: string): Promise<T> {
       ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
     },
   });
-
   const payload = await parseApiResponse(response);
-
-  if (!response.ok) {
-    throw payload;
-  }
-
+  if (!response.ok) throw payload;
   return payload as T;
 }
 
 function normalizeErrorMessage(error: unknown): string {
   if (typeof error === 'string') return error;
-
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof (error as { message?: unknown }).message === 'string'
-  ) {
-    return (error as { message: string }).message;
+  if (typeof error === 'object' && error !== null) {
+    if ('message' in error && typeof (error as { message?: unknown }).message === 'string') {
+      return (error as { message: string }).message;
+    }
+    if ('errors' in error && typeof (error as { errors?: unknown }).errors === 'object') {
+      const errors = (error as { errors?: Record<string, string[] | string> }).errors ?? {};
+      const first = Object.values(errors)[0];
+      if (Array.isArray(first) && first[0]) return first[0];
+      if (typeof first === 'string') return first;
+    }
   }
-
-  return 'Something went wrong while processing the request.';
+  return 'Please check the form.';
 }
 
-function upsertById<T extends { id: RowId }>(items: T[], row: T) {
+function validationErrors(error: unknown, map: Record<string, string> = {}): FieldErrors {
+  if (!(typeof error === 'object' && error !== null && 'errors' in error)) return {};
+  const raw = (error as { errors?: Record<string, string[] | string> }).errors ?? {};
+  const out: FieldErrors = {};
+  Object.entries(raw).forEach(([key, value]) => {
+    const message = Array.isArray(value) ? value[0] : value;
+    if (!message) return;
+    out[map[key] ?? key] = String(message);
+  });
+  return out;
+}
+
+function inputClass(hasError: boolean) {
+  return `w-full rounded-xl border px-4 py-3 text-sm outline-none transition ${
+    hasError
+      ? 'border-red-500 bg-red-50 focus:border-red-600 dark:bg-red-950/20'
+      : 'border-slate-300 bg-white focus:border-emerald-600 dark:border-white/10 dark:bg-[#11151d] dark:focus:border-blue-400'
+  }`;
+}
+
+function FieldError({ error }: { error?: string }) {
+  if (!error) return null;
+  return <div className="mt-1 text-sm font-medium text-red-600 dark:text-red-300">{error}</div>;
+}
+
+function NoticeBar({ notice }: { notice: NoticeState }) {
+  if (!notice) return null;
+  return (
+    <div className={`rounded-xl border px-4 py-3 text-sm font-medium ${notice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-red-200 bg-red-50 text-red-800 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200'}`}>
+      {notice.text}
+    </div>
+  );
+}
+
+function upsertById<T extends { id: number | string }>(items: T[], row: T) {
   const exists = items.some((item) => item.id === row.id);
-  if (exists) return items.map((item) => (item.id === row.id ? row : item));
-  return [row, ...items];
+  return exists ? items.map((item) => (item.id === row.id ? row : item)) : [row, ...items];
 }
 
-function removeById<T extends { id: RowId }>(items: T[], id: RowId) {
+function removeById<T extends { id: number | string }>(items: T[], id: number | string) {
   return items.filter((item) => item.id !== id);
 }
 
-export default function TourismMemberManager({
-  initialMembers = [],
-}: {
-  initialMembers?: TourismMemberRow[];
-}) {
+export default function TourismMemberManager({ initialMembers = [] }: { initialMembers?: TourismMemberRow[] }) {
   const [members, setMembers] = useState<TourismMemberRow[]>(initialMembers);
-  const [form, setForm] = useState<TourismMemberFormState>(emptyForm);
-  const [editingId, setEditingId] = useState<RowId | null>(null);
+  const [form, setForm] = useState<FormState>(emptyForm);
+  const [editingId, setEditingId] = useState<number | string | null>(null);
+  const [errors, setErrors] = useState<FieldErrors>({});
   const [notice, setNotice] = useState<NoticeState>(null);
+  const [query, setQuery] = useState('');
+
+  const filteredMembers = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return members;
+    return members.filter((row) => [row.fullName, row.designation, row.unitName, row.email, row.phone].join(' ').toLowerCase().includes(needle));
+  }, [members, query]);
 
   const resetForm = () => {
     setForm(emptyForm);
     setEditingId(null);
+    setErrors({});
   };
 
   const handlePhoto = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
     setForm((prev) => ({ ...prev, photoFile: file }));
+    setErrors((prev) => ({ ...prev, photoFile: '' }));
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setNotice(null);
+    setErrors({});
 
     const formData = new FormData();
     formData.append('full_name', form.fullName);
@@ -181,34 +196,27 @@ export default function TourismMemberManager({
     formData.append('details_text', form.detailsText);
     formData.append('is_active', form.active ? '1' : '0');
     formData.append('is_featured', form.featured ? '1' : '0');
-
-    if (form.photoFile) {
-      formData.append('photo', form.photoFile);
-    }
+    if (form.photoFile) formData.append('photo', form.photoFile);
 
     try {
       const payload = editingId
-        ? await apiFormSubmit<{ message: string; item: TourismMemberRow }>(
-            `/admin/tourism-members/${editingId}`,
-            formData,
-            'PUT',
-          )
-        : await apiFormSubmit<{ message: string; item: TourismMemberRow }>(
-            '/admin/tourism-members',
-            formData,
-            'POST',
-          );
+        ? await apiFormSubmit<{ message: string; item: TourismMemberRow }>(`/admin/tourism-members/${editingId}`, formData, 'PUT')
+        : await apiFormSubmit<{ message: string; item: TourismMemberRow }>('/admin/tourism-members', formData, 'POST');
 
       setMembers((prev) => upsertById(prev, payload.item));
       setNotice({ type: 'success', text: payload.message });
       resetForm();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
+      setErrors(validationErrors(error, { full_name: 'fullName', unit_name: 'unitName', short_bio: 'shortBio', details_text: 'detailsText', photo: 'photoFile', is_active: 'active', is_featured: 'featured' }));
       setNotice({ type: 'error', text: normalizeErrorMessage(error) });
     }
   };
 
   const edit = (row: TourismMemberRow) => {
     setEditingId(row.id);
+    setErrors({});
+    setNotice(null);
     setForm({
       fullName: row.fullName,
       designation: row.designation,
@@ -221,21 +229,16 @@ export default function TourismMemberManager({
       active: row.active,
       featured: row.featured,
     });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const remove = async (id: RowId) => {
-    if (!window.confirm('Are you sure you want to delete this team member profile?')) {
-      return;
-    }
-
+  const remove = async (row: TourismMemberRow) => {
+    if (!window.confirm(`Delete ${row.fullName}?`)) return;
     setNotice(null);
-
     try {
-      const payload = await apiDelete<{ message: string; id: RowId }>(`/admin/tourism-members/${id}`);
+      const payload = await apiDelete<{ message: string; id: number | string }>(`/admin/tourism-members/${row.id}`);
       setMembers((prev) => removeById(prev, payload.id));
-      if (editingId === payload.id) {
-        resetForm();
-      }
+      if (editingId === row.id) resetForm();
       setNotice({ type: 'success', text: payload.message });
     } catch (error) {
       setNotice({ type: 'error', text: normalizeErrorMessage(error) });
@@ -243,208 +246,120 @@ export default function TourismMemberManager({
   };
 
   return (
-    <section className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#121318] sm:p-8">
-      <div className="mb-6">
-        <h2 className="text-2xl font-semibold">CTCAO Team / Member Profiles</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-          Add officer and staff cards for the Tourism Office page, including unit, designation, contact details, and more info content.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <div className="grid gap-5 lg:grid-cols-[1.05fr_1.2fr]">
+        <section className="rounded-2xl border bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#161b24]">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-xl font-bold">Tourism profile form</h2>
+            {editingId ? (
+              <button type="button" onClick={resetForm} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/10">
+                <X className="h-4 w-4" />
+                Cancel
+              </button>
+            ) : null}
+          </div>
 
-      {notice ? (
-        <div
-          className={`mb-6 rounded-2xl border px-4 py-3 text-sm ${
-            notice.type === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200'
-              : 'border-red-200 bg-red-50 text-red-800 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200'
-          }`}
-        >
-          {notice.text}
-        </div>
-      ) : null}
+          <NoticeBar notice={notice} />
 
-      <form
-        onSubmit={submit}
-        className="grid gap-4 rounded-3xl border border-black/5 bg-[#f7f5ef] p-5 dark:border-white/10 dark:bg-white/5 lg:grid-cols-2"
-      >
-        <input
-          value={form.fullName}
-          onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-          placeholder="Full name"
-          className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none dark:border-white/10 dark:bg-[#121318]"
-          required
-        />
+          <form onSubmit={submit} className="mt-4 space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-semibold">Full name</label>
+              <input value={form.fullName} onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))} className={inputClass(!!errors.fullName)} />
+              <FieldError error={errors.fullName} />
+            </div>
 
-        <input
-          value={form.designation}
-          onChange={(e) => setForm((prev) => ({ ...prev, designation: e.target.value }))}
-          placeholder="Designation / Position"
-          className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none dark:border-white/10 dark:bg-[#121318]"
-          required
-        />
+            <div>
+              <label className="mb-1 block text-sm font-semibold">Position</label>
+              <input value={form.designation} onChange={(e) => setForm((prev) => ({ ...prev, designation: e.target.value }))} className={inputClass(!!errors.designation)} />
+              <FieldError error={errors.designation} />
+            </div>
 
-        <input
-          value={form.unitName}
-          onChange={(e) => setForm((prev) => ({ ...prev, unitName: e.target.value }))}
-          placeholder="Unit / Division (example: Creative Baguio City)"
-          className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none dark:border-white/10 dark:bg-[#121318]"
-        />
+            <div>
+              <label className="mb-1 block text-sm font-semibold">Office / unit</label>
+              <input value={form.unitName} onChange={(e) => setForm((prev) => ({ ...prev, unitName: e.target.value }))} className={inputClass(!!errors.unitName)} />
+              <FieldError error={errors.unitName} />
+            </div>
 
-        <input
-          value={form.email}
-          onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-          placeholder="Email"
-          className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none dark:border-white/10 dark:bg-[#121318]"
-        />
-
-        <input
-          value={form.phone}
-          onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-          placeholder="Phone"
-          className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none dark:border-white/10 dark:bg-[#121318]"
-        />
-
-        <label className="flex items-center gap-3 rounded-2xl border border-dashed border-black/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-[#121318]">
-          <ImageIcon className="h-4 w-4" />
-          <span>{form.photoFile ? form.photoFile.name : 'Profile photo'}</span>
-          <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
-        </label>
-
-        <textarea
-          value={form.shortBio}
-          onChange={(e) => setForm((prev) => ({ ...prev, shortBio: e.target.value }))}
-          placeholder="Short bio / summary"
-          rows={4}
-          className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm outline-none dark:border-white/10 dark:bg-[#121318] lg:col-span-2"
-        />
-
-        <textarea
-          value={form.detailsText}
-          onChange={(e) => setForm((prev) => ({ ...prev, detailsText: e.target.value }))}
-          placeholder={'More details, one line per item\nExample:\nHandles tourism coordination\nSupports public inquiries\nCreative sector engagement'}
-          rows={6}
-          className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm outline-none dark:border-white/10 dark:bg-[#121318] lg:col-span-2"
-        />
-
-        <label className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-[#121318]">
-          <input
-            type="checkbox"
-            checked={form.active}
-            onChange={(e) => setForm((prev) => ({ ...prev, active: e.target.checked }))}
-          />
-          Active profile
-        </label>
-
-        <label className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-[#121318]">
-          <input
-            type="checkbox"
-            checked={form.featured}
-            onChange={(e) => setForm((prev) => ({ ...prev, featured: e.target.checked }))}
-          />
-          Featured card
-        </label>
-
-        <div className="lg:col-span-2 flex flex-wrap gap-3">
-          <button
-            type="submit"
-            className="inline-flex items-center gap-2 rounded-full bg-[#174f40] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-[#2d47ff]"
-          >
-            {editingId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {editingId ? 'Update Profile' : 'Create Profile'}
-          </button>
-
-          {editingId ? (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold dark:border-white/10 dark:bg-[#17181c]"
-            >
-              <X className="h-4 w-4" />
-              Cancel Edit
-            </button>
-          ) : null}
-        </div>
-      </form>
-
-      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {members.map((row) => (
-          <div
-            key={row.id}
-            className="rounded-3xl border border-black/5 bg-[#f7f5ef] p-4 dark:border-white/10 dark:bg-white/5"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  {row.photo ? (
-                    <img
-                      src={row.photo}
-                      alt={row.fullName}
-                      className="h-16 w-16 rounded-2xl border border-black/10 object-cover dark:border-white/10"
-                    />
-                  ) : (
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-black/10 bg-white text-2xl font-semibold dark:border-white/10 dark:bg-[#121318]">
-                      {row.fullName.charAt(0)}
-                    </div>
-                  )}
-
-                  <div>
-                    <div className="text-lg font-semibold">{row.fullName}</div>
-                    <div className="text-sm text-[#174f40] dark:text-[#8ea3ff]">{row.designation}</div>
-                    {row.unitName ? (
-                      <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                        {row.unitName}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
-                  {row.shortBio || 'No short bio yet.'}
-                </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-semibold">Email</label>
+                <input type="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} className={inputClass(!!errors.email)} />
+                <FieldError error={errors.email} />
               </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => edit(row)}
-                  className="rounded-full border border-black/10 bg-white p-2 dark:border-white/10 dark:bg-[#17181c]"
-                >
-                  <Edit3 className="h-4 w-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => remove(row.id)}
-                  className="rounded-full border border-red-200 bg-white p-2 text-red-600 dark:border-red-400/20 dark:bg-[#17181c]"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+              <div>
+                <label className="mb-1 block text-sm font-semibold">Phone</label>
+                <input value={form.phone} onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))} className={inputClass(!!errors.phone)} />
+                <FieldError error={errors.phone} />
               </div>
             </div>
 
-            {(row.active || row.featured) && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {row.active ? (
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-                    Active
-                  </span>
-                ) : null}
-                {row.featured ? (
-                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
-                    Featured
-                  </span>
-                ) : null}
-              </div>
-            )}
-          </div>
-        ))}
+            <div>
+              <label className="mb-1 block text-sm font-semibold">Short bio</label>
+              <textarea rows={3} value={form.shortBio} onChange={(e) => setForm((prev) => ({ ...prev, shortBio: e.target.value }))} className={inputClass(!!errors.shortBio)} />
+              <FieldError error={errors.shortBio} />
+            </div>
 
-        {members.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">
-            No team member profiles added yet.
+            <div>
+              <label className="mb-1 block text-sm font-semibold">More details</label>
+              <textarea rows={4} value={form.detailsText} onChange={(e) => setForm((prev) => ({ ...prev, detailsText: e.target.value }))} className={inputClass(!!errors.detailsText)} />
+              <FieldError error={errors.detailsText} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-semibold">Photo</label>
+              <input type="file" accept="image/*" onChange={handlePhoto} className={inputClass(!!errors.photoFile)} />
+              {form.photoFile ? <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">{form.photoFile.name}</div> : null}
+              <FieldError error={errors.photoFile} />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium dark:border-white/10">
+                <input type="checkbox" checked={form.active} onChange={(e) => setForm((prev) => ({ ...prev, active: e.target.checked }))} />
+                Active
+              </label>
+              <label className="flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium dark:border-white/10">
+                <input type="checkbox" checked={form.featured} onChange={(e) => setForm((prev) => ({ ...prev, featured: e.target.checked }))} />
+                Featured
+              </label>
+            </div>
+
+            <button type="submit" className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-800 dark:bg-blue-600 dark:hover:bg-blue-500">
+              {editingId ? 'Update profile' : 'Save profile'}
+            </button>
+          </form>
+        </section>
+
+        <section className="rounded-2xl border bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#161b24]">
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <h2 className="text-xl font-bold">Saved profiles</h2>
+            <div className="relative w-full md:w-72">
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className={inputClass(false)} />
+            </div>
           </div>
-        ) : null}
+
+          <div className="space-y-3">
+            {filteredMembers.length === 0 ? <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">No profiles found.</div> : null}
+            {filteredMembers.map((row) => (
+              <div key={row.id} className="rounded-2xl border p-4 dark:border-white/10">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-lg font-semibold">{row.fullName}</div>
+                    <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{row.designation}{row.unitName ? ` • ${row.unitName}` : ''}</div>
+                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-600 dark:text-slate-300">
+                      {row.email ? <span className="inline-flex items-center gap-2"><Mail className="h-4 w-4" />{row.email}</span> : null}
+                      {row.phone ? <span className="inline-flex items-center gap-2"><Phone className="h-4 w-4" />{row.phone}</span> : null}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => edit(row)} className="rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/10"><Edit3 className="mr-2 inline h-4 w-4" />Edit</button>
+                    <button type="button" onClick={() => remove(row)} className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 dark:border-red-400/20 dark:text-red-300 dark:hover:bg-red-500/10"><Trash2 className="mr-2 inline h-4 w-4" />Delete</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
   );
 }

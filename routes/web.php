@@ -22,6 +22,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use Spatie\Permission\Models\Permission;
 
 /*
 |--------------------------------------------------------------------------
@@ -110,7 +111,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->prefix('admin')
         ->name('admin.')
         ->group(function () {
-            
+
+
             Route::post('/tourism-members', [AdminPublicContentController::class, 'storeTourismMember'])->name('tourism-members.store');
             Route::put('/tourism-members/{tourismMember}', [AdminPublicContentController::class, 'updateTourismMember'])->name('tourism-members.update');
             Route::delete('/tourism-members/{tourismMember}', [AdminPublicContentController::class, 'destroyTourismMember'])->name('tourism-members.destroy');
@@ -410,6 +412,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/users/{user}/roles', [UserRoleController::class, 'update'])
         ->middleware('permission:users.manage')
         ->name('users.roles.update');
+        
+    Route::get('/users/roles', [UserRoleController::class, 'index'])
+                ->middleware('permission:users.manage')
+                ->name('users.roles.index');
+
+    Route::put('/users/{user}/roles', [UserRoleController::class, 'update'])
+                ->middleware('permission:users.manage')
+                ->whereNumber('user')
+                ->name('users.roles.update');
+
+    Route::resource('users', UserController::class)
+                ->middleware('permission:users.manage')
+                ->where(['user' => '[0-9]+']);
 });
 
 require __DIR__ . '/settings.php';
