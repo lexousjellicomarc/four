@@ -58,18 +58,6 @@ export default function WelcomeSection() {
             className="h-full w-full object-cover"
           />
           <div className="absolute inset-0" />
-
-          <div className="absolute left-5 top-5 rounded-full border border-white/20 bg-slate-950/42 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-white backdrop-blur-md">
-            Baguio Convention and Cultural Center
-          </div>
-
-          <div className="absolute bottom-5 left-5 right-5 max-w-2xl rounded-[1.5rem] border border-white/12 bg-slate-950/50 p-4 text-white backdrop-blur-md sm:p-5">
-            <div className="text-xs font-bold uppercase tracking-[0.24em] text-white/72">Public Venue Profile</div>
-            <div className="mt-2 text-xl font-semibold sm:text-2xl">A city venue with heritage presence and modern public-use value.</div>
-            <p className="mt-3 text-sm leading-7 text-white/84">
-              This single-image presentation is prepared so you can replace it later with your final Canva design.
-            </p>
-          </div>
         </div>
       </div>
     </section>

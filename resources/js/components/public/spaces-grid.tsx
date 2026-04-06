@@ -20,7 +20,7 @@ export default function SpacesGrid({ items = [] }: Props) {
   const rows = useMemo(() => chunk(visible, 4), [visible]);
 
   return (
-    <section className="mt-14 w-full px-4 sm:px-6 lg:px-8">
+    <section className="mt-14 w-full px-4 sm:px-4 lg:px-6">
       <div className="mx-auto w-full max-w-[1600px]">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
@@ -49,13 +49,13 @@ export default function SpacesGrid({ items = [] }: Props) {
               return (
                 <div
                   key={`row-${rowIndex}`}
-                  className={`flex flex-wrap gap-5 ${leftPointing ? 'justify-start' : 'justify-end'}`}
+                  className={`flex flex-wrap ${leftPointing ? 'justify-start' : 'justify-end'}`}
                 >
                   {row.map((item) => (
                     <Link
                       key={String(item.id)}
                       href={`/facilities/${item.slug}`}
-                      className="public-hover-card public-image-sheen group relative block h-[360px] w-full max-w-[360px] overflow-hidden border border-black/5 bg-black shadow-[0_24px_65px_rgba(15,23,42,0.16)] dark:border-white/10 sm:w-[calc(50%_-_10px)] xl:w-[calc(25%_-_15px)]"
+                      className="public-hover-card public-image-sheen group relative block h-[360px] w-full max-w-[340px] overflow-hidden border border-black/5 bg-black shadow-[0_24px_65px_rgba(15,23,42,0.16)] dark:border-white/10 sm:w-[calc(50%_-_10px)] xl:w-[calc(25%_-_15px)]"
                       style={{
                         clipPath: leftPointing
                           ? 'polygon(0 0, 92% 0, 100% 100%, 8% 100%)'

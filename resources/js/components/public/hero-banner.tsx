@@ -20,12 +20,12 @@ export default function HeroBanner({ venueOptions }: Props) {
   return (
     <section className="relative min-h-screen w-full mt-0 overflow-hidden">
       <img
-        src="/marketing/images/hero/noon.png"
+        src="/marketing/images/hero/noon2.jpg"
         alt="Baguio panoramic view"
         className="absolute inset-0 h-full w-full object-cover dark:hidden"
       />
       <img
-        src="/marketing/images/hero/night.png"
+        src="/marketing/images/hero/night2.png"
         alt="Baguio panoramic view"
         className="absolute inset-0 hidden h-full w-full object-cover dark:block"
       />
@@ -36,15 +36,24 @@ export default function HeroBanner({ venueOptions }: Props) {
         <div className="max-w-5xl">
           <div className="flex justify-center">
             <img
-              src="/marketing/images/branding/breathe-light.png"
+              src="/marketing/images/branding/breathe-dark.png"
               alt="Breathe Baguio"
               className="max-h-44 w-auto object-contain drop-shadow-[0_15px_35px_rgba(0,0,0,0.18)] dark:hidden sm:max-h-56 lg:max-h-72"
             />
             <img
-              src="/marketing/images/branding/breathe-dark.png"
+              src="/marketing/images/branding/breathe-light.png"
               alt="Breathe Baguio"
               className="hidden max-h-44 w-auto object-contain drop-shadow-[0_18px_40px_rgba(0,0,0,0.32)] dark:block sm:max-h-56 lg:max-h-72"
             />
+          </div>
+
+          <div>
+            <h1 className='font-extrabold text-5xl'>
+              Baguio Convention & Cultural Center
+            </h1>
+            <h3 className='font-extrabold text-4xl'>
+              Events Access & Scheduling Engine
+            </h3>
           </div>
 
           <div className="mt-7 flex flex-wrap justify-center gap-3">

@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { CalendarDays, ChevronLeft, ChevronRight, Lock, MapPin } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Lock, MapPin } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import PageHero from '@/components/public/page-hero';
 import PublicLayout from '@/layouts/public-layout';

@@ -362,7 +362,7 @@ $publicEventItems = $publicEvents->map(function (PublicEvent $event) {
             }
 
             $events = $bookingEvents
-                ->concat($publicEventItems)
+                
                 ->concat($blockEvents)
                 ->values();
         }
