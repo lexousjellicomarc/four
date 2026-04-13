@@ -34,8 +34,6 @@ class Booking extends Model
         'booking_status',
         'payment_status',
         'survey_email',
-
-        // ✅ Proof (disk OR blob)
         'survey_proof_image_path',
         'survey_proof_image',
         'survey_proof_image_mime',
@@ -43,7 +41,6 @@ class Booking extends Model
     ];
 
     protected $hidden = [
-        // don’t accidentally dump raw bytes to the frontend
         'survey_proof_image',
     ];
 
@@ -55,12 +52,10 @@ class Booking extends Model
     {
         $version = $this->updated_at?->timestamp ?? $this->created_at?->timestamp ?? time();
 
-        // DB blob case
         if (!empty($this->survey_proof_image_name)) {
             return url("/bookings/{$this->id}/survey-proof-image") . '?v=' . $version;
         }
 
-        // disk path case
         if (!empty($this->survey_proof_image_path)) {
             $diskUrl = Storage::disk('public')->url($this->survey_proof_image_path);
             return $diskUrl . (str_contains($diskUrl, '?') ? '&' : '?') . 'v=' . $version;
@@ -102,51 +97,59 @@ class Booking extends Model
         return $this->hasMany(BookingView::class, 'booking_id');
     }
 
+    public function lifecycleEvents(): HasMany
+    {
+        return $this->hasMany(BookingLifecycleEvent::class, 'booking_id')
+            ->orderBy('event_at')
+            ->orderBy('id');
+    }
+
     public array $notificationChanges = [];
+
     protected static function booted(): void
-{
-    static::created(function (Booking $booking) {
-        if (app()->runningInConsole()) return;
+    {
+        static::created(function (Booking $booking) {
+            if (app()->runningInConsole()) return;
 
-        try {
-            app(NotificationService::class)->bookingCreated($booking, Auth::user());
-        } catch (\Throwable $e) {
-            report($e);
-        }
-    });
+            try {
+                app(NotificationService::class)->bookingCreated($booking, Auth::user());
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        });
 
-    static::updating(function (Booking $booking) {
-        $changes = [];
+        static::updating(function (Booking $booking) {
+            $changes = [];
 
-        foreach ($booking->getDirty() as $field => $newValue) {
-            if ($field === 'updated_at') continue;
-            $changes[$field] = [$booking->getOriginal($field), $newValue];
-        }
+            foreach ($booking->getDirty() as $field => $newValue) {
+                if ($field === 'updated_at') continue;
+                $changes[$field] = [$booking->getOriginal($field), $newValue];
+            }
 
-        $booking->notificationChanges = $changes;
-    });
+            $booking->notificationChanges = $changes;
+        });
 
-    static::updated(function (Booking $booking) {
-        if (app()->runningInConsole()) return;
+        static::updated(function (Booking $booking) {
+            if (app()->runningInConsole()) return;
 
-        $changes = $booking->notificationChanges ?? [];
-        if (empty($changes)) return;
+            $changes = $booking->notificationChanges ?? [];
+            if (empty($changes)) return;
 
-        try {
-            app(NotificationService::class)->bookingUpdated($booking, Auth::user(), $changes);
-        } catch (\Throwable $e) {
-            report($e);
-        }
-    });
+            try {
+                app(NotificationService::class)->bookingUpdated($booking, Auth::user(), $changes);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        });
 
-    static::deleted(function (Booking $booking) {
-        if (app()->runningInConsole()) return;
+        static::deleted(function (Booking $booking) {
+            if (app()->runningInConsole()) return;
 
-        try {
-            app(NotificationService::class)->bookingDeleted($booking, Auth::user());
-        } catch (\Throwable $e) {
-            report($e);
-        }
-    });
-}
+            try {
+                app(NotificationService::class)->bookingDeleted($booking, Auth::user());
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        });
+    }
 }

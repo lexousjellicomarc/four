@@ -20,6 +20,7 @@ class BookingResource extends JsonResource
                     'id' => $item->id,
                     'service_id' => $item->service_id,
                     'service_name' => $item->service?->name,
+                    'area' => $item->service?->serviceType?->name ?? null,
                     'price' => $price,
                     'quantity' => 1,
                     'line_total' => $price,
@@ -36,11 +37,48 @@ class BookingResource extends JsonResource
                         'id' => $p->id,
                         'status' => $p->status,
                         'payment_method' => $p->payment_method,
+                        'payment_gateway' => $p->payment_gateway,
+                        'payment_type' => $p->payment_type,
                         'amount' => (float) $p->amount,
                         'transaction_reference' => $p->transaction_reference,
-                        'payment_gateway' => $p->payment_gateway,
                         'remarks' => $p->remarks,
+                        'payer_name' => $p->payer_name,
+                        'card_last_four' => $p->card_last_four,
+                        'marketing_consent' => (bool) $p->marketing_consent,
+                        'proof_image_url' => $p->proof_image_url,
+                        'paid_at' => optional($p->paid_at)->toIso8601String(),
                         'created_at' => optional($p->created_at)->toIso8601String(),
+                    ];
+                })
+                ->toArray();
+        });
+
+        $lifecycleEvents = $this->whenLoaded('lifecycleEvents', function () {
+            return $this->lifecycleEvents
+                ->sortBy('event_at')
+                ->values()
+                ->map(function ($event) {
+                    $actor = $event->relationLoaded('actor') ? $event->actor : null;
+
+                    return [
+                        'id' => $event->id,
+                        'event_key' => $event->event_key,
+                        'title' => $event->title,
+                        'from_status' => $event->from_status,
+                        'to_status' => $event->to_status,
+                        'from_payment_status' => $event->from_payment_status,
+                        'to_payment_status' => $event->to_payment_status,
+                        'reason' => $event->reason,
+                        'meta' => $event->meta,
+                        'event_at' => optional($event->event_at ?? $event->created_at)->toIso8601String(),
+                        'created_at' => optional($event->created_at)->toIso8601String(),
+                        'actor' => $actor
+                            ? [
+                                'id' => $actor->id,
+                                'name' => $actor->name,
+                                'email' => $actor->email,
+                            ]
+                            : null,
                     ];
                 })
                 ->toArray();
@@ -129,15 +167,18 @@ class BookingResource extends JsonResource
             'current_user_viewed_at' => $currentUserView?->viewed_at?->toIso8601String(),
 
             'created_at' => optional($this->created_at)->toIso8601String(),
+            'updated_at' => optional($this->updated_at)->toIso8601String(),
 
             'items' => $items,
             'payments' => $payments,
+            'lifecycle_events' => $lifecycleEvents,
 
             'totals' => [
                 'items_total' => $itemsTotal,
                 'payments_total' => $confirmedPaymentsTotal,
                 'submitted_payments_total' => $submittedPaymentsTotal,
                 'confirmed_payments_total' => $confirmedPaymentsTotal,
+                'remaining_balance' => max(0, (float) ($itemsTotal ?? 0) - (float) ($confirmedPaymentsTotal ?? 0)),
             ],
         ];
     }

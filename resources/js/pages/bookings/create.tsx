@@ -5,12 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AlertTriangle, CalendarDays, CheckCircle2, Info, Search, Trash2, Users } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CalendarDays, CheckCircle2, Info, Save, Search, Trash2, Users } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import BookingViewSwitch from '@/components/bookings/view-switch';
 import qrFallback from '@/components/logo/qr.png';
 import { cn } from '@/lib/utils';
+import { BLOCK_KEYS, BLOCK_META, resolveBlockAvailable } from '@/lib/unified-schedule';
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Bookings', href: '/bookings' },
@@ -221,6 +222,111 @@ type FormShape = {
   booking_status: string;
 };
 
+
+type LocalFieldErrors = Partial<Record<keyof FormShape | 'booking_date' | 'selected_blocks' | 'items' | 'survey', string>>;
+
+type SectionKey = 'client' | 'schedule' | 'services' | 'survey';
+
+const SECTION_ORDER: SectionKey[] = ['client', 'schedule', 'services', 'survey'];
+
+
+type BookingDraftPayload = {
+  version: number;
+  saved_at: string;
+  survey_proof_name: string;
+  form: Omit<FormShape, 'survey_proof_image'>;
+  bookingDate: string;
+  selectedBlocks: BlockKey[];
+  search: string;
+  cart: CartItem[];
+};
+
+const BOOKING_DRAFT_VERSION = 1;
+
+function buildDraftKey(seed?: string | null) {
+  const normalized = String(seed ?? '').trim().toLowerCase() || 'guest';
+  return `bccc-ease:booking-create-draft:${normalized}`;
+}
+
+function hasMeaningfulDraftContent(payload: BookingDraftPayload) {
+  return Boolean(
+    payload.form.client_name.trim() ||
+      payload.form.company_name.trim() ||
+      payload.form.client_contact_number.trim() ||
+      payload.form.client_email.trim() ||
+      payload.form.type_of_event.trim() ||
+      payload.form.client_address.trim() ||
+      payload.form.head_of_organization.trim() ||
+      payload.form.number_of_guests.trim() ||
+      payload.bookingDate.trim() ||
+      payload.selectedBlocks.length > 0 ||
+      payload.search.trim() ||
+      payload.cart.length > 0 ||
+      payload.form.survey_email.trim() ||
+      payload.survey_proof_name.trim()
+  );
+}
+
+function formatDraftSavedAt(value?: string | null) {
+  if (!value) return 'No draft saved yet.';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return 'Draft saved.';
+  return `Last autosaved ${d.toLocaleString(undefined, {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`;
+}
+
+function firstTruthyError(errors: LocalFieldErrors) {
+  const order: Array<keyof LocalFieldErrors> = [
+    'client_name',
+    'company_name',
+    'client_contact_number',
+    'client_email',
+    'head_of_organization',
+    'type_of_event',
+    'client_address',
+    'number_of_guests',
+    'booking_status',
+    'booking_date',
+    'selected_blocks',
+    'items',
+    'survey_email',
+    'survey_proof_image',
+    'survey',
+  ];
+
+  return order.find((key) => Boolean(errors[key]));
+}
+
+function sectionForField(field?: keyof LocalFieldErrors): SectionKey {
+  switch (field) {
+    case 'client_name':
+    case 'company_name':
+    case 'client_contact_number':
+    case 'client_email':
+    case 'head_of_organization':
+    case 'type_of_event':
+    case 'client_address':
+    case 'number_of_guests':
+    case 'booking_status':
+      return 'client';
+    case 'booking_date':
+    case 'selected_blocks':
+      return 'schedule';
+    case 'items':
+      return 'services';
+    case 'survey_email':
+    case 'survey_proof_image':
+    case 'survey':
+    default:
+      return 'survey';
+  }
+}
+
 export default function CreateBooking({ serviceTypes, initialSchedule }: CreateBookingProps) {
   const page = usePage<any>();
   const auth = page.props.auth ?? {};
@@ -265,12 +371,264 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
     survey?.qr_image_url ? 'remote' : 'fallback',
   );
 
+  const [localErrors, setLocalErrors] = useState<LocalFieldErrors>({});
+  const draftKey = useMemo(() => buildDraftKey(authEmail || data.client_email || auth?.user?.id), [authEmail, data.client_email, auth?.user?.id]);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [draftRestoreCandidate, setDraftRestoreCandidate] = useState<BookingDraftPayload | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftGateResolved, setDraftGateResolved] = useState(false);
+  const draftTimerRef = useRef<number | null>(null);
+
+  const sectionRefs = useRef<Record<SectionKey, HTMLDivElement | null>>({
+    client: null,
+    schedule: null,
+    services: null,
+    survey: null,
+  });
+
+  function setSectionRef(section: SectionKey) {
+    return (element: HTMLDivElement | null) => {
+      sectionRefs.current[section] = element;
+    };
+  }
+
+  function scrollToSection(section: SectionKey) {
+    const target = sectionRefs.current[section];
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function markDraftInteractive() {
+    if (!draftGateResolved) {
+      setDraftGateResolved(true);
+      setDraftRestoreCandidate(null);
+    }
+  }
+
+  function clearLocalError(field: keyof LocalFieldErrors) {
+    setLocalErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function updateField<K extends keyof FormShape>(field: K, value: FormShape[K]) {
+    setData(field, value);
+    clearLocalError(field);
+    if (!draftGateResolved) {
+      setDraftGateResolved(true);
+      setDraftRestoreCandidate(null);
+    }
+  }
+
+  function buildDraftPayload(): BookingDraftPayload {
+    return {
+      version: BOOKING_DRAFT_VERSION,
+      saved_at: new Date().toISOString(),
+      survey_proof_name: data.survey_proof_image?.name ?? '',
+      form: {
+        service_id: data.service_id,
+        company_name: data.company_name,
+        client_name: data.client_name,
+        client_contact_number: data.client_contact_number,
+        client_email: data.client_email,
+        survey_email: data.survey_email,
+        client_address: data.client_address,
+        head_of_organization: data.head_of_organization,
+        type_of_event: data.type_of_event,
+        booking_date_from: data.booking_date_from,
+        booking_date_to: data.booking_date_to,
+        number_of_guests: data.number_of_guests,
+        booking_status: data.booking_status,
+      },
+      bookingDate,
+      selectedBlocks,
+      search,
+      cart,
+    };
+  }
+
+  function persistDraft(payload = buildDraftPayload()) {
+    if (typeof window === 'undefined') return;
+
+    if (!hasMeaningfulDraftContent(payload)) {
+      window.localStorage.removeItem(draftKey);
+      setDraftSavedAt(null);
+      return;
+    }
+
+    window.localStorage.setItem(draftKey, JSON.stringify(payload));
+    setDraftSavedAt(payload.saved_at);
+  }
+
+  function clearDraftStorage() {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(draftKey);
+    setDraftSavedAt(null);
+    setDraftRestoreCandidate(null);
+    setDraftGateResolved(true);
+  }
+
+  function restoreDraft(payload: BookingDraftPayload) {
+    setData((current) => ({
+      ...current,
+      ...payload.form,
+      survey_proof_image: null,
+    }));
+    setBookingDate(payload.bookingDate || '');
+    setSelectedBlocks(
+      Array.isArray(payload.selectedBlocks)
+        ? payload.selectedBlocks.filter((block): block is BlockKey => ['AM', 'PM', 'EVE'].includes(block))
+        : [],
+    );
+    setSearch(payload.search || '');
+    setCart(Array.isArray(payload.cart) ? payload.cart : []);
+    setPreviewUrl(null);
+    setLocalErrors({});
+    setScheduleError(null);
+    setCapacityError(null);
+    setDraftRestoreCandidate(null);
+    setDraftSavedAt(payload.saved_at || new Date().toISOString());
+    setDraftGateResolved(true);
+  }
+
   useEffect(() => {
     if (!isClient || !authEmail) return;
     if (data.client_email !== authEmail) {
       setData('client_email', authEmail);
     }
   }, [isClient, authEmail, data.client_email]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      if (!raw) {
+        setDraftRestoreCandidate(null);
+        setDraftSavedAt(null);
+        setDraftGateResolved(true);
+        setDraftReady(true);
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as BookingDraftPayload;
+      if (!parsed || parsed.version !== BOOKING_DRAFT_VERSION) {
+        window.localStorage.removeItem(draftKey);
+        setDraftRestoreCandidate(null);
+        setDraftSavedAt(null);
+        setDraftGateResolved(true);
+        setDraftReady(true);
+        return;
+      }
+
+      if (!hasMeaningfulDraftContent(parsed)) {
+        window.localStorage.removeItem(draftKey);
+        setDraftRestoreCandidate(null);
+        setDraftSavedAt(null);
+        setDraftGateResolved(true);
+        setDraftReady(true);
+        return;
+      }
+
+      setDraftRestoreCandidate(parsed);
+      setDraftSavedAt(parsed.saved_at || null);
+      setDraftGateResolved(false);
+    } catch {
+      setDraftRestoreCandidate(null);
+      setDraftSavedAt(null);
+      setDraftGateResolved(true);
+    } finally {
+      setDraftReady(true);
+    }
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftReady || !draftGateResolved) return;
+    if (typeof window === 'undefined') return;
+
+    if (draftTimerRef.current) {
+      window.clearTimeout(draftTimerRef.current);
+    }
+
+    draftTimerRef.current = window.setTimeout(() => {
+      persistDraft();
+    }, 800);
+
+    return () => {
+      if (draftTimerRef.current) {
+        window.clearTimeout(draftTimerRef.current);
+      }
+    };
+  }, [
+    draftReady,
+    draftGateResolved,
+    data.service_id,
+    data.company_name,
+    data.client_name,
+    data.client_contact_number,
+    data.client_email,
+    data.survey_email,
+    data.client_address,
+    data.head_of_organization,
+    data.type_of_event,
+    data.booking_status,
+    data.number_of_guests,
+    bookingDate,
+    selectedBlocks,
+    search,
+    cart,
+    draftKey,
+  ]);
+
+  useEffect(() => {
+    const hasFileThatCannotBeAutosaved = Boolean(data.survey_proof_image);
+    if (!hasFileThatCannotBeAutosaved) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [data.survey_proof_image]);
+
+  useEffect(() => {
+    if (!draftRestoreCandidate) return;
+    if (data.client_name || data.company_name || data.type_of_event || cart.length > 0 || bookingDate) {
+      setDraftGateResolved(true);
+      setDraftRestoreCandidate(null);
+    }
+  }, [draftRestoreCandidate, data.client_name, data.company_name, data.type_of_event, cart.length, bookingDate]);
+
+  useEffect(() => {
+    const mergedErrors: LocalFieldErrors = {
+      client_name: errors.client_name,
+      company_name: errors.company_name,
+      client_contact_number: errors.client_contact_number,
+      client_email: errors.client_email,
+      head_of_organization: errors.head_of_organization,
+      type_of_event: errors.type_of_event,
+      client_address: errors.client_address,
+      number_of_guests: errors.number_of_guests,
+      booking_status: errors.booking_status,
+      booking_date: errors.booking_date_from || errors.booking_date_to,
+      items: errors.items as string | undefined,
+      survey_email: errors.survey_email,
+      survey_proof_image: errors.survey_proof_image,
+    };
+
+    const firstField = firstTruthyError(mergedErrors);
+    if (!firstField) return;
+
+    const section = sectionForField(firstField);
+    window.requestAnimationFrame(() => {
+      scrollToSection(section);
+    });
+  }, [errors]);
 
   useEffect(() => {
     if (!data.survey_proof_image) {
@@ -402,6 +760,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
       return;
     }
 
+    markDraftInteractive();
     setCart((prev) => [
       ...prev,
       {
@@ -414,9 +773,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
         capacity_note: service.capacity_note ?? null,
       },
     ]);
+    clearLocalError('items');
   }
 
   function removeService(serviceId: number) {
+    markDraftInteractive();
     setCart((prev) => prev.filter((item) => item.service_id !== serviceId));
   }
 
@@ -428,36 +789,62 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
   const surveyQrUrl = survey?.qr_image_url ? normalizeAssetUrl(String(survey.qr_image_url)) : null;
   const qrSrc = qrStage === 'remote' ? surveyQrUrl : qrStage === 'fallback' ? qrFallback : null;
 
+
+  function validateBeforeSubmit() {
+    const nextErrors: LocalFieldErrors = {};
+
+    if (!data.client_name.trim()) nextErrors.client_name = 'Please enter the client name.';
+    if (!data.client_contact_number.trim()) nextErrors.client_contact_number = 'Please enter the contact number.';
+    if (!data.client_email.trim()) nextErrors.client_email = 'Please enter the client email.';
+    if (!data.type_of_event.trim()) nextErrors.type_of_event = 'Please enter the type of event.';
+    if (!data.client_address.trim()) nextErrors.client_address = 'Please enter the client address.';
+    if (!data.number_of_guests.trim() || Number(data.number_of_guests) <= 0) {
+      nextErrors.number_of_guests = 'Please enter a valid number of guests.';
+    }
+
+    if (!bookingDate) {
+      nextErrors.booking_date = 'Please select a booking date.';
+    }
+
+    if (selectedBlocks.length === 0) {
+      nextErrors.selected_blocks = 'Please select at least one schedule block.';
+    }
+
+    if (cart.length === 0) {
+      nextErrors.items = 'Please select at least one service.';
+    }
+
+    if (capacityError) {
+      nextErrors.items = capacityError;
+    }
+
+    if (!data.survey_email.trim()) {
+      nextErrors.survey_email = 'Please enter the survey email used in the Google Form.';
+    }
+
+    if (!data.survey_proof_image) {
+      nextErrors.survey_proof_image = 'Please upload the survey proof image.';
+    }
+
+    setLocalErrors(nextErrors);
+
+    const firstField = firstTruthyError(nextErrors);
+    if (firstField) {
+      const section = sectionForField(firstField);
+      window.requestAnimationFrame(() => {
+        scrollToSection(section);
+      });
+      return false;
+    }
+
+    return true;
+  }
+
   function submitBooking(e: FormEvent) {
     e.preventDefault();
     setScheduleError(null);
 
-    if (!bookingDate) {
-      setScheduleError('Please select a booking date.');
-      return;
-    }
-
-    if (selectedBlocks.length === 0) {
-      setScheduleError('Please select at least one schedule block.');
-      return;
-    }
-
-    if (cart.length === 0) {
-      setScheduleError('Please select at least one service.');
-      return;
-    }
-
-    if (capacityError) {
-      return;
-    }
-
-    if (!data.survey_email.trim()) {
-      setScheduleError('Please enter the survey email used in the Google Form.');
-      return;
-    }
-
-    if (!data.survey_proof_image) {
-      setScheduleError('Please upload the survey proof image.');
+    if (!validateBeforeSubmit()) {
       return;
     }
 
@@ -469,7 +856,10 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
 
     const badBlocks = selectedBlocks.filter((block) => !isBlockAvailable(currentAvailability, block));
     if (badBlocks.length > 0) {
-      setScheduleError(`The selected block is not available: ${badBlocks.join(', ')}.`);
+      const message = `The selected block is not available: ${badBlocks.join(', ')}.`;
+      setScheduleError(message);
+      setLocalErrors((prev) => ({ ...prev, selected_blocks: message }));
+      scrollToSection('schedule');
       return;
     }
 
@@ -488,6 +878,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
 
     post('/bookings', {
       forceFormData: true,
+      onSuccess: () => {
+        clearDraftStorage();
+      },
     });
   }
 
@@ -509,7 +902,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   Book your schedule
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300">
-                  Choose your details, date, time block, and service. Your entries stay in place if you need to correct anything.
+                  Choose your details, date, time block, and service. When the form is incomplete, the page now jumps to the first missing section so the client can correct it quickly.
                 </p>
               </div>
 
@@ -568,15 +961,69 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-[#dce9e4] bg-[#eef7f4] px-4 py-3 text-xs leading-6 text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
-                  Capacity notes are checked against the selected service and guest count before submission.
+                  Capacity notes are checked against the selected service and guest count before submission. After saving, the flow continues to the payment screen.
                 </div>
               </div>
             </div>
           </div>
         </Card>
 
+        {draftRestoreCandidate ? (
+          <Card className="border-[#bfd2ff] bg-[#eef4ff] dark:border-[#263541] dark:bg-[#16212b]">
+            <CardContent className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#bfd2ff] bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#1645ac] dark:border-[#3f5b9d] dark:bg-[#1c2740] dark:text-[#9dc0ff]">
+                  <Save className="h-3.5 w-3.5" /> Draft Found
+                </div>
+                <div className="text-lg font-semibold text-[#1f1f1c] dark:text-white">
+                  A saved booking draft is available on this device.
+                </div>
+                <div className="text-sm leading-7 text-slate-600 dark:text-slate-300">
+                  {formatDraftSavedAt(draftRestoreCandidate.saved_at)}. You can restore it and continue where you left off. For security reasons, the survey proof image file cannot be restored automatically and must be uploaded again.
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button type="button" variant="outline" onClick={() => clearDraftStorage()}>
+                  Discard Draft
+                </Button>
+                <Button type="button" onClick={() => restoreDraft(draftRestoreCandidate)}>
+                  Restore Draft
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-black/5 bg-white/80 dark:border-white/10 dark:bg-[#121318]">
+            <CardContent className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#dce9e4] bg-[#eef7f4] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
+                  <Save className="h-3.5 w-3.5" /> Draft Autosave
+                </div>
+                <div className="text-sm leading-7 text-slate-600 dark:text-slate-300">
+                  {formatDraftSavedAt(draftSavedAt)} The form now saves locally while you type so refreshes or accidental tab closes do not wipe the whole booking.
+                </div>
+                {data.survey_proof_image ? (
+                  <div className="text-xs text-amber-700 dark:text-amber-300">
+                    The uploaded survey proof image is not included in local draft storage. Re-upload it if the page is refreshed.
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button type="button" variant="outline" onClick={() => persistDraft()}>
+                  Save Draft Now
+                </Button>
+                <Button type="button" variant="outline" onClick={() => clearDraftStorage()}>
+                  Clear Saved Draft
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <form onSubmit={submitBooking} className="space-y-6">
-          <Card>
+          <Card ref={setSectionRef('client')}>
             <CardHeader>
               <CardTitle>Client details</CardTitle>
             </CardHeader>
@@ -586,11 +1033,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                 <Input
                   id="client_name"
                   value={data.client_name}
-                  onChange={(e) => setData('client_name', e.currentTarget.value)}
+                  onChange={(e) => updateField('client_name', e.currentTarget.value)}
                   required
-                  className={fieldClass(Boolean(errors.client_name))}
+                  className={fieldClass(Boolean(localErrors.client_name || errors.client_name))}
                 />
-                <FieldError message={errors.client_name} />
+                <FieldError message={localErrors.client_name || errors.client_name} />
               </div>
 
               <div className="space-y-2">
@@ -598,10 +1045,10 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                 <Input
                   id="company_name"
                   value={data.company_name}
-                  onChange={(e) => setData('company_name', e.currentTarget.value)}
-                  className={fieldClass(Boolean(errors.company_name))}
+                  onChange={(e) => updateField('company_name', e.currentTarget.value)}
+                  className={fieldClass(Boolean(localErrors.company_name || errors.company_name))}
                 />
-                <FieldError message={errors.company_name} />
+                <FieldError message={localErrors.company_name || errors.company_name} />
               </div>
 
               <div className="space-y-2">
@@ -609,11 +1056,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                 <Input
                   id="client_contact_number"
                   value={data.client_contact_number}
-                  onChange={(e) => setData('client_contact_number', e.currentTarget.value)}
+                  onChange={(e) => updateField('client_contact_number', e.currentTarget.value)}
                   required
-                  className={fieldClass(Boolean(errors.client_contact_number))}
+                  className={fieldClass(Boolean(localErrors.client_contact_number || errors.client_contact_number))}
                 />
-                <FieldError message={errors.client_contact_number} />
+                <FieldError message={localErrors.client_contact_number || errors.client_contact_number} />
               </div>
 
               <div className="space-y-2">
@@ -622,12 +1069,12 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   id="client_email"
                   type="email"
                   value={data.client_email}
-                  onChange={(e) => setData('client_email', e.currentTarget.value)}
+                  onChange={(e) => updateField('client_email', e.currentTarget.value)}
                   required
                   disabled={isClient && !!authEmail}
-                  className={fieldClass(Boolean(errors.client_email), isClient && !!authEmail ? 'bg-muted text-muted-foreground' : undefined)}
+                  className={fieldClass(Boolean(localErrors.client_email || errors.client_email), isClient && !!authEmail ? 'bg-muted text-muted-foreground' : undefined)}
                 />
-                <FieldError message={errors.client_email} />
+                <FieldError message={localErrors.client_email || errors.client_email} />
               </div>
 
               <div className="space-y-2">
@@ -635,10 +1082,10 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                 <Input
                   id="head_of_organization"
                   value={data.head_of_organization}
-                  onChange={(e) => setData('head_of_organization', e.currentTarget.value)}
-                  className={fieldClass(Boolean(errors.head_of_organization))}
+                  onChange={(e) => updateField('head_of_organization', e.currentTarget.value)}
+                  className={fieldClass(Boolean(localErrors.head_of_organization || errors.head_of_organization))}
                 />
-                <FieldError message={errors.head_of_organization} />
+                <FieldError message={localErrors.head_of_organization || errors.head_of_organization} />
               </div>
 
               <div className="space-y-2">
@@ -646,11 +1093,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                 <Input
                   id="type_of_event"
                   value={data.type_of_event}
-                  onChange={(e) => setData('type_of_event', e.currentTarget.value)}
+                  onChange={(e) => updateField('type_of_event', e.currentTarget.value)}
                   required
-                  className={fieldClass(Boolean(errors.type_of_event))}
+                  className={fieldClass(Boolean(localErrors.type_of_event || errors.type_of_event))}
                 />
-                <FieldError message={errors.type_of_event} />
+                <FieldError message={localErrors.type_of_event || errors.type_of_event} />
               </div>
 
               <div className="space-y-2 md:col-span-2">
@@ -658,12 +1105,12 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                 <textarea
                   id="client_address"
                   value={data.client_address}
-                  onChange={(e) => setData('client_address', e.currentTarget.value)}
+                  onChange={(e) => updateField('client_address', e.currentTarget.value)}
                   rows={3}
-                  className={fieldClass(Boolean(errors.client_address), 'w-full rounded-md bg-background px-3 py-2 text-sm')}
+                  className={fieldClass(Boolean(localErrors.client_address || errors.client_address), 'w-full rounded-md bg-background px-3 py-2 text-sm')}
                   required
                 />
-                <FieldError message={errors.client_address} />
+                <FieldError message={localErrors.client_address || errors.client_address} />
               </div>
 
               <div className="space-y-2">
@@ -673,11 +1120,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   type="number"
                   min="1"
                   value={data.number_of_guests}
-                  onChange={(e) => setData('number_of_guests', e.currentTarget.value)}
+                  onChange={(e) => updateField('number_of_guests', e.currentTarget.value)}
                   required
-                  className={fieldClass(Boolean(errors.number_of_guests))}
+                  className={fieldClass(Boolean(localErrors.number_of_guests || errors.number_of_guests))}
                 />
-                <FieldError message={errors.number_of_guests} />
+                <FieldError message={localErrors.number_of_guests || errors.number_of_guests} />
               </div>
 
               {!isClient && (
@@ -686,8 +1133,8 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   <select
                     id="booking_status"
                     value={data.booking_status}
-                    onChange={(e) => setData('booking_status', e.currentTarget.value)}
-                    className={fieldClass(Boolean(errors.booking_status), 'h-10 w-full rounded-md bg-background px-3 text-sm')}
+                    onChange={(e) => updateField('booking_status', e.currentTarget.value)}
+                    className={fieldClass(Boolean(localErrors.booking_status || errors.booking_status), 'h-10 w-full rounded-md bg-background px-3 text-sm')}
                   >
                     <option value="pending">Pending</option>
                     <option value="confirmed">Confirmed</option>
@@ -696,13 +1143,13 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                     <option value="cancelled">Cancelled</option>
                     <option value="completed">Completed</option>
                   </select>
-                  <FieldError message={errors.booking_status} />
+                  <FieldError message={localErrors.booking_status || errors.booking_status} />
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card ref={setSectionRef('schedule')}>
             <CardHeader>
               <CardTitle>Choose date and time</CardTitle>
             </CardHeader>
@@ -715,9 +1162,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                     type="date"
                     min={todayLocal()}
                     value={bookingDate}
-                    onChange={(e) => setBookingDate(e.currentTarget.value)}
+                    onChange={(e) => { setBookingDate(e.currentTarget.value); clearLocalError('booking_date'); clearLocalError('selected_blocks'); }}
                     required
-                    className={fieldClass(Boolean(scheduleError || errors.booking_date_from || errors.booking_date_to))}
+                    className={fieldClass(Boolean(localErrors.booking_date || scheduleError || errors.booking_date_from || errors.booking_date_to))}
                   />
                 </div>
 
@@ -732,7 +1179,8 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                         <button
                           key={block}
                           type="button"
-                          onClick={() => setSelectedBlocks((prev) => toggleBlock(prev, block))}
+                          onClick={() => { markDraftInteractive();
+                      setSelectedBlocks((prev) => toggleBlock(prev, block)); clearLocalError('selected_blocks'); }}
                           disabled={!available || !bookingDate}
                           className={cn(
                             'rounded-2xl border px-4 py-4 text-left transition',
@@ -771,19 +1219,19 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
 
               {(scheduleError || errors.booking_date_from || errors.booking_date_to) && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
-                  {scheduleError || errors.booking_date_from || errors.booking_date_to}
+                  {localErrors.booking_date || localErrors.selected_blocks || scheduleError || errors.booking_date_from || errors.booking_date_to}
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card ref={setSectionRef('services')}>
             <CardHeader>
               <CardTitle>Choose services</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="rounded-2xl border border-[#dce9e4] bg-[#eef7f4] px-4 py-3 text-sm text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
-                Choose one or more services. Each service is added once only.
+                Choose one or more services. When you select one, it disappears from the available list and moves to the selected-services panel for easier review.
               </div>
 
               <div className="space-y-2">
@@ -793,18 +1241,18 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   <Input
                     id="service_search"
                     value={search}
-                    onChange={(e) => setSearch(e.currentTarget.value)}
+                    onChange={(e) => { markDraftInteractive(); setSearch(e.currentTarget.value); }}
                     className={fieldClass(Boolean(errors.service_search), 'pl-10')}
                     placeholder="Search service or area"
                   />
                 </div>
               </div>
 
-              {capacityError && (
+              {(capacityError || localErrors.items) && (
                 <div className="rounded-2xl border border-[#f2c8c8] bg-[#fff6f6] px-4 py-3 text-sm text-[#a52a2a] dark:border-[#6e2a2a] dark:bg-[#241414] dark:text-[#ffbcbc]">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{capacityError}</span>
+                    <span>{localErrors.items || capacityError}</span>
                   </div>
                 </div>
               )}
@@ -914,9 +1362,13 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                         ))
                       ) : (
                         <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">
-                          No service selected yet.
+                          No service selected yet. Choose from the left panel.
                         </div>
                       )}
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-[#dce9e4] bg-[#eef7f4] px-4 py-4 text-sm text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
+                      The selected services shown here are the items that will be sent with the booking after you finalize the form.
                     </div>
 
                     <div className="mt-4 rounded-2xl border border-black/5 bg-[#f7f5ef] px-4 py-4 dark:border-white/10 dark:bg-white/5">
@@ -930,16 +1382,14 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                       </div>
                     </div>
 
-                    {(errors.items as any) && (
-                      <FieldError message={String(errors.items)} />
-                    )}
+                    <FieldError message={localErrors.items || String((errors.items as any) ?? '')} />
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card ref={setSectionRef('survey')}>
             <CardHeader>
               <CardTitle>Survey</CardTitle>
             </CardHeader>
@@ -987,11 +1437,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                       id="survey_email"
                       type="email"
                       value={data.survey_email}
-                      onChange={(e) => setData('survey_email', e.currentTarget.value)}
+                      onChange={(e) => updateField('survey_email', e.currentTarget.value)}
                       required
-                      className={fieldClass(Boolean(errors.survey_email))}
+                      className={fieldClass(Boolean(localErrors.survey_email || errors.survey_email))}
                     />
-                    <FieldError message={errors.survey_email} />
+                    <FieldError message={localErrors.survey_email || errors.survey_email} />
                   </div>
 
                   <div className="space-y-2">
@@ -1000,11 +1450,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                       id="survey_proof_image"
                       type="file"
                       accept="image/*"
-                      onChange={(e) => setData('survey_proof_image', e.currentTarget.files?.[0] ?? null)}
+                      onChange={(e) => { updateField('survey_proof_image', e.currentTarget.files?.[0] ?? null); clearLocalError('survey'); }}
                       required
-                      className={fieldClass(Boolean(errors.survey_proof_image))}
+                      className={fieldClass(Boolean(localErrors.survey_proof_image || errors.survey_proof_image))}
                     />
-                    <FieldError message={errors.survey_proof_image} />
+                    <FieldError message={localErrors.survey_proof_image || errors.survey_proof_image} />
                   </div>
 
                   {previewUrl && (
@@ -1021,6 +1471,10 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
             </CardContent>
           </Card>
 
+          <div className="rounded-2xl border border-[#dce9e4] bg-[#eef7f4] px-4 py-4 text-sm text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
+            After this booking is saved, the next screen should be used for payment options, proof upload, and reference number submission.
+          </div>
+
           <div className="flex flex-wrap items-center justify-end gap-3">
             <Link href="/bookings">
               <Button type="button" variant="outline">
@@ -1029,7 +1483,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
             </Link>
 
             <Button type="submit" disabled={processing || !!capacityError}>
-              {processing ? 'Submitting...' : 'Submit Booking'}
+              {processing ? 'Submitting...' : 'Save Booking and Continue to Payment'}
             </Button>
           </div>
         </form>

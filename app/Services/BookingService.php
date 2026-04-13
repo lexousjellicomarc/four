@@ -12,9 +12,56 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Schema;
 use App\Models\CalendarBlock;
 use App\Models\PublicEvent;
+use App\Models\BookingLifecycleEvent;
 
 class BookingService implements BookingServiceInterface
 {
+    protected function recordLifecycleEvent(
+    Booking $booking,
+    string $eventKey,
+    string $title,
+    ?string $reason = null,
+    ?string $fromStatus = null,
+    ?string $toStatus = null,
+    ?string $fromPaymentStatus = null,
+    ?string $toPaymentStatus = null,
+    array $meta = [],
+): void {
+    try {
+        BookingLifecycleEvent::query()->create([
+            'booking_id' => $booking->id,
+            'actor_user_id' => auth()->id(),
+            'event_key' => $eventKey,
+            'title' => $title,
+            'from_status' => $fromStatus,
+            'to_status' => $toStatus,
+            'from_payment_status' => $fromPaymentStatus,
+            'to_payment_status' => $toPaymentStatus,
+            'reason' => $reason,
+            'meta' => $this->normalizeLifecycleMeta($meta),
+            'event_at' => now(),
+        ]);
+    } catch (\Throwable $e) {
+        report($e);
+    }
+}
+
+protected function normalizeLifecycleMeta(array $meta): array
+{
+    return collect($meta)
+        ->filter(function ($value) {
+            return $value !== null && $value !== '' && $value !== [];
+        })
+        ->map(function ($value) {
+            if ($value instanceof Carbon) {
+                return $value->toIso8601String();
+            }
+
+            return $value;
+        })
+        ->toArray();
+}
+
     protected function bookingSelectColumns(): array
     {
         static $columns = null;
@@ -296,6 +343,18 @@ class BookingService implements BookingServiceInterface
         $data['service_id'] = $items[0]['service_id'] ?? null;
 
         $booking = Booking::create($data);
+        
+        $this->recordLifecycleEvent(
+    $booking,
+    'booking_created',
+    'Booking submitted',
+    reason: 'The booking record was created and is now being tracked by the lifecycle system.',
+    toStatus: (string) ($booking->booking_status ?? ''),
+    toPaymentStatus: (string) ($booking->payment_status ?? ''),
+    meta: [
+        'source' => 'booking_service.create',
+    ],
+);
 
         if (! empty($items)) {
             $this->syncItems($booking, $items);
@@ -305,6 +364,21 @@ class BookingService implements BookingServiceInterface
         $this->createExtraSchedules($booking, $extraSchedules);
 
         return $booking->refresh()->loadMissing(['createdBy']);
+        if (! empty($data)) {
+    $this->recordLifecycleEvent(
+        $booking,
+        'booking_updated',
+        'Booking details updated',
+        reason: 'One or more booking details were modified.',
+        toStatus: (string) ($booking->booking_status ?? ''),
+        toPaymentStatus: (string) ($booking->payment_status ?? ''),
+        meta: [
+            'changed_fields' => array_values(array_keys($data)),
+            'source' => 'booking_service.update',
+        ],
+    );
+}
+
     });
 }
 
@@ -614,34 +688,36 @@ protected function existingItemsForCapacity(Booking $booking): array
         }
     }
 
-    if ($booking->payment_status !== $newPaymentStatus) {
+    $previousPaymentStatus = (string) ($booking->payment_status ?? '');
+
+    if ($previousPaymentStatus !== $newPaymentStatus) {
         $booking->forceFill([
             'payment_status' => $newPaymentStatus,
         ])->saveQuietly();
+
+        $this->recordLifecycleEvent(
+            $booking,
+            'payment_status_changed',
+            'Payment status updated',
+            reason: 'Payment totals were recalculated for this booking.',
+            fromPaymentStatus: $previousPaymentStatus,
+            toPaymentStatus: $newPaymentStatus,
+            meta: [
+                'items_total' => $itemsTotal,
+                'confirmed_payments_total' => $completedPaid,
+                'source' => 'booking_service.recalculate_payment_status',
+            ],
+        );
 
         $booking->refresh();
     }
 
     $this->syncLifecycleStatus($booking);
 }
-
-
-    public function syncLifecycleStatuses(): int
+    
+public function syncLifecycleStatuses(): int
 {
-    $changed = 0;
-
-    Booking::query()
-        ->where('booking_status', '!=', 'cancelled')
-        ->orderBy('id')
-        ->chunkById(100, function ($bookings) use (&$changed) {
-            foreach ($bookings as $booking) {
-                if ($this->syncLifecycleStatusAndReturnChange($booking) !== null) {
-                    $changed++;
-                }
-            }
-        });
-
-    return $changed;
+    return (int) ($this->runAutomatedLifecycleMaintenance()['changed_count'] ?? 0);
 }
 
 public function syncLifecycleStatus(Booking $booking): bool
@@ -680,12 +756,13 @@ protected function syncLifecycleStatusAndReturnChange(Booking $booking): ?array
 {
     $currentStatus = strtolower((string) ($booking->booking_status ?? ''));
 
-    // Cancelled stays manual and is never auto-overwritten.
     if ($currentStatus === 'cancelled') {
         return null;
     }
 
-    $nextStatus = $this->determineAutomaticBookingStatus($booking);
+    $decision = $this->determineAutomaticBookingDecision($booking);
+    $nextStatus = (string) ($decision['status'] ?? $booking->booking_status);
+    $reason = (string) ($decision['reason'] ?? '');
 
     if ($nextStatus === $booking->booking_status) {
         return null;
@@ -697,6 +774,19 @@ protected function syncLifecycleStatusAndReturnChange(Booking $booking): ?array
         'booking_status' => $nextStatus,
     ])->saveQuietly();
 
+    $this->recordLifecycleEvent(
+        $booking,
+        'booking_status_changed',
+        'Booking status updated',
+        reason: $reason !== '' ? $reason : 'The booking lifecycle engine updated the booking status.',
+        fromStatus: $previousStatus,
+        toStatus: $nextStatus,
+        toPaymentStatus: (string) ($booking->payment_status ?? ''),
+        meta: [
+            'source' => app()->runningInConsole() ? 'automation' : 'booking_service.sync_lifecycle_status',
+        ],
+    );
+
     return [
         'booking_id' => $booking->id,
         'title' => (string) ($booking->type_of_event ?: $booking->company_name ?: 'Booking'),
@@ -704,8 +794,10 @@ protected function syncLifecycleStatusAndReturnChange(Booking $booking): ?array
         'from_status' => $previousStatus,
         'to_status' => $nextStatus,
         'scheduled_at' => optional($booking->booking_date_from)?->format('Y-m-d H:i'),
+        'reason' => $reason,
     ];
 }
+
 
 protected function automatedDeletionWindowHours(): int
 {
@@ -733,6 +825,19 @@ protected function cleanupAutoDeletedBookings(): array
             'scheduled_at' => optional($booking->booking_date_from)?->format('Y-m-d H:i'),
         ];
 
+        $this->recordLifecycleEvent(
+            $booking,
+            'booking_auto_deleted',
+            'Booking automatically deleted',
+            reason: 'The booking remained declined or cancelled beyond the cleanup window and was automatically removed.',
+            fromStatus: (string) ($booking->booking_status ?? ''),
+            toStatus: 'deleted',
+            toPaymentStatus: (string) ($booking->payment_status ?? ''),
+            meta: [
+                'source' => 'booking_service.cleanup_auto_deleted_bookings',
+            ],
+        );
+
         $booking->delete();
     }
 
@@ -740,10 +845,9 @@ protected function cleanupAutoDeletedBookings(): array
 }
 
 
-protected function determineAutomaticBookingStatus(Booking $booking): string
+protected function determineAutomaticBookingDecision(Booking $booking): array
 {
-    $paymentStatus = strtolower((string) ($booking->payment_status ?? 'unpaid'));
-    $hasQualifiedPayment = in_array($paymentStatus, ['partial', 'paid'], true);
+    $booking->loadMissing(['bookingServices.service', 'payments']);
 
     $now = Carbon::now();
 
@@ -759,29 +863,144 @@ protected function determineAutomaticBookingStatus(Booking $booking): string
         ? $booking->booking_date_to->copy()
         : ($booking->booking_date_to ? Carbon::parse($booking->booking_date_to) : null);
 
-    // No qualifying payment yet:
-    // - within 24 hours from creation => pending
-    // - beyond 24 hours => declined
-    if (! $hasQualifiedPayment) {
-        return $createdAt->copy()->addHours(24)->lte($now)
-            ? 'declined'
-            : 'pending';
+    $itemsTotal = $booking->bookingServices->reduce(function ($carry, $item) {
+        $price = (float) ($item->service->price ?? 0);
+        return $carry + $price;
+    }, 0.0);
+
+    $submittedTotal = $booking->payments
+        ->whereIn('status', ['pending', 'confirmed'])
+        ->reduce(fn ($sum, $payment) => $sum + (float) $payment->amount, 0.0);
+
+    $downPaymentRequired = $itemsTotal > 0 ? round($itemsTotal * 0.5, 2) : 0.0;
+    $downPaymentDeadline = $createdAt->copy()->addHours(24);
+    $fullPaymentDeadline = $createdAt->copy()->addHours(48);
+
+    if ($itemsTotal <= 0) {
+        if (! $startsAt || ! $endsAt) {
+            return [
+                'status' => 'confirmed',
+                'reason' => 'This booking has no billable item total, so it is treated as confirmed.',
+            ];
+        }
+
+        if ($endsAt->lte($now)) {
+            return ['status' => 'completed', 'reason' => 'The scheduled end time has passed.'];
+        }
+
+        if ($startsAt->lte($now) && $endsAt->gt($now)) {
+            return ['status' => 'active', 'reason' => 'The booking schedule is currently in progress.'];
+        }
+
+        return ['status' => 'confirmed', 'reason' => 'The booking is fully scheduled and no payment gate is blocking it.'];
     }
 
-    // Partial/Paid payment automatically qualifies the booking lifecycle.
+    if ($submittedTotal + 0.00001 < $downPaymentRequired) {
+        if ($downPaymentDeadline->lte($now)) {
+            return [
+                'status' => 'declined',
+                'reason' => 'The required 50% down payment was not submitted within the first 24 hours.',
+            ];
+        }
+
+        return [
+            'status' => 'pending',
+            'reason' => 'The booking is still inside the initial 24-hour window for the 50% down payment.',
+        ];
+    }
+
+    if ($submittedTotal + 0.00001 < $itemsTotal && $fullPaymentDeadline->lte($now)) {
+        return [
+            'status' => 'declined',
+            'reason' => 'The remaining balance was not completed within 48 hours from booking creation.',
+        ];
+    }
+
     if (! $startsAt || ! $endsAt) {
-        return 'confirmed';
+        return [
+            'status' => 'confirmed',
+            'reason' => 'Payment compliance is currently sufficient for the next lifecycle stage.',
+        ];
     }
 
     if ($endsAt->lte($now)) {
-        return 'completed';
+        return [
+            'status' => 'completed',
+            'reason' => 'The scheduled end time has passed.',
+        ];
     }
 
     if ($startsAt->lte($now) && $endsAt->gt($now)) {
-        return 'active';
+        return [
+            'status' => 'active',
+            'reason' => 'The booking schedule is currently in progress.',
+        ];
     }
 
-    return 'confirmed';
+    return [
+        'status' => 'confirmed',
+        'reason' => 'The booking met the payment rule and is waiting for its scheduled date.',
+    ];
+}
+
+protected function determineAutomaticBookingStatus(Booking $booking): string
+{
+    return (string) ($this->determineAutomaticBookingDecision($booking)['status'] ?? 'pending');
+}
+
+
+protected function paymentPolicySnapshot(Booking $booking): array
+{
+    $booking->loadMissing(['bookingServices.service', 'payments']);
+
+    $now = Carbon::now();
+
+    $createdAt = $booking->created_at instanceof Carbon
+        ? $booking->created_at->copy()
+        : ($booking->created_at ? Carbon::parse($booking->created_at) : $now->copy());
+
+    $itemsTotal = $this->roundMoney($this->bookingItemsTotal($booking));
+    $confirmedTotal = $this->roundMoney($this->confirmedPaymentTotal($booking));
+    $submittedTotal = $this->roundMoney($this->submittedPaymentTotal($booking));
+    $downRequired = $itemsTotal <= 0 ? 0.0 : $this->roundMoney($itemsTotal * 0.50);
+
+    return [
+        'items_total' => $itemsTotal,
+        'confirmed_total' => $confirmedTotal,
+        'submitted_total' => $submittedTotal,
+        'down_required' => $downRequired,
+        'down_deadline_at' => $createdAt->copy()->addHours(24),
+        'final_deadline_at' => $createdAt->copy()->addHours(48),
+        'has_met_down_payment' => $itemsTotal <= 0 ? true : ($submittedTotal + 0.00001 >= $downRequired),
+        'has_met_full_payment' => $itemsTotal <= 0 ? true : ($submittedTotal + 0.00001 >= $itemsTotal),
+    ];
+}
+
+protected function bookingItemsTotal(Booking $booking): float
+{
+    return (float) $booking->bookingServices->reduce(function ($carry, $item) {
+        $price = (float) ($item->service->price ?? 0);
+        return $carry + $price;
+    }, 0.0);
+}
+
+protected function confirmedPaymentTotal(Booking $booking): float
+{
+    return (float) $booking->payments
+        ->whereIn('status', ['confirmed'])
+        ->reduce(fn ($sum, $payment) => $sum + (float) $payment->amount, 0.0);
+}
+
+protected function submittedPaymentTotal(Booking $booking): float
+{
+    return (float) $booking->payments
+        ->whereIn('status', ['pending', 'confirmed'])
+        ->reduce(fn ($sum, $payment) => $sum + (float) $payment->amount, 0.0);
+}
+
+protected function roundMoney(float $value): float
+{
+    return round($value, 2);
 }
 
     protected function createExtraSchedules(Booking $baseBooking, array $extraSchedules): void

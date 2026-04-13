@@ -1,7 +1,8 @@
+
 import React, { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, router, usePage, Link } from '@inertiajs/react';
 import {
   Bell,
   Calendar,
@@ -13,22 +14,16 @@ import {
   Package,
   Users,
   CalendarOff,
-  Shield,
+  Bot,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination';
-import { cn } from '@/lib/utils';
+import OpsPageHeader from '@/components/ui/ops-page-header';
+import OpsKpiCard from '@/components/ui/ops-kpi-card';
+import OpsStatusChip from '@/components/ui/ops-status-chip';
+import OpsEmptyState from '@/components/ui/ops-empty-state';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Notifications', href: '/notifications' }];
 
@@ -40,8 +35,6 @@ type NotificationRow = {
   link: string | null;
   read_at: string | null;
   created_at: string | null;
-
-  // optional if backend provides it
   is_unread?: boolean;
 };
 
@@ -54,6 +47,7 @@ interface LaravelPaginationLink {
 type SharedSummary = {
   unread_count: number;
   latest: NotificationRow[];
+  automation_unread_count?: number;
 };
 
 type NotificationFeed = {
@@ -74,9 +68,30 @@ type NotificationFeed = {
   };
 };
 
+type NotificationStats = {
+  all: number;
+  unread: number;
+  automation: number;
+  automation_unread: number;
+  bookings: number;
+  payments: number;
+  calendar: number;
+  services: number;
+  users: number;
+};
+
+type NotificationFilters = {
+  q: string;
+  status: 'all' | 'unread' | 'read';
+  kind: 'all' | 'automation' | 'bookings' | 'payments' | 'calendar' | 'services' | 'users' | 'system';
+};
+
 type PageProps = {
   notifications: SharedSummary;
   notificationFeed: NotificationFeed;
+  notificationFilters?: NotificationFilters;
+  notificationStats?: NotificationStats;
+  automationLatest?: { data?: NotificationRow[] } | NotificationRow[];
 };
 
 function formatRelativeTime(iso: string | null) {
@@ -102,21 +117,52 @@ function normalizeLabel(label: any): string {
   return raw.replace(/&laquo;|&raquo;/g, '').replace(/<[^>]*>/g, '').trim();
 }
 
-function NotificationIcon({ type }: { type: string | null }) {
-  if (!type) return <Info className="h-4 w-4 text-slate-500" />;
+function getNotificationKind(type: string | null) {
+  const value = String(type ?? '').toLowerCase();
 
-  if (type === 'booking_status_changed') return <RefreshCw className="h-4 w-4 text-amber-600" />;
-  if (type.startsWith('booking')) return <Calendar className="h-4 w-4 text-emerald-600" />;
-  if (type.startsWith('payment')) return <CreditCard className="h-4 w-4 text-blue-600" />;
-  if (type.startsWith('calendar_block')) return <CalendarOff className="h-4 w-4 text-rose-600" />;
-  if (type.includes('roles')) return <Shield className="h-4 w-4 text-violet-600" />;
-  if (type.endsWith('_updated')) return <RefreshCw className="h-4 w-4 text-amber-600" />;
-  if (type.startsWith('service_') || type.startsWith('service_type_')) {
-    return <Package className="h-4 w-4 text-indigo-600" />;
+  if (value === 'booking_lifecycle_maintenance' || value.startsWith('booking_auto_')) {
+    return 'automation';
   }
-  if (type.startsWith('user_')) return <Users className="h-4 w-4 text-cyan-700" />;
+  if (value.startsWith('payment')) return 'payments';
+  if (value.startsWith('calendar_block')) return 'calendar';
+  if (value.startsWith('service_') || value.startsWith('service_type_')) return 'services';
+  if (value.startsWith('user_') || value.includes('roles')) return 'users';
+  if (value.startsWith('booking')) return 'bookings';
+
+  return 'system';
+}
+
+function NotificationIcon({ type }: { type: string | null }) {
+  const kind = getNotificationKind(type);
+
+  if (kind === 'automation') return <Bot className="h-4 w-4 text-violet-600" />;
+  if (kind === 'bookings') return <Calendar className="h-4 w-4 text-emerald-600" />;
+  if (kind === 'payments') return <CreditCard className="h-4 w-4 text-blue-600" />;
+  if (kind === 'calendar') return <CalendarOff className="h-4 w-4 text-rose-600" />;
+  if (kind === 'users') return <Users className="h-4 w-4 text-cyan-700" />;
+  if (kind === 'services') return <Package className="h-4 w-4 text-indigo-600" />;
 
   return <Info className="h-4 w-4 text-slate-500" />;
+}
+
+function kindTone(kind: string) {
+  if (kind === 'automation') return 'violet';
+  if (kind === 'bookings') return 'emerald';
+  if (kind === 'payments') return 'sky';
+  if (kind === 'calendar') return 'rose';
+  if (kind === 'services') return 'indigo';
+  if (kind === 'users') return 'sky';
+  return 'slate';
+}
+
+function prettyKind(kind: string) {
+  if (kind === 'automation') return 'Automation';
+  if (kind === 'bookings') return 'Bookings';
+  if (kind === 'payments') return 'Payments';
+  if (kind === 'calendar') return 'Calendar';
+  if (kind === 'services') return 'Services';
+  if (kind === 'users') return 'Users';
+  return 'System';
 }
 
 export default function NotificationsIndex() {
@@ -124,15 +170,23 @@ export default function NotificationsIndex() {
 
   const summaryFromProps = pageProps.notifications;
   const feedFromProps = pageProps.notificationFeed;
+  const stats = pageProps.notificationStats;
+  const filtersFromProps = pageProps.notificationFilters ?? {
+    q: '',
+    status: 'all',
+    kind: 'all',
+  };
 
-  // ✅ local state so we can highlight NEW until click/mark-all (optimistic UI)
+  const automationLatest = Array.isArray(pageProps.automationLatest)
+    ? pageProps.automationLatest
+    : pageProps.automationLatest?.data ?? [];
+
   const [unreadCount, setUnreadCount] = useState<number>(summaryFromProps?.unread_count ?? 0);
   const [rows, setRows] = useState<NotificationRow[]>(feedFromProps?.data ?? []);
+  const [query, setQuery] = useState<string>(filtersFromProps.q ?? '');
+  const [status, setStatus] = useState<'all' | 'unread' | 'read'>(filtersFromProps.status ?? 'all');
+  const [kind, setKind] = useState<NotificationFilters['kind']>(filtersFromProps.kind ?? 'all');
 
-  const [tab, setTab] = useState<'all' | 'unread'>('all');
-  const [query, setQuery] = useState<string>('');
-
-  // ✅ keep state in sync when Inertia brings new props (pagination/refresh)
   useEffect(() => {
     setUnreadCount(summaryFromProps?.unread_count ?? 0);
   }, [summaryFromProps?.unread_count]);
@@ -141,280 +195,254 @@ export default function NotificationsIndex() {
     setRows(feedFromProps?.data ?? []);
   }, [feedFromProps?.data]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-
-    return (rows ?? []).filter((n) => {
-      const isUnread = typeof n.is_unread === 'boolean' ? n.is_unread : !n.read_at;
-
-      if (tab === 'unread' && !isUnread) return false;
-      if (!q) return true;
-
-      const haystack = `${n.title ?? ''} ${n.message ?? ''}`.toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [rows, tab, query]);
+  useEffect(() => {
+    setQuery(filtersFromProps.q ?? '');
+    setStatus(filtersFromProps.status ?? 'all');
+    setKind(filtersFromProps.kind ?? 'all');
+  }, [filtersFromProps.q, filtersFromProps.status, filtersFromProps.kind]);
 
   const handleOpen = (n: NotificationRow) => {
-    const isUnread = typeof n.is_unread === 'boolean' ? n.is_unread : !n.read_at;
-
-    // ✅ Optimistic: remove highlight + NEW immediately when clicked
-    if (isUnread) {
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-      setRows((prev) =>
-        prev.map((x) =>
-          x.id === n.id
-            ? { ...x, read_at: x.read_at ?? new Date().toISOString(), is_unread: false }
-            : x,
-        ),
-      );
-    }
-
-    router.visit(`/notifications/${n.id}/open`);
+    router.visit(`/notifications/${n.id}/open`, { preserveScroll: true });
   };
 
-  const handleMarkAllAsRead = () => {
-    if (!unreadCount) return;
-
-    const nowIso = new Date().toISOString();
-
-    // ✅ Optimistic UI: immediately remove highlight + NEW everywhere
-    setUnreadCount(0);
-    setRows((prev) => prev.map((x) => (x.read_at ? x : { ...x, read_at: nowIso, is_unread: false })));
-
-    router.post(
-      '/notifications/read-all',
-      {},
+  const applyFilters = () => {
+    router.get(
+      '/notifications',
       {
-        preserveScroll: true,
-        onSuccess: () => router.reload({ only: ['notifications', 'notificationFeed'] }),
-        onError: () => router.reload({ only: ['notifications', 'notificationFeed'] }),
+        q: query || undefined,
+        status: status !== 'all' ? status : undefined,
+        kind: kind !== 'all' ? kind : undefined,
       },
+      { preserveState: true, preserveScroll: true, replace: true },
     );
   };
 
-  const handleRefresh = () => {
-    router.reload({ only: ['notifications', 'notificationFeed'] });
+  const resetFilters = () => {
+    setQuery('');
+    setStatus('all');
+    setKind('all');
+    router.get('/notifications', {}, { preserveState: true, preserveScroll: true, replace: true });
   };
 
-  const handlePagination = (url: string | null) => (e: React.MouseEvent) => {
-    if (!url) {
-      e.preventDefault();
-      return;
-    }
-    e.preventDefault();
-
-    router.visit(url, {
-      preserveScroll: true,
-      preserveState: true,
-      replace: true,
-      only: ['notifications', 'notificationFeed'],
-    });
-  };
-
-  const paginationLinks = feedFromProps?.meta?.links ?? [];
+  const metricCards = [
+    { label: 'Unread', value: stats?.unread ?? unreadCount ?? 0, icon: Bell, tone: 'amber' as const },
+    { label: 'Automation', value: stats?.automation ?? 0, icon: Bot, tone: 'violet' as const },
+    { label: 'Automation unread', value: stats?.automation_unread ?? 0, icon: Sparkles, tone: 'violet' as const },
+    { label: 'Bookings', value: stats?.bookings ?? 0, icon: Calendar, tone: 'emerald' as const },
+    { label: 'Payments', value: stats?.payments ?? 0, icon: CreditCard, tone: 'sky' as const },
+    { label: 'Calendar', value: stats?.calendar ?? 0, icon: CalendarOff, tone: 'red' as const },
+  ];
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Notifications" />
 
-      <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-        <Card>
-          <CardHeader className="flex flex-col gap-3 px-6">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <CardTitle className="text-base">Notifications</CardTitle>
-                <CardDescription>
-                  {unreadCount > 0
-                    ? `You have ${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}.`
-                    : 'You’re all caught up.'}
-                </CardDescription>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={handleRefresh}>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Refresh
-                </Button>
-
-                <Button type="button" size="sm" onClick={handleMarkAllAsRead} disabled={!unreadCount}>
-                  <CheckCheck className="mr-2 h-4 w-4" />
-                  Mark all as read
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <ToggleGroup
-                type="single"
-                value={tab}
-                onValueChange={(v) => {
-                  if (!v) return;
-                  setTab(v as 'all' | 'unread');
-                }}
+      <div className="space-y-6 p-4 md:p-6">
+        <OpsPageHeader
+          eyebrow="Notification Center"
+          title="Automation alerts, bookings, payments, and system activity in one place."
+          description="This view now matches the other operations pages so staff can scan unread counts, filter by category, and jump straight into the important events."
+          actions={
+            <>
+              <Button
+                type="button"
                 variant="outline"
-                size="sm"
+                onClick={() => router.post('/notifications/read-all', {}, { preserveScroll: true })}
               >
-                <ToggleGroupItem value="all">All</ToggleGroupItem>
-                <ToggleGroupItem value="unread">Unread</ToggleGroupItem>
-              </ToggleGroup>
+                <CheckCheck className="mr-2 h-4 w-4" /> Mark all read
+              </Button>
+              <Button type="button" variant="outline" onClick={applyFilters}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+              </Button>
+              <Button asChild>
+                <Link href="/bookings/operations">Operations center</Link>
+              </Button>
+            </>
+          }
+        />
 
-              <div className="relative w-full sm:w-[320px]">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search notifications..."
-                  className="pl-9"
-                />
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          {metricCards.map((metric) => (
+            <OpsKpiCard key={metric.label} label={metric.label} value={metric.value} icon={metric.icon} tone={metric.tone} />
+          ))}
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="space-y-6">
+            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-6 shadow-sm dark:border-white/10 dark:bg-[#121318]">
+              <div className="grid gap-2 lg:grid-cols-[1.3fr_0.6fr_0.6fr_auto]">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search title, message, automation reason" />
+                </div>
+
+                <select className="rounded-md border bg-background px-3 py-2 text-sm" value={status} onChange={(e) => setStatus(e.target.value as any)}>
+                  <option value="all">All read states</option>
+                  <option value="unread">Unread only</option>
+                  <option value="read">Read only</option>
+                </select>
+
+                <select className="rounded-md border bg-background px-3 py-2 text-sm" value={kind} onChange={(e) => setKind(e.target.value as any)}>
+                  <option value="all">All kinds</option>
+                  <option value="automation">Automation</option>
+                  <option value="bookings">Bookings</option>
+                  <option value="payments">Payments</option>
+                  <option value="calendar">Calendar</option>
+                  <option value="services">Services</option>
+                  <option value="users">Users</option>
+                  <option value="system">System</option>
+                </select>
+
+                <div className="flex gap-2">
+                  <Button onClick={applyFilters}>Apply</Button>
+                  <Button variant="outline" onClick={resetFilters}>Reset</Button>
+                </div>
               </div>
             </div>
-          </CardHeader>
 
-          <CardContent>
-            {filtered.length === 0 ? (
-              <div className="py-12 text-center">
-                <Bell className="mx-auto h-10 w-10 text-muted-foreground/50" />
-                <div className="mt-3 text-sm font-medium">
-                  {query ? 'No results' : tab === 'unread' ? 'No unread notifications' : 'No notifications yet'}
-                </div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {query
-                    ? 'Try a different keyword.'
-                    : tab === 'unread'
-                      ? 'Everything has been read.'
-                      : 'When something happens, it will show up here.'}
+            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-6 shadow-sm dark:border-white/10 dark:bg-[#121318]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Notification feed</h2>
+                  <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
+                    Open any row to mark it read and follow the linked action.
+                  </div>
                 </div>
               </div>
-            ) : (
-              <div className="-mx-6 divide-y">
-                {filtered.map((n) => {
-                  const isUnread = typeof n.is_unread === 'boolean' ? n.is_unread : !n.read_at;
 
-                  const isUpdateType =
-                    n.type === 'booking_updated' ||
-                    n.type === 'payment_updated' ||
-                    n.type === 'booking_status_changed' ||
-                    (n.type?.endsWith('_updated') ?? false);
+              <div className="mt-5 space-y-4">
+                {rows.length === 0 ? (
+                  <OpsEmptyState title="No notifications matched the current filter set" />
+                ) : (
+                  rows.map((notification) => {
+                    const kindValue = getNotificationKind(notification.type);
+                    const unread = typeof notification.is_unread === 'boolean' ? notification.is_unread : !notification.read_at;
 
-                  return (
-                    <button
-                      key={n.id}
-                      type="button"
-                      onClick={() => handleOpen(n)}
-                      className={cn(
-                        'relative w-full text-left px-6 py-4 hover:bg-muted/30 transition',
-                        // ✅ highlight unread
-                        isUnread && 'bg-amber-50/70 dark:bg-amber-950/25',
-                      )}
-                    >
-                      {/* ✅ left accent bar while NEW */}
-                      {isUnread && <span className="absolute left-0 top-0 h-full w-1 bg-amber-500/70" />}
-
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'mt-0.5 h-10 w-10 shrink-0 rounded-full border flex items-center justify-center',
-                            isUnread
-                              ? 'bg-amber-200/40 border-amber-500/30'
-                              : 'bg-muted/40 border-border',
-                          )}
-                        >
-                          <NotificationIcon type={n.type} />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <div className="font-medium truncate">{n.title}</div>
-
-                                {isUpdateType && (
-                                  <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-[10px] px-2 py-[2px] font-medium">
-                                    Updated
-                                  </span>
-                                )}
+                    return (
+                      <button
+                        key={notification.id}
+                        type="button"
+                        onClick={() => handleOpen(notification)}
+                        className="w-full rounded-[1.5rem] border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm"
+                      >
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                <NotificationIcon type={notification.type} />
+                                {notification.title}
                               </div>
-
-                              {n.message && (
-                                <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{n.message}</p>
-                              )}
+                              <OpsStatusChip label={prettyKind(kindValue)} tone={kindTone(kindValue)} />
+                              {unread ? <OpsStatusChip label="Unread" tone="amber" /> : <OpsStatusChip label="Read" tone="slate" />}
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
-                              {/* ✅ NEW tag stays until clicked or mark all */}
-                              {isUnread && (
-                                <span className="inline-flex items-center rounded-md bg-amber-200/70 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
-                                  NEW
-                                </span>
-                              )}
+                            {notification.message ? (
+                              <div className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                                {notification.message}
+                              </div>
+                            ) : null}
 
-                              <span className="text-xs text-muted-foreground">{formatRelativeTime(n.created_at)}</span>
+                            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                              <span>{formatRelativeTime(notification.created_at)}</span>
+                              {notification.created_at ? <span>{new Date(notification.created_at).toLocaleString()}</span> : null}
                             </div>
                           </div>
+
+                          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-300">
+                            Open <ArrowRight className="h-4 w-4" />
+                          </div>
                         </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {feedFromProps?.meta?.links?.length ? (
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {feedFromProps.meta.links.map((link, index) => (
+                    <button
+                      key={`${link.label}-${index}`}
+                      type="button"
+                      disabled={!link.url}
+                      onClick={() => link.url && router.visit(link.url, { preserveState: true, preserveScroll: true, replace: true })}
+                      className={`rounded-lg border px-3 py-2 text-sm transition ${link.active ? 'bg-primary text-primary-foreground' : 'bg-background'} ${!link.url ? 'cursor-not-allowed opacity-40' : ''}`}
+                    >
+                      {normalizeLabel(link.label)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-6 shadow-sm dark:border-white/10 dark:bg-[#121318]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Latest automation activity</h2>
+                  <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
+                    The newest lifecycle and system automation events.
+                  </div>
+                </div>
+                <Sparkles className="h-5 w-5 text-violet-500" />
+              </div>
+
+              <div className="mt-5 space-y-4">
+                {automationLatest.length === 0 ? (
+                  <OpsEmptyState title="No recent automation events found" />
+                ) : (
+                  automationLatest.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleOpen(item)}
+                      className="w-full rounded-[1.5rem] border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Bot className="h-4 w-4 text-violet-600" />
+                            <div className="font-medium text-slate-900 dark:text-white">{item.title}</div>
+                          </div>
+                          {item.message ? (
+                            <div className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                              {item.message}
+                            </div>
+                          ) : null}
+                          <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                            {formatRelativeTime(item.created_at)}
+                          </div>
+                        </div>
+                        <OpsStatusChip label="Automation" tone="violet" />
                       </div>
                     </button>
-                  );
-                })}
+                  ))
+                )}
               </div>
-            )}
+            </div>
 
-            {paginationLinks?.length > 0 && (
-              <div className="pt-4">
-                <Pagination>
-                  <PaginationContent>
-                    {paginationLinks.map((link, i) => {
-                      const label = normalizeLabel(link.label);
-                      const lower = label.toLowerCase();
-
-                      const isPrev = lower.includes('previous');
-                      const isNext = lower.includes('next');
-                      const isDots = label === '...';
-
-                      return (
-                        <PaginationItem key={i}>
-                          {isPrev ? (
-                            <PaginationPrevious
-                              href={link.url ?? '#'}
-                              aria-disabled={!link.url}
-                              tabIndex={link.url ? 0 : -1}
-                              onClick={handlePagination(link.url)}
-                            >
-                              Previous
-                            </PaginationPrevious>
-                          ) : isNext ? (
-                            <PaginationNext
-                              href={link.url ?? '#'}
-                              aria-disabled={!link.url}
-                              tabIndex={link.url ? 0 : -1}
-                              onClick={handlePagination(link.url)}
-                            >
-                              Next
-                            </PaginationNext>
-                          ) : isDots ? (
-                            <PaginationEllipsis />
-                          ) : (
-                            <PaginationLink
-                              isActive={link.active}
-                              href={link.url ?? '#'}
-                              aria-current={link.active ? 'page' : undefined}
-                              aria-disabled={!link.url}
-                              tabIndex={link.url ? 0 : -1}
-                              onClick={handlePagination(link.url)}
-                            >
-                              {label}
-                            </PaginationLink>
-                          )}
-                        </PaginationItem>
-                      );
-                    })}
-                  </PaginationContent>
-                </Pagination>
+            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-6 shadow-sm dark:border-white/10 dark:bg-[#121318]">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Unread summary</h2>
+              <div className="mt-4 grid gap-3">
+                <div className="rounded-2xl border p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Unread notifications</div>
+                  <div className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{unreadCount}</div>
+                </div>
+                <div className="rounded-2xl border p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Automation unread</div>
+                  <div className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{stats?.automation_unread ?? 0}</div>
+                </div>
+                <div className="rounded-2xl border p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Latest fetched</div>
+                  <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                    {summaryFromProps?.latest?.[0]?.created_at ? new Date(summaryFromProps.latest[0].created_at as string).toLocaleString() : '—'}
+                  </div>
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          </div>
+        </div>
       </div>
     </AppLayout>
   );

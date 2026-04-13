@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
+use App\Services\NotificationService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use App\Models\Booking;
-use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class BookingPayment extends Model
 {
@@ -19,68 +19,111 @@ class BookingPayment extends Model
         'booking_id',
         'status',
         'payment_method',
+        'payment_gateway',
+        'payment_type',
         'amount',
         'transaction_reference',
-        'payment_gateway',
         'remarks',
+        'proof_image_path',
+        'payer_name',
+        'card_holder_name',
+        'card_last_four',
+        'card_expiration',
+        'marketing_consent',
+        'payment_meta',
+        'paid_at',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'marketing_consent' => 'boolean',
+        'payment_meta' => 'array',
+        'paid_at' => 'datetime',
+    ];
+
+    protected $appends = [
+        'proof_image_url',
     ];
 
     public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class);
     }
+
+    public function getProofImageUrlAttribute(): ?string
+    {
+        if (! $this->proof_image_path) {
+            return null;
+        }
+
+        if (preg_match('/^(https?:\/\/|\/)/i', (string) $this->proof_image_path)) {
+            return $this->proof_image_path;
+        }
+
+        return Storage::disk('public')->url($this->proof_image_path);
+    }
+
     public array $notificationChanges = [];
 
-protected static function booted(): void
-{
-    static::created(function (BookingPayment $payment) {
-        if (app()->runningInConsole()) return;
+    protected static function booted(): void
+    {
+        static::created(function (BookingPayment $payment) {
+            if (app()->runningInConsole()) {
+                return;
+            }
 
-        $booking = method_exists($payment, 'booking')
-            ? $payment->booking()->first()
-            : Booking::find($payment->booking_id);
+            $booking = method_exists($payment, 'booking')
+                ? $payment->booking()->first()
+                : Booking::find($payment->booking_id);
 
-        if (! $booking) return;
+            if (! $booking) {
+                return;
+            }
 
-        try {
-            app(NotificationService::class)->paymentCreated($payment, $booking, Auth::user());
-        } catch (\Throwable $e) {
-            report($e);
-        }
-    });
+            try {
+                app(NotificationService::class)->paymentCreated($payment, $booking, Auth::user());
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        });
 
-    static::updating(function (BookingPayment $payment) {
-        $changes = [];
+        static::updating(function (BookingPayment $payment) {
+            $changes = [];
 
-        foreach ($payment->getDirty() as $field => $newValue) {
-            if ($field === 'updated_at') continue;
-            $changes[$field] = [$payment->getOriginal($field), $newValue];
-        }
+            foreach ($payment->getDirty() as $field => $newValue) {
+                if ($field === 'updated_at') {
+                    continue;
+                }
 
-        $payment->notificationChanges = $changes;
-    });
+                $changes[$field] = [$payment->getOriginal($field), $newValue];
+            }
 
-    static::updated(function (BookingPayment $payment) {
-        if (app()->runningInConsole()) return;
+            $payment->notificationChanges = $changes;
+        });
 
-        $changes = $payment->notificationChanges ?? [];
-        if (empty($changes)) return;
+        static::updated(function (BookingPayment $payment) {
+            if (app()->runningInConsole()) {
+                return;
+            }
 
-        $booking = method_exists($payment, 'booking')
-            ? $payment->booking()->first()
-            : Booking::find($payment->booking_id);
+            $changes = $payment->notificationChanges ?? [];
+            if (empty($changes)) {
+                return;
+            }
 
-        if (! $booking) return;
+            $booking = method_exists($payment, 'booking')
+                ? $payment->booking()->first()
+                : Booking::find($payment->booking_id);
 
-        try {
-            app(NotificationService::class)->paymentUpdated($payment, $booking, Auth::user(), $changes);
-        } catch (\Throwable $e) {
-            report($e);
-        }
-    });
-}
+            if (! $booking) {
+                return;
+            }
+
+            try {
+                app(NotificationService::class)->paymentUpdated($payment, $booking, Auth::user(), $changes);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        });
+    }
 }

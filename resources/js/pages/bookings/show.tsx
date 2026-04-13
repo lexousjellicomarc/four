@@ -1,1326 +1,596 @@
 import AppLayout from '@/layouts/app-layout';
-import type { BreadcrumbItem, Booking, Service } from '@/types';
+import type { BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { Badge } from '@/components/ui/badge';
-import BookingStatusBadge from '@/components/ui/booking-status-badge';
-import PaymentRowStatusBadge from '@/components/ui/payment-row-status-badge';
-import ConfirmActionDialog from '@/components/confirm-action-dialog';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
+import BookingProgressPanel from '@/components/bookings/booking-progress-panel';
 
-
-/* ----------------------------- helpers/types ----------------------------- */
-
-type UnknownRecord = Record<string, unknown>;
-
-function isRecord(v: unknown): v is UnknownRecord {
-  return typeof v === 'object' && v !== null;
-}
-
-type RoleLike = string | { name?: string | null };
-type AuthLike = { roles?: RoleLike[] | null; user?: { roles?: RoleLike[] | null } | null };
-
-function getRoleNames(auth: unknown): string[] {
-  const tryGetRoles = (v: unknown): RoleLike[] => {
-    if (!isRecord(v)) return [];
-    const roles = v.roles;
-    return Array.isArray(roles) ? (roles as RoleLike[]) : [];
-  };
-
-  const roles = tryGetRoles(auth);
-  const userRoles = isRecord(auth) ? tryGetRoles(auth.user) : [];
-
-  return [...roles, ...userRoles]
-    .map((r) => (typeof r === 'string' ? r : r?.name))
-    .filter((x): x is string => typeof x === 'string' && x.length > 0);
-}
-
-function formatDateTime(input?: string | null) {
-  if (!input) return '-';
-  const m = input.match(
-    /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?$/,
-  );
-  let year: number, monthIndex: number, day: number, hour: number, minute: number;
-  if (m) {
-    year = Number(m[1]);
-    monthIndex = Number(m[2]) - 1;
-    day = Number(m[3]);
-    hour = Number(m[4]);
-    minute = Number(m[5]);
-  } else {
-    const d = new Date(input);
-    if (isNaN(d.getTime())) return String(input);
-    year = d.getFullYear();
-    monthIndex = d.getMonth();
-    day = d.getDate();
-    hour = d.getHours();
-    minute = d.getMinutes();
-  }
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthLabel = months[monthIndex];
-  const ampm = hour >= 12 ? 'PM' : 'AM';
-  let displayHour = hour % 12;
-  if (displayHour === 0) displayHour = 12;
-  const minStr = String(minute).padStart(2, '0');
-  return `${monthLabel} ${day}, ${year} ${displayHour}:${minStr} ${ampm}`;
-}
-
-function parseLiteralDate(input?: string | null): Date | undefined {
-  if (!input) return undefined;
-  const m = input.match(
-    /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?$/,
-  );
-  if (!m) return undefined;
-  const [, y, mo, da, h, mi, s] = m;
-  const d = new Date(Number(y), Number(mo) - 1, Number(da), Number(h), Number(mi), s ? Number(s) : 0, 0);
-  return isNaN(d.getTime()) ? undefined : d;
-}
-
-function normalizeIso16(input?: string | null): string {
-  if (!input) return '';
-  const m = String(input).match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})/);
-  if (m) return `${m[1]}T${m[2]}`;
-  return String(input);
-}
-
-function getCreatedByLabel(b: unknown): string {
-  if (!isRecord(b)) return '-';
-
-  const createdBy = b.created_by ?? b.createdBy ?? b.creator ?? null;
-
-  const name =
-    (typeof b.created_by_name === 'string' ? b.created_by_name : null) ??
-    (isRecord(createdBy) && typeof createdBy.name === 'string' ? createdBy.name : null);
-
-  const email =
-    (typeof b.created_by_email === 'string' ? b.created_by_email : null) ??
-    (isRecord(createdBy) && typeof createdBy.email === 'string' ? createdBy.email : null);
-
-  if (name && email) return `${name} (${email})`;
-  if (name) return name;
-  if (email) return email;
-  return '-';
-}
-
-type BookingItemRaw = {
-  service_id: number;
-  service_name: string;
-  price: number | string;
-  quantity: number | string;
+type BookingItem = {
+  service_id?: number | null;
+  service_name?: string | null;
+  area?: string | null;
+  line_total?: number | null;
 };
 
-type PaymentRaw = {
+type BookingPayment = {
   id: number;
-  created_at: string;
-  payment_method: string;
-  status: string;
+  status?: string | null;
+  payment_method?: string | null;
+  payment_gateway?: string | null;
+  payment_type?: string | null;
+  amount?: number | null;
   transaction_reference?: string | null;
-  amount: number | string;
   remarks?: string | null;
+  proof_image_url?: string | null;
+  payer_name?: string | null;
+  card_last_four?: string | null;
+  marketing_consent?: boolean | null;
+  paid_at?: string | null;
+  created_at?: string | null;
 };
 
-type BookingTotalsRaw = {
-  items_total?: number | string | null;
-  payments_total?: number | string | null;
-  submitted_payments_total?: number | string | null;
-  confirmed_payments_total?: number | string | null;
-};
-
-
-type BookingVM = Booking & {
+type BookingPayload = {
   id: number;
-  service_id?: number | string | null;
   company_name?: string | null;
-  client_name?: string;
-  client_contact_number?: string;
-  client_email?: string;
-  client_address?: string;
+  client_name?: string | null;
+  client_contact_number?: string | null;
+  client_email?: string | null;
+  survey_email?: string | null;
+  survey_proof_image_url?: string | null;
+  client_address?: string | null;
   head_of_organization?: string | null;
   type_of_event?: string | null;
   booking_date_from?: string | null;
   booking_date_to?: string | null;
-  number_of_guests?: number | string | null;
+  number_of_guests?: number | null;
   booking_status?: string | null;
   payment_status?: string | null;
-
-  created_by?: unknown;
-  createdBy?: unknown;
-  creator?: unknown;
-  created_by_name?: string | null;
-  created_by_email?: string | null;
-
-  items?: BookingItemRaw[] | null;
-  payments?: PaymentRaw[] | null;
-  totals?: BookingTotalsRaw | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  items?: BookingItem[];
+  payments?: BookingPayment[];
+  totals?: {
+    items_total?: number | null;
+    submitted_payments_total?: number | null;
+    confirmed_payments_total?: number | null;
+  } | null;
 };
+
+type PageProps = {
+  booking: BookingPayload;
+};
+
+type AuthRole = string | { name?: string | null } | null | undefined;
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Bookings', href: '/bookings' },
-  { title: 'Details', href: '/bookings' },
+  { title: 'Booking details', href: '/bookings' },
 ];
 
-interface ShowBookingProps {
-  booking: Booking;
-  services: Service[];
-  unavailableDates?: string[];
+function getRoleNames(input: any): string[] {
+  const roles: AuthRole[] = input?.roles ?? input?.user?.roles ?? [];
+  if (!Array.isArray(roles)) return [];
+  return roles
+    .map((role) => (typeof role === 'string' ? role : role?.name))
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
 }
 
-/* --------------------- Service Type (Area) helpers --------------------- */
-
-type ServiceWithType = Service & {
-  service_type?: string | null;
-  service_type_name?: string | null;
-  serviceType?: { name?: string | null } | null;
-};
-
-function getServiceAreaLabel(service: Service): string {
-  const s = service as unknown as ServiceWithType;
-
-  const direct =
-    typeof s.service_type === 'string' ? s.service_type.trim() : '';
-
-  const nameField =
-    typeof (s as any)?.service_type_name === 'string'
-      ? String((s as any).service_type_name).trim()
-      : '';
-
-  const relation =
-    isRecord((s as any)?.serviceType) && typeof (s as any).serviceType?.name === 'string'
-      ? String((s as any).serviceType.name).trim()
-      : '';
-
-  return direct || nameField || relation || '—';
+function formatMoney(value?: number | null) {
+  return Number(value ?? 0).toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
-/* --------------------- Custom searchable service select -------------------- */
-
-function SearchableServiceSelect({
-  services,
-  value,
-  onChange,
-  serviceSearch,
-  setServiceSearch,
-  disabled,
-}: {
-  services: Service[];
-  value: string;
-  onChange: (v: string) => void;
-  serviceSearch: string;
-  setServiceSearch: (v: string) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (disabled) setOpen(false);
-  }, [disabled]);
-
-  useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-      if (!containerRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, []);
-
-  useEffect(() => {
-    if (open && inputRef.current) inputRef.current.focus();
-  }, [open]);
-
-  const listboxId = 'service-listbox';
-
-  const grouped = useMemo(() => {
-    const groups: Record<string, Service[]> = {};
-    services.forEach((s) => {
-      const key = getServiceAreaLabel(s);
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(s);
-    });
-
-    return Object.keys(groups)
-      .sort((a, b) => a.localeCompare(b))
-      .map((group) => ({
-        group,
-        items: groups[group].sort((a, b) => (a.name || '').localeCompare(b.name || '')),
-      }));
-  }, [services]);
-
-  const selectedLabel = useMemo(() => {
-    const svc = services.find((s) => String(s.id) === value);
-    return svc ? svc.name : 'Select a service to add';
-  }, [value, services]);
-
-  const selectOption = (id: string) => {
-    onChange(id);
-    setOpen(false);
-  };
-
-  return (
-    <div ref={containerRef} className="relative min-w-56">
-      <button
-        type="button"
-        className="border bg-background rounded-md px-2 py-2 text-sm w-full text-left flex justify-between items-center disabled:opacity-60"
-        onClick={() => {
-          if (disabled) return;
-          setOpen((o) => !o);
-        }}
-        aria-haspopup="listbox"
-        aria-controls={listboxId}
-        aria-expanded={open}
-        disabled={disabled}
-      >
-        <span className={value ? '' : 'text-muted-foreground'}>{selectedLabel}</span>
-        <span className="ml-2 text-xs text-muted-foreground">{open ? '▲' : '▼'}</span>
-      </button>
-
-      {open && !disabled && (
-        <div className="absolute z-50 mt-1 w-full border rounded-md bg-popover shadow-md max-h-72 overflow-auto animate-in fade-in">
-          <div className="p-2 border-b bg-muted/40">
-            <input
-              ref={inputRef}
-              value={serviceSearch}
-              onChange={(e) => setServiceSearch(e.currentTarget.value)}
-              placeholder="Search..."
-              className="w-full rounded-md border px-2 py-1 text-sm bg-background"
-            />
-          </div>
-
-          {/* Proper ARIA: listbox -> group -> option */}
-          <ul id={listboxId} role="listbox" className="py-1 text-sm">
-            {grouped.map((g) => (
-              <li key={g.group} role="group" aria-label={g.group} className="px-2 py-1">
-                <div className="text-xs font-semibold text-muted-foreground mb-1">{g.group}</div>
-
-                <div className="space-y-0.5">
-                  {g.items.map((item) => {
-                    const selected = String(item.id) === value;
-
-                    return (
-                      <div
-                        key={item.id}
-                        role="option"
-                        aria-selected={selected}
-                        tabIndex={selected ? 0 : -1}
-                        onClick={() => selectOption(String(item.id))}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            selectOption(String(item.id));
-                          }
-                        }}
-                        className={`cursor-pointer w-full text-left px-2 py-1 rounded hover:bg-accent hover:text-accent-foreground ${
-                          selected ? 'bg-accent text-accent-foreground' : ''
-                        }`}
-                      >
-                        {item.name}
-                      </div>
-                    );
-                  })}
-
-                  {g.items.length === 0 && (
-                    <div className="px-2 py-1 text-muted-foreground italic text-xs">No matches</div>
-                  )}
-                </div>
-              </li>
-            ))}
-
-            {grouped.length === 0 && (
-              <li className="px-2 py-2 text-muted-foreground text-xs">No services available.</li>
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
+function formatDateTime(value?: string | null) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('en-PH', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
 }
 
-/* -------------------------- Zoomable image preview ------------------------- */
+function statusPill(status?: string | null) {
+  const value = String(status ?? '').toLowerCase();
+  const map: Record<string, string> = {
+    pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100',
+    active: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-100',
+    confirmed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100',
+    completed: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-100',
+    declined: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-100',
+    cancelled: 'bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100',
+    unpaid: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-100',
+    partial: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100',
+    paid: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100',
+    failed: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-100',
+    refunded: 'bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100',
+    owing: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-100',
+  };
 
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
+  return cn('inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide', map[value] ?? 'bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100');
 }
 
-function ZoomableImagePreview({
-  src,
-  alt,
-  title = 'Image preview',
-}: {
-  src: string;
-  alt: string;
-  title?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [zoom, setZoom] = useState(1);
-
-  // Reset zoom when closing
-  useEffect(() => {
-    if (!open) setZoom(1);
-  }, [open]);
-
-  const zoomIn = () => setZoom((z) => clamp(Math.round((z + 0.25) * 100) / 100, 1, 4));
-  const zoomOut = () => setZoom((z) => clamp(Math.round((z - 0.25) * 100) / 100, 1, 4));
-  const reset = () => setZoom(1);
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="group inline-flex flex-col items-start gap-1"
-        aria-label="Open image preview"
-      >
-        <img
-          src={src}
-          alt={alt}
-          className="h-20 w-auto max-w-full rounded-md border bg-background object-contain cursor-zoom-in transition-opacity group-hover:opacity-90"
-        />
-        <span className="text-[11px] text-muted-foreground">Click to enlarge</span>
-      </button>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] sm:w-[calc(100%-4rem)] sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-          </DialogHeader>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={zoomOut} disabled={zoom <= 1}>
-              Zoom −
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={zoomIn} disabled={zoom >= 4}>
-              Zoom +
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={reset} disabled={zoom === 1}>
-              Reset
-            </Button>
-
-            <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Zoom</span>
-              <input
-                type="range"
-                min={1}
-                max={4}
-                step={0.1}
-                value={zoom}
-                onChange={(e) => setZoom(clamp(Number(e.currentTarget.value), 1, 4))}
-                className="w-40 accent-primary"
-              />
-              <span className="tabular-nums">{Math.round(zoom * 100)}%</span>
-            </div>
-          </div>
-
-          <div className="max-h-[70vh] overflow-auto rounded-md border bg-muted/10 p-2">
-            {/* Scale by layout width so scrollbars work */}
-            <div className="mx-auto" style={{ width: `${zoom * 100}%`, maxWidth: 'none' }}>
-              <img src={src} alt={alt} className="w-full h-auto rounded-md" style={{ maxWidth: 'none' }} />
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
+function ErrorText({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="mt-1 text-xs text-red-600 dark:text-red-400">{message}</p>;
 }
 
-/* --------------------------------- Page ---------------------------------- */
+function trialRedirectLabel(gateway: string) {
+  if (gateway === 'paypal') return 'PayPal trial redirect';
+  if (gateway === 'gcash') return 'GCash trial redirect';
+  return 'Card payment simulation';
+}
 
-export default function ShowBooking({ booking, services }: ShowBookingProps) {
+function PaymentForm({ booking }: { booking: BookingPayload }) {
+  const { auth } = usePage<{ auth?: any }>().props;
+  const roleNames = useMemo(() => getRoleNames(auth), [auth]);
+  const isClient = roleNames.includes('user');
+  const canManage = roleNames.includes('admin') || roleNames.includes('administrator') || roleNames.includes('superadmin') || roleNames.includes('manager');
 
-  const { auth } = usePage<{ auth?: AuthLike | null }>().props;
+  const itemsTotal = Number(booking.totals?.items_total ?? 0);
+  const confirmedTotal = Number(booking.totals?.confirmed_payments_total ?? 0);
+  const balance = Math.max(itemsTotal - confirmedTotal, 0);
 
-  const roleNames = getRoleNames(auth).map((r) => r.toLowerCase());
-  const isAdminOrManager = roleNames.includes('admin') || roleNames.includes('manager');
-  const isStaff = !isAdminOrManager && (roleNames.includes('staff') || roleNames.includes('employee'));
-  const isClient = !isAdminOrManager && !isStaff && roleNames.includes('user');
+  const [gateway, setGateway] = useState<'card' | 'paypal' | 'gcash'>('card');
+  const [paymentType, setPaymentType] = useState<'down' | 'full'>('down');
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
 
+  const downAmount = itemsTotal > 0 ? Math.max(itemsTotal * 0.5, 0) : 0;
+  const computedAmount = paymentType === 'full' ? balance : Math.min(balance, downAmount || balance);
 
-  const b = booking as unknown as BookingVM;
-
-  const createdByLabel = getCreatedByLabel(b);
-
-  // ✅ Fast lookup: service_id -> area label
-  const serviceAreaById = useMemo(() => {
-    const map = new Map<number, string>();
-    services.forEach((s) => map.set(Number(s.id), getServiceAreaLabel(s)));
-    return map;
-  }, [services]);
-
-  // Items editor state
-  type CartItem = { service_id: number; service_name: string; price: number };
-
-  const initialItems: CartItem[] = Array.isArray(b.items)
-    ? b.items.map((i) => ({
-        service_id: Number(i.service_id ?? 0),
-        service_name: String(i.service_name ?? '-'),
-        price: Number(i.price ?? 0),
-      }))
-    : [];
-
-  const [confirmRemoveItemOpen, setConfirmRemoveItemOpen] = useState(false);
-  const [pendingRemoveServiceId, setPendingRemoveServiceId] = useState<number | null>(null);
-  const [confirmSaveServicesOpen, setConfirmSaveServicesOpen] = useState(false);
-
-  const [cart, setCart] = useState<CartItem[]>(initialItems);
-  const [addServiceId, setAddServiceId] = useState<string>('');
-  const [serviceSearch, setServiceSearch] = useState('');
-
-  const filteredServices = useMemo(() => {
-    const term = serviceSearch.trim().toLowerCase();
-    const selectedIds = new Set(cart.map((item) => item.service_id));
-
-    return services.filter((s) => {
-      if (selectedIds.has(Number(s.id))) return false;
-      if (!term) return true;
-
-      return s.name?.toLowerCase().includes(term) || s.description?.toLowerCase().includes(term);
-    });
-  }, [services, serviceSearch, cart]);
-
-  const duration = useMemo(() => {
-    const start = parseLiteralDate(b.booking_date_from ?? undefined);
-    const end = parseLiteralDate(b.booking_date_to ?? undefined);
-    if (!start || !end) return null;
-    let diff = end.getTime() - start.getTime();
-    if (diff < 0) diff = 0;
-    const DAY = 24 * 60 * 60 * 1000;
-    const HOUR = 60 * 60 * 1000;
-    const days = Math.floor(diff / DAY);
-    const hours = Math.floor((diff % DAY) / HOUR);
-    return { days, hours, totalHours: Math.floor(diff / HOUR) };
-  }, [b.booking_date_from, b.booking_date_to]);
-
-  const removeCartItem = (service_id: number) => {
-    if (isClient || isStaff) return; // ✅ staff cannot modify
-    setCart((prev) => prev.filter((ci) => ci.service_id !== service_id));
-  };
-
-  const requestRemoveCartItem = (service_id: number) => {
-    if (isClient || isStaff) return;
-    setPendingRemoveServiceId(service_id);
-    setConfirmRemoveItemOpen(true);
-  };
-
-  const confirmRemoveCartItem = () => {
-    if (pendingRemoveServiceId === null) return;
-    removeCartItem(pendingRemoveServiceId);
-    setPendingRemoveServiceId(null);
-    setConfirmRemoveItemOpen(false);
-  };
-
-  const addCartItem = () => {
-    if (isClient || isStaff) return; // ✅ staff cannot modify
-    if (!addServiceId) return;
-
-    const sid = Number(addServiceId);
-    const svc = services.find((s) => Number(s.id) === sid);
-    if (!svc) return;
-
-    setCart((prev) => {
-      if (prev.some((ci) => ci.service_id === sid)) {
-        return prev;
-      }
-
-      return [...prev, { service_id: sid, service_name: svc.name, price: Number(svc.price) }];
-    });
-
-    setAddServiceId('');
-    setServiceSearch('');
-  };
-
-  const initialFrom = normalizeIso16(b.booking_date_from ?? '');
-  const initialTo = normalizeIso16(b.booking_date_to ?? '');
-
-  const { put, processing, transform } = useForm<{
-    service_id?: number | string | null;
-    company_name: string;
-    client_name: string;
-    client_contact_number: string;
-    client_email: string;
-    survey_email: string;
-    client_address: string;
-    head_of_organization: string;
-    type_of_event: string;
-    booking_date_from: string;
-    booking_date_to: string;
-    number_of_guests: number | string;
-    booking_status: string;
-    payment_status: string;
-    items: Array<{ service_id: number; quantity: 1 }>;
-  }>({
-    service_id: b.service_id ?? null,
-    company_name: b.company_name ?? '',
-    client_name: b.client_name ?? '',
-    client_contact_number: b.client_contact_number ?? '',
-    client_email: b.client_email ?? '',
-    survey_email: (b as any).survey_email ?? '',
-    client_address: b.client_address ?? '',
-    head_of_organization: b.head_of_organization ?? '',
-    type_of_event: b.type_of_event ?? '',
-    booking_date_from: initialFrom,
-    booking_date_to: initialTo,
-    number_of_guests: b.number_of_guests ?? '',
-    booking_status: b.booking_status ?? '',
-    payment_status: b.payment_status ?? '',
-    items: [],
+  const { data, setData, post, processing, errors, reset } = useForm({
+    payment_method: 'online',
+    payment_gateway: gateway,
+    payment_type: paymentType,
+    amount: computedAmount > 0 ? computedAmount.toFixed(2) : '',
+    transaction_reference: '',
+    remarks: '',
+    status: canManage ? 'confirmed' : 'pending',
+    proof_image: null as File | null,
+    payer_name: booking.client_name ?? '',
+    card_holder_name: booking.client_name ?? '',
+    card_number: '',
+    card_expiration: '',
+    card_cvc: '',
+    marketing_consent: false,
   });
 
-  const saveItems = () => {
-    if (isClient || isStaff) return; // ✅ staff cannot modify
-    const items = cart.map((ci) => ({ service_id: ci.service_id, quantity: 1 as const }));
-    transform((prev) => ({ ...prev, items }));
-    put(`/bookings/${b.id}`);
-  };
+  useEffect(() => {
+    setData((current) => ({
+      ...current,
+      payment_gateway: gateway,
+      payment_type: paymentType,
+      amount: computedAmount > 0 ? computedAmount.toFixed(2) : '',
+      status: canManage ? 'confirmed' : current.status,
+    }));
+  }, [gateway, paymentType, computedAmount, canManage]);
 
-  const canEditPaymentStatus = !isClient && !isStaff; // admin/manager etc.
-  const staffReadOnly = isStaff;
+  useEffect(() => {
+    if (!data.proof_image) {
+      setProofPreviewUrl(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(data.proof_image);
+    setProofPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [data.proof_image]);
+
+  const isCard = gateway === 'card';
+  const requiresReferenceAndProof = gateway === 'paypal' || gateway === 'gcash';
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+
+    post(`/bookings/${booking.id}/payments`, {
+      forceFormData: true,
+      preserveScroll: true,
+      onSuccess: () => {
+        reset(
+          'transaction_reference',
+          'remarks',
+          'proof_image',
+          'card_number',
+          'card_expiration',
+          'card_cvc',
+        );
+        setProofPreviewUrl(null);
+      },
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+      <Card>
+        <CardHeader>
+          <CardTitle>Selected services and balance</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {booking.items?.length ? (
+            booking.items.map((item, index) => (
+              <div key={`${item.service_id ?? 'item'}-${index}`} className="rounded-2xl border p-4">
+                <div className="font-semibold">{item.service_name ?? 'Selected service'}</div>
+                <div className="mt-1 text-sm text-muted-foreground">Area: {item.area ?? '—'}</div>
+                <div className="mt-2 text-sm">₱ {formatMoney(item.line_total ?? 0)}</div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-dashed px-4 py-10 text-sm text-muted-foreground">
+              No selected services were attached to this booking.
+            </div>
+          )}
+
+          <div className="rounded-2xl border bg-muted/20 p-4 text-sm">
+            <div className="flex items-center justify-between">
+              <span>Services total</span>
+              <span className="font-semibold">₱ {formatMoney(itemsTotal)}</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <span>Confirmed online payments</span>
+              <span className="font-semibold">₱ {formatMoney(confirmedTotal)}</span>
+            </div>
+            <div className="mt-3 border-t pt-3">
+              <div className="flex items-center justify-between text-base font-semibold">
+                <span>Remaining balance</span>
+                <span>₱ {formatMoney(balance)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-blue-50 p-4 text-sm text-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
+            {paymentType === 'down'
+              ? 'Down payment uses 50% of the services total or the remaining outstanding amount, whichever is lower.'
+              : 'Full payment uses the entire remaining outstanding amount.'}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment options</CardTitle>
+        </CardHeader>
+        <Button type="button" variant="outline" asChild>
+  <Link href="/payments/review">
+    Review Payments
+  </Link>
+</Button>
+        <CardContent className="space-y-6">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label>Payment amount type</Label>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className={cn(
+                    'rounded-xl border px-4 py-3 text-sm font-medium',
+                    paymentType === 'down' ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-border bg-background',
+                  )}
+                  onClick={() => setPaymentType('down')}
+                >
+                  Down payment
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'rounded-xl border px-4 py-3 text-sm font-medium',
+                    paymentType === 'full' ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-border bg-background',
+                  )}
+                  onClick={() => setPaymentType('full')}
+                >
+                  Full payment
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <Label>Gateway</Label>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {(['card', 'paypal', 'gcash'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={cn(
+                      'rounded-xl border px-4 py-3 text-sm font-medium capitalize',
+                      gateway === value ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-border bg-background',
+                    )}
+                    onClick={() => setGateway(value)}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label htmlFor="amount">Amount *</Label>
+              <Input id="amount" value={data.amount} onChange={(e) => setData('amount', e.target.value)} />
+              <ErrorText message={errors.amount} />
+            </div>
+
+            <div>
+              <Label htmlFor="payer_name">Payer name *</Label>
+              <Input id="payer_name" value={data.payer_name} onChange={(e) => setData('payer_name', e.target.value)} />
+              <ErrorText message={errors.payer_name} />
+            </div>
+          </div>
+
+          {isCard ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <Label htmlFor="card_holder_name">Card holder name *</Label>
+                <Input id="card_holder_name" value={data.card_holder_name} onChange={(e) => setData('card_holder_name', e.target.value)} />
+                <ErrorText message={errors.card_holder_name} />
+              </div>
+
+              <div className="md:col-span-2">
+                <Label htmlFor="card_number">Card number *</Label>
+                <Input id="card_number" placeholder="4111 1111 1111 1111" value={data.card_number} onChange={(e) => setData('card_number', e.target.value)} />
+                <ErrorText message={errors.card_number} />
+              </div>
+
+              <div>
+                <Label htmlFor="card_expiration">Expiration *</Label>
+                <Input id="card_expiration" placeholder="MM/YY" value={data.card_expiration} onChange={(e) => setData('card_expiration', e.target.value)} />
+                <ErrorText message={errors.card_expiration} />
+              </div>
+
+              <div>
+                <Label htmlFor="card_cvc">CVC *</Label>
+                <Input id="card_cvc" placeholder="123" value={data.card_cvc} onChange={(e) => setData('card_cvc', e.target.value)} />
+                <ErrorText message={errors.card_cvc} />
+              </div>
+
+              <div className="md:col-span-2 rounded-2xl border bg-muted/20 p-4 text-sm">
+                <label className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={data.marketing_consent}
+                    onChange={(e) => setData('marketing_consent', e.target.checked)}
+                  />
+                  <span>
+                    By signing up, you allow us to tailor offers and content to your interests by monitoring how you use Booking.com through tracking technologies. Unsubscribe anytime through your account settings or the link in any marketing email.
+                  </span>
+                </label>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border bg-muted/20 p-4 text-sm">
+              <div className="font-semibold">{trialRedirectLabel(gateway)}</div>
+              <p className="mt-2 text-muted-foreground">
+                After clicking complete booking, the client would normally be redirected to the selected payment provider in a live integration.
+              </p>
+            </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label htmlFor="transaction_reference">
+                Reference number{requiresReferenceAndProof ? ' *' : ''}
+              </Label>
+              <Input
+                id="transaction_reference"
+                value={data.transaction_reference}
+                onChange={(e) => setData('transaction_reference', e.target.value)}
+              />
+              <ErrorText message={errors.transaction_reference} />
+            </div>
+
+            <div>
+              <Label htmlFor="proof_image">
+                Payment screenshot{requiresReferenceAndProof ? ' *' : ''}
+              </Label>
+              <Input
+                id="proof_image"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => setData('proof_image', e.target.files?.[0] ?? null)}
+              />
+              <ErrorText message={errors.proof_image} />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="remarks">Remarks</Label>
+            <textarea
+              id="remarks"
+              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={data.remarks}
+              onChange={(e) => setData('remarks', e.target.value)}
+            />
+            <ErrorText message={errors.remarks} />
+          </div>
+
+          {proofPreviewUrl ? (
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 text-sm font-semibold">Proof preview</div>
+              <img src={proofPreviewUrl} alt="Payment proof preview" className="max-h-72 rounded-xl border object-contain" />
+            </div>
+          ) : null}
+
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" asChild>
+              <Link href={`/bookings/${booking.id}/edit`}>Edit booking</Link>
+            </Button>
+            <Button type="submit" disabled={processing || computedAmount <= 0}>
+              {processing ? 'Submitting payment…' : 'Complete booking payment'}
+            </Button>
+          </div>
+
+          {isClient ? (
+            <p className="text-xs text-muted-foreground">
+              Trial flow only: online card / PayPal / GCash UI is enabled for demo and record capture, not for live settlement.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+    </form>
+  );
+}
+
+export default function ShowBooking() {
+  const { booking } = usePage<PageProps>().props;
+
+  const itemsTotal = Number(booking.totals?.items_total ?? 0);
+  const submittedPayments = Number(booking.totals?.submitted_payments_total ?? 0);
+  const confirmedPayments = Number(booking.totals?.confirmed_payments_total ?? 0);
+  const balance = Math.max(itemsTotal - confirmedPayments, 0);
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title={`Booking • ${b.client_name ?? ''}`} />
+      <Head title={`Booking #${booking.id}`} />
 
-      <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-        <div className="flex items-center justify-between mb-4 gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/bookings">← Back to Bookings</Link>
-          </Button>
+      <div className="space-y-6 p-4 md:p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Booking details and payment flow</h1>
+            <p className="text-sm text-muted-foreground">
+              Includes status timeline, payment snapshot, proof state, and client payment submission in one page.
+            </p>
+          </div>
 
-          {/* ✅ Hide edit button for STAFF */}
-          {!isStaff && (
-            <Button asChild>
-              <Link href={`/bookings/${b.id}/edit`}>Edit details</Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={statusPill(booking.booking_status)}>{booking.booking_status ?? 'pending'}</span>
+            <span className={statusPill(booking.payment_status)}>{booking.payment_status ?? 'unpaid'}</span>
+            <Button asChild variant="outline">
+              <Link href={`/bookings/${booking.id}/edit`}>Edit booking</Link>
             </Button>
-          )}
+          </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Booking Details</CardTitle>
-          </CardHeader>
-
-          <CardContent className="grid gap-6">
-            {/* Client section */}
-            <section>
-              <h3 className="text-sm font-medium text-muted-foreground">Client</h3>
-              <Separator className="my-2" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <div className="text-xs text-muted-foreground">Client Name</div>
-                  <div className="font-medium">{b.client_name ?? '-'}</div>
+        <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Booking overview</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border bg-muted/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Client</div>
+                  <div className="mt-2 font-semibold">{booking.client_name ?? '—'}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">{booking.client_email ?? '—'}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">{booking.client_contact_number ?? '—'}</div>
                 </div>
 
-                <div>
-                  <div className="text-xs text-muted-foreground">Company</div>
-                  <div className="font-medium">{b.company_name ?? '-'}</div>
+                <div className="rounded-2xl border bg-muted/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Organization</div>
+                  <div className="mt-2 font-semibold">{booking.company_name ?? '—'}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">Head: {booking.head_of_organization ?? '—'}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">Guests: {booking.number_of_guests ?? 0}</div>
                 </div>
 
-                <div>
-                  <div className="text-xs text-muted-foreground">Booking Email</div>
-                  <div className="font-medium">{b.client_email ?? '-'}</div>
+                <div className="rounded-2xl border bg-muted/20 p-4 md:col-span-2">
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Event and schedule</div>
+                  <div className="mt-2 font-semibold">{booking.type_of_event ?? '—'}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    {formatDateTime(booking.booking_date_from)} → {formatDateTime(booking.booking_date_to)}
+                  </div>
+                  <div className="mt-1 text-sm text-muted-foreground">Address: {booking.client_address ?? '—'}</div>
                 </div>
+              </CardContent>
+            </Card>
 
-                <div>
-                  <div className="text-xs text-muted-foreground">Contact</div>
-                  <div className="font-medium">{b.client_contact_number ?? '-'}</div>
-                </div>
+            <PaymentForm booking={booking} />
 
-                <div className="sm:col-span-2">
-                  <div className="text-xs text-muted-foreground">Address</div>
-                  <div className="font-medium">{b.client_address ?? '-'}</div>
-                </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment records</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {booking.payments?.length ? (
+                  booking.payments.map((payment) => (
+                    <div key={payment.id} className="rounded-2xl border p-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="font-semibold">₱ {formatMoney(payment.amount)}</div>
+                            <span className={statusPill(payment.status)}>{payment.status ?? 'submitted'}</span>
+                          </div>
+                          <div className="mt-2 text-sm text-muted-foreground">
+                            {payment.payment_gateway ?? payment.payment_method ?? 'payment'} • {payment.payment_type ?? '—'}
+                          </div>
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            Reference: {payment.transaction_reference ?? '—'}
+                          </div>
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            Paid at: {formatDateTime(payment.paid_at ?? payment.created_at)}
+                          </div>
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            Payer: {payment.payer_name ?? '—'}{payment.card_last_four ? ` • **** ${payment.card_last_four}` : ''}
+                          </div>
+                          {payment.remarks ? (
+                            <div className="mt-2 rounded-xl border bg-muted/20 px-3 py-2 text-sm">{payment.remarks}</div>
+                          ) : null}
+                        </div>
 
-                <div className="sm:col-span-2">
-                  <div className="text-xs text-muted-foreground">Head of the Organization</div>
-                  <div className="font-medium">{b.head_of_organization || '-'}</div>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <div className="text-xs text-muted-foreground">Created By</div>
-                  <div className="font-medium">{createdByLabel}</div>
-                </div>
-              </div>
-            </section>
-
-            {/* Survey section */}
-            <section>
-              <h3 className="text-sm font-medium text-muted-foreground">Survey</h3>
-              <Separator className="my-2" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <div className="text-xs text-muted-foreground">Survey Email</div>
-                  <div className="font-medium">{(b as any).survey_email ?? '-'}</div>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <div className="text-xs text-muted-foreground">Proof</div>
-                  {(b as any).survey_proof_image_url ? (
-                    <div className="mt-2">
-                      <ZoomableImagePreview
-                        src={(b as any).survey_proof_image_url as string}
-                        alt="Survey proof"
-                        title="Survey Proof"
-                      />
+                        {payment.proof_image_url ? (
+                          <a href={payment.proof_image_url} target="_blank" rel="noreferrer" className="block">
+                            <img
+                              src={payment.proof_image_url}
+                              alt={`Payment proof ${payment.id}`}
+                              className="h-28 w-40 rounded-xl border object-cover"
+                            />
+                          </a>
+                        ) : (
+                          <div className="rounded-xl border border-dashed px-4 py-10 text-sm text-muted-foreground">
+                            No proof image
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  ) : (
-                    <div className="font-medium text-destructive">No proof uploaded.</div>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {/* Event section */}
-            <section>
-              <h3 className="text-sm font-medium text-muted-foreground">Event</h3>
-              <Separator className="my-2" />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <div className="text-xs text-muted-foreground">Type of Event</div>
-                  <div className="font-medium">{b.type_of_event ?? '-'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">From</div>
-                  <div className="font-medium">{formatDateTime(b.booking_date_from)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">To</div>
-                  <div className="font-medium">{formatDateTime(b.booking_date_to)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Duration</div>
-                  <div className="font-medium">
-                    {duration ? (duration.days > 0 ? `${duration.days}d ${duration.hours}h` : `${duration.hours}h`) : '-'}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Guests</div>
-                  <div className="font-medium">{b.number_of_guests ?? '-'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Status</div>
-                  <div className="font-medium">
-                    <BookingStatusBadge status={b.booking_status ?? ''} />
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Payment</div>
-                  <div className="font-medium">
-                    <PaymentStatusBadge status={b.payment_status ?? ''} />
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Note: internally we assume a minimum window of <strong>5 hours</strong> from the start time (4 hours
-                event time plus ingress &amp; egress buffer).
-              </p>
-            </section>
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Services */}
-          <Card className="xl:col-span-1">
-            <CardHeader>
-              <CardTitle>Services</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col gap-3">
-                {/* Only non-client see the add controls, but STAFF is disabled */}
-                {!isClient && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <SearchableServiceSelect
-                      services={filteredServices}
-                      value={addServiceId}
-                      onChange={setAddServiceId}
-                      serviceSearch={serviceSearch}
-                      setServiceSearch={setServiceSearch}
-                      disabled={staffReadOnly}
-                    />
-                    <Button type="button" onClick={addCartItem} size="sm" disabled={staffReadOnly || !addServiceId}>
-                      Add
-                    </Button>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed px-4 py-10 text-sm text-muted-foreground">
+                    No payment records yet.
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left">
-                        <th className="py-2 pr-2">Service</th>
-                        {/* ✅ NEW COLUMN: service type shown as "Area" */}
-                        <th className="py-2 pr-2">Area</th>
-                        <th className="py-2 pr-2">Price</th>
-                        <th className="py-2 pr-2 text-right">Actions</th>
-                      </tr>
-                    </thead>
+          <div className="space-y-6">
+            <BookingProgressPanel booking={booking} />
 
-                    <tbody>
-                      {cart.map((i) => {
-                        const area = serviceAreaById.get(i.service_id) ?? '—';
-
-                        return (
-                          <tr key={i.service_id} className="border-t">
-                            <td className="py-2 pr-2">{i.service_name}</td>
-
-                            {/* ✅ Area (service type) */}
-                            <td className="py-2 pr-2">
-                              <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
-                                {area}
-                              </Badge>
-                            </td>
-
-                            <td className="py-2 pr-2">
-                              {Number(i.price).toLocaleString('en-US', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </td>
-
-                            <td className="py-2 pr-2 text-right">
-                              {/* Non-client sees button; STAFF sees it disabled */}
-                              {!isClient && (
-                                <Button
-                                  type="button"
-                                  variant="destructive"
-                                  size="sm"
-                                  disabled={staffReadOnly}
-                                  onClick={() => requestRemoveCartItem(i.service_id)}
-                                >
-                                  Remove
-                                </Button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-
-                      {cart.length === 0 && (
-                        <tr>
-                          <td colSpan={4} className="py-6 text-center text-muted-foreground">
-                            No services selected.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-
-                    {cart.length > 0 && (
-                      <tfoot>
-                        <tr className="border-t">
-                          <td className="py-2 pr-2" colSpan={2}>
-                            Total Services
-                          </td>
-                          <td className="py-2 pr-2">
-                            {cart.reduce((sum, i) => sum + i.price, 0).toLocaleString('en-US', {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </td>
-                          <td />
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick totals</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between rounded-2xl border bg-muted/20 px-4 py-3 text-sm">
+                  <span>Items total</span>
+                  <span className="font-semibold">₱ {formatMoney(itemsTotal)}</span>
                 </div>
-
-                {/* Non-client sees Save; STAFF disabled */}
-                {!isClient && (
-                  <div className="flex justify-end">
-                    <Button type="button" onClick={() => setConfirmSaveServicesOpen(true)} disabled={processing || staffReadOnly}>
-                      Save services
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Payments */}
-          <Card className="xl:col-span-1">
-            <CardHeader>
-              <CardTitle>Payments</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-6">
-              <div className="grid gap-4">
-                <BookingPaymentSummary booking={b} />
-
-                {/* ✅ STAFF cannot input anything (disabled) */}
-                <AddPaymentForm bookingId={b.id} canEditStatus={canEditPaymentStatus} disabled={staffReadOnly} />
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left">
-                        <th className="py-2 pr-2">Date</th>
-                        <th className="py-2 pr-2">Method</th>
-                        <th className="py-2 pr-2">Status</th>
-                        <th className="py-2 pr-2">Reference</th>
-                        <th className="py-2 pr-2 text-right">Amount</th>
-                        <th className="py-2 pr-2 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Array.isArray(b.payments) && b.payments.length > 0 ? (
-                        b.payments.map((p) => (
-                          <PaymentRow
-                            key={p.id}
-                            bookingId={b.id}
-                            payment={p}
-                            showEditButton={!isClient}
-                            readOnly={staffReadOnly}
-                          />
-                        ))
-                      ) : (
-                        <tr>
-                          <td className="py-6 text-center text-muted-foreground" colSpan={6}>
-                            No payments recorded.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                    <tfoot>
-  <tr className="border-t">
-    <td className="py-2 pr-2" colSpan={4}>
-      Submitted Total
-    </td>
-    <td className="py-2 pr-2 text-right">
-      {Number(b.totals?.submitted_payments_total ?? 0).toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}
-    </td>
-  </tr>
-  <tr>
-    <td className="py-2 pr-2" colSpan={4}>
-      Confirmed Paid
-    </td>
-    <td className="py-2 pr-2 text-right">
-      {Number(b.totals?.confirmed_payments_total ?? b.totals?.payments_total ?? 0).toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}
-    </td>
-  </tr>
-</tfoot>
-
-                  </table>
+                <div className="flex items-center justify-between rounded-2xl border bg-muted/20 px-4 py-3 text-sm">
+                  <span>Submitted payments</span>
+                  <span className="font-semibold">₱ {formatMoney(submittedPayments)}</span>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="flex items-center justify-between rounded-2xl border bg-muted/20 px-4 py-3 text-sm">
+                  <span>Confirmed payments</span>
+                  <span className="font-semibold">₱ {formatMoney(confirmedPayments)}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl border bg-muted/20 px-4 py-3 text-sm font-semibold">
+                  <span>Outstanding balance</span>
+                  <span className={balance > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                    ₱ {formatMoney(balance)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
-      <ConfirmActionDialog
-    open={confirmRemoveItemOpen}
-    onOpenChange={(open) => {
-        setConfirmRemoveItemOpen(open);
-        if (!open) {
-            setPendingRemoveServiceId(null);
-        }
-    }}
-    title="Remove this service from the booking?"
-    description="This will remove the selected service line from the current booking editor."
-    confirmLabel="Remove"
-    cancelLabel="Keep it"
-    onConfirm={confirmRemoveCartItem}
-    variant="destructive"
-/>
-
-<ConfirmActionDialog
-    open={confirmSaveServicesOpen}
-    onOpenChange={setConfirmSaveServicesOpen}
-    title="Save service changes?"
-    description="This will update the service lines attached to the booking."
-    confirmLabel="Save changes"
-    cancelLabel="Review first"
-    onConfirm={() => {
-        saveItems();
-        setConfirmSaveServicesOpen(false);
-    }}
-    variant="default"
-/>
-
     </AppLayout>
   );
 }
-
-/* ---------------------------- Add Payment Form ---------------------------- */
-
-function AddPaymentForm({
-  bookingId,
-  canEditStatus,
-  disabled,
-}: {
-  bookingId: number;
-  canEditStatus: boolean;
-  disabled?: boolean;
-}) {
-  const { data, setData, post, processing, errors, reset } = useForm<{
-    status: string;
-    payment_method: string;
-    amount: string;
-    transaction_reference: string;
-    remarks: string;
-  }>({
-    status: 'pending',
-    payment_method: '',
-    amount: '',
-    transaction_reference: '',
-    remarks: '',
-  });
-
-  const submit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (disabled) return;
-    post(`/bookings/${bookingId}/payments`, {
-      onSuccess: () => reset('payment_method', 'amount', 'transaction_reference', 'remarks'),
-    });
-  };
-
-  return (
-    <form onSubmit={submit} className="grid gap-3 border rounded-md p-4 bg-muted/30">
-      <h4 className="font-medium text-sm">Add Payment</h4>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="grid gap-1">
-          <label className="text-xs font-medium" htmlFor="payment_method">
-            Payment Method
-          </label>
-          <Input
-            id="payment_method"
-            value={data.payment_method}
-            onChange={(e) => setData('payment_method', e.currentTarget.value)}
-            required
-            disabled={disabled}
-          />
-          {errors.payment_method && <p className="text-destructive text-xs">{errors.payment_method}</p>}
-        </div>
-
-        <div className="grid gap-1">
-          <label className="text-xs font-medium" htmlFor="amount">
-            Amount
-          </label>
-          <Input
-            id="amount"
-            type="number"
-            min={0.01}
-            step={0.01}
-            value={data.amount}
-            onChange={(e) => setData('amount', e.currentTarget.value)}
-            required
-            disabled={disabled}
-          />
-          {errors.amount && <p className="text-destructive text-xs">{errors.amount}</p>}
-        </div>
-
-        <div className="grid gap-1">
-          <label className="text-xs font-medium" htmlFor="status">
-            Status
-          </label>
-
-          {canEditStatus && !disabled ? (
-            <select
-              id="status"
-              className="border bg-background rounded-md px-2 py-2 text-sm"
-              value={data.status}
-              onChange={(e) => setData('status', e.currentTarget.value)}
-            >
-              <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="failed">Failed</option>
-              <option value="declined">Declined</option>
-              <option value="refunded">Refunded</option>
-            </select>
-          ) : (
-            <Input id="status" value="Pending" disabled className="bg-muted text-muted-foreground" />
-          )}
-
-          {errors.status && <p className="text-destructive text-xs">{errors.status}</p>}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="grid gap-1">
-          <label className="text-xs font-medium" htmlFor="transaction_reference">
-            Reference
-          </label>
-          <Input
-            id="transaction_reference"
-            value={data.transaction_reference}
-            onChange={(e) => setData('transaction_reference', e.currentTarget.value)}
-            disabled={disabled}
-          />
-          {errors.transaction_reference && <p className="text-destructive text-xs">{errors.transaction_reference}</p>}
-        </div>
-
-        <div className="grid gap-1">
-          <label className="text-xs font-medium" htmlFor="remarks">
-            Remarks
-          </label>
-          <Input
-            id="remarks"
-            value={data.remarks}
-            onChange={(e) => setData('remarks', e.currentTarget.value)}
-            disabled={disabled}
-          />
-          {errors.remarks && <p className="text-destructive text-xs">{errors.remarks}</p>}
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <Button type="submit" size="sm" disabled={processing || disabled}>
-          {processing ? 'Saving…' : 'Add Payment'}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-/* ------------------------------ Payment Row ------------------------------- */
-
-function PaymentRow({
-  bookingId,
-  payment,
-  showEditButton,
-  readOnly,
-}: {
-  bookingId: number;
-  payment: PaymentRaw;
-  showEditButton: boolean;
-  readOnly: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-
-  useEffect(() => {
-    if (readOnly) setEditing(false);
-  }, [readOnly]);
-
-  return (
-    <>
-      <tr className="border-t">
-        <td className="py-2 pr-2">{new Date(payment.created_at).toLocaleDateString()}</td>
-        <td className="py-2 pr-2">{payment.payment_method}</td>
-        <td className="py-2 pr-2">
-          <PaymentRowStatusBadge status={payment.status} />
-        </td>
-        <td className="py-2 pr-2">{payment.transaction_reference ?? '-'}</td>
-        <td className="py-2 pr-2 text-right">{Number(payment.amount).toFixed(2)}</td>
-        <td className="py-2 pr-2 text-right">
-          {showEditButton && (
-            <Button
-              size="sm"
-              variant="outline"
-              type="button"
-              disabled={readOnly}
-              onClick={() => {
-                if (readOnly) return;
-                setEditing((v) => !v);
-              }}
-            >
-              {editing ? 'Close' : 'Edit'}
-            </Button>
-          )}
-        </td>
-      </tr>
-
-      {editing && showEditButton && !readOnly && (
-        <tr className="border-b">
-          <td colSpan={6} className="py-3">
-            <EditPaymentForm bookingId={bookingId} payment={payment} onDone={() => setEditing(false)} />
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
-
-/* ---------------------------- Edit Payment Form --------------------------- */
-
-function EditPaymentForm({
-  bookingId,
-  payment,
-  onDone,
-}: {
-  bookingId: number;
-  payment: PaymentRaw;
-  onDone: () => void;
-}) {
-  const { data, setData, put, processing, errors } = useForm<{
-    status: string;
-    payment_method: string;
-    amount: string;
-    transaction_reference: string;
-    remarks: string;
-  }>({
-    status: payment.status ?? 'pending',
-    payment_method: payment.payment_method ?? '',
-    amount: String(payment.amount ?? ''),
-    transaction_reference: payment.transaction_reference ?? '',
-    remarks: payment.remarks ?? '',
-  });
-
-  const submit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    put(`/bookings/${bookingId}/payments/${payment.id}`, { onSuccess: onDone });
-  };
-
-  return (
-    <form onSubmit={submit} className="grid gap-3 border rounded-md p-4 bg-muted/20">
-      <h4 className="font-medium text-sm">Edit Payment</h4>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="grid gap-1">
-          <label className="text-xs font-medium" htmlFor={`edit_method_${payment.id}`}>
-            Method
-          </label>
-          <Input
-            id={`edit_method_${payment.id}`}
-            value={data.payment_method}
-            onChange={(e) => setData('payment_method', e.currentTarget.value)}
-            required
-          />
-          {errors.payment_method && <p className="text-destructive text-xs">{errors.payment_method}</p>}
-        </div>
-
-        <div className="grid gap-1">
-          <label className="text-xs font-medium" htmlFor={`edit_amount_${payment.id}`}>
-            Amount
-          </label>
-          <Input
-            id={`edit_amount_${payment.id}`}
-            type="number"
-            min={0.01}
-            step={0.01}
-            value={data.amount}
-            onChange={(e) => setData('amount', e.currentTarget.value)}
-            required
-          />
-          {errors.amount && <p className="text-destructive text-xs">{errors.amount}</p>}
-        </div>
-
-        <div className="grid gap-1">
-          <label className="text-xs font-medium" htmlFor={`edit_status_${payment.id}`}>
-            Status
-          </label>
-          <select
-            id={`edit_status_${payment.id}`}
-            className="border bg-background rounded-md px-2 py-2 text-sm"
-            value={data.status}
-            onChange={(e) => setData('status', e.currentTarget.value)}
-          >
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="failed">Failed</option>
-            <option value="declined">Declined</option>
-            <option value="refunded">Refunded</option>
-          </select>
-          {errors.status && <p className="text-destructive text-xs">{errors.status}</p>}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="grid gap-1">
-          <label className="text-xs font-medium" htmlFor={`edit_ref_${payment.id}`}>
-            Reference
-          </label>
-          <Input
-            id={`edit_ref_${payment.id}`}
-            value={data.transaction_reference}
-            onChange={(e) => setData('transaction_reference', e.currentTarget.value)}
-          />
-          {errors.transaction_reference && <p className="text-destructive text-xs">{errors.transaction_reference}</p>}
-        </div>
-
-        <div className="grid gap-1">
-          <label className="text-xs font-medium" htmlFor={`edit_remarks_${payment.id}`}>
-            Remarks
-          </label>
-          <Input
-            id={`edit_remarks_${payment.id}`}
-            value={data.remarks}
-            onChange={(e) => setData('remarks', e.currentTarget.value)}
-          />
-          {errors.remarks && <p className="text-destructive text-xs">{errors.remarks}</p>}
-        </div>
-      </div>
-
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={onDone}>
-          Cancel
-        </Button>
-        <Button type="submit" size="sm" disabled={processing}>
-          {processing ? 'Saving…' : 'Save Changes'}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-/* ------------------------------ UI Badges -------------------------------- */
-
-function PaymentStatusBadge({ status }: { status?: string }) {
-  const s = (status || '').toLowerCase();
-  const cls =
-    s === 'paid'
-      ? 'bg-green-600 text-white'
-      : s === 'partial'
-        ? 'bg-amber-500 text-black'
-        : 'bg-red-600 text-white';
-  const label = s ? s.charAt(0).toUpperCase() + s.slice(1) : '-';
-  return <Badge className={cls}>{label}</Badge>;
-}
-
-function BookingPaymentSummary({ booking }: { booking: BookingVM }) {
-  const itemsTotal = Number(booking.totals?.items_total ?? 0);
-
-  const submittedTotal = Number(
-    booking.totals?.submitted_payments_total ??
-      (Array.isArray(booking.payments)
-        ? booking.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
-        : 0),
-  );
-
-  const confirmedPaid = Number(
-    booking.totals?.confirmed_payments_total ??
-      (Array.isArray(booking.payments)
-        ? booking.payments
-            .filter((p) => p.status === 'confirmed')
-            .reduce((sum, p) => sum + Number(p.amount || 0), 0)
-        : 0),
-  );
-
-  const balance = Math.max(itemsTotal - confirmedPaid, 0);
-
-  return (
-    <div className="flex flex-wrap items-center gap-3 text-sm">
-      <div>
-        Total Services:{' '}
-        <span className="font-medium">
-          {itemsTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
-      </div>
-      <div>
-        Submitted Total:{' '}
-        <span className="font-medium">
-          {submittedTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
-      </div>
-      <div>
-        Confirmed Paid:{' '}
-        <span className="font-medium">
-          {confirmedPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
-      </div>
-      <div>
-        Balance Due:{' '}
-        <span className="font-semibold">
-          {balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
-      </div>
-    </div>
-  );
-}
-

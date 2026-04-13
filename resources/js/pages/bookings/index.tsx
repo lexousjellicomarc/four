@@ -2,11 +2,24 @@ import AppLayout from '@/layouts/app-layout';
 import { Booking, Service, type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import React, { useMemo, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import {
+  Activity,
+  AlertTriangle,
+  CalendarDays,
+  Clock3,
+  Download,
+  Eye,
+  LayoutGrid,
+  List,
+  Pencil,
+  Search,
+  Trash2,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
@@ -60,7 +73,7 @@ const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
 ];
 
 interface BookingsPageProps {
-  bookings: any; // supports resource paginator OR direct paginator
+  bookings: any;
   services: Service[];
   filters: Partial<{
     booking_status: string;
@@ -91,34 +104,12 @@ function getRoleNames(auth: any): string[] {
     .map((s: string) => s.toLowerCase());
 }
 
-/* ============================================================
- * ✅ FIX: Schedule "to" showing wrong time/day
- *
- * Your symptom:
- *   from: Jan 30, 2026 6:00 AM
- *   to:   Jan 30, 2026 6:00 PM
- * was showing as:
- *   Jan 30, 2026, 2:00 PM
- *   to Jan 31, 2026, 2:00 AM
- *
- * That happens when the browser is applying timezone conversion
- * (usually because the string contains `Z` / `+00:00` etc).
- *
- * So here we parse booking schedule as "floating local time":
- * - We EXTRACT the YYYY-MM-DD HH:mm:ss parts and IGNORE timezone suffix.
- * - That means "06:00" always displays as 06:00, not shifted.
- * ============================================================ */
-
 function isDateOnlyString(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
 
-function parseScheduleDateTime(
-  input: unknown,
-  opts?: { dateOnlyAsEnd?: boolean },
-): Date | null {
+function parseScheduleDateTime(input: unknown, opts?: { dateOnlyAsEnd?: boolean }): Date | null {
   if (input === null || input === undefined) return null;
-
   if (input instanceof Date) return Number.isNaN(input.getTime()) ? null : input;
 
   if (typeof input === 'number') {
@@ -129,20 +120,11 @@ function parseScheduleDateTime(
   const s = String(input).trim();
   if (!s) return null;
 
-  // Capture ONLY the leading datetime part, ignore any trailing timezone.
-  // Examples supported:
-  // - 2026-01-30
-  // - 2026-01-30 06:00
-  // - 2026-01-30 06:00:00
-  // - 2026-01-30T06:00:00
-  // - 2026-01-30T06:00:00.000000Z
-  // - 2026-01-30T06:00:00+00:00
   const m = s.match(
     /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?)?/,
   );
 
   if (!m) {
-    // Fallback: last resort
     const d = new Date(s);
     return Number.isNaN(d.getTime()) ? null : d;
   }
@@ -150,22 +132,19 @@ function parseScheduleDateTime(
   const y = Number(m[1]);
   const mo = Number(m[2]) - 1;
   const da = Number(m[3]);
-
   const dateOnly = isDateOnlyString(s);
 
   let hh = m[4] ? Number(m[4]) : 0;
   let mm = m[5] ? Number(m[5]) : 0;
   let ss = m[6] ? Number(m[6]) : 0;
-
-  // microseconds -> milliseconds (take first 3 digits, pad if needed)
   let ms = 0;
+
   if (m[7]) {
     const frac = String(m[7]);
     ms = Number.parseInt(frac.padEnd(3, '0').slice(0, 3), 10);
     if (!Number.isFinite(ms)) ms = 0;
   }
 
-  // If it is date-only and used as "to", treat as end-of-day for duration/tag
   if (dateOnly && opts?.dateOnlyAsEnd) {
     hh = 23;
     mm = 59;
@@ -178,14 +157,12 @@ function parseScheduleDateTime(
 }
 
 function formatScheduleDateTime(input: unknown): string {
-  if (input === null || input === undefined) return '-';
+  if (input === null || input === undefined) return '—';
   const s = String(input).trim();
   const dateOnly = isDateOnlyString(s);
-
   const d = parseScheduleDateTime(input);
-  if (!d) return '-';
+  if (!d) return '—';
 
-  // Date-only → show only date (no misleading midnight)
   if (dateOnly) {
     return d.toLocaleDateString(undefined, {
       year: 'numeric',
@@ -194,7 +171,6 @@ function formatScheduleDateTime(input: unknown): string {
     });
   }
 
-  // Datetime → show date + time
   return d.toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',
@@ -204,25 +180,7 @@ function formatScheduleDateTime(input: unknown): string {
   });
 }
 
-function formatScheduleTimeOnly(input: unknown): string {
-  const d = parseScheduleDateTime(input);
-  if (!d) return '-';
-  return d.toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-function sameCalendarDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
 function diffCalendarDays(a: Date, b: Date) {
-  // DST-safe calendar difference
   const aUTC = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
   const bUTC = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
   return Math.round((aUTC - bUTC) / 86400000);
@@ -237,7 +195,6 @@ function formatDuration(fromInput: unknown, toInput: unknown) {
   if (!Number.isFinite(mins) || mins <= 0) return null;
 
   if (mins < 60) return `${mins}m`;
-
   if (mins < 24 * 60) {
     const h = Math.floor(mins / 60);
     const m = mins % 60;
@@ -247,7 +204,6 @@ function formatDuration(fromInput: unknown, toInput: unknown) {
   const days = Math.floor(mins / (24 * 60));
   const rem = mins - days * 24 * 60;
   const h = Math.floor(rem / 60);
-
   return h ? `${days}d ${h}h` : `${days}d`;
 }
 
@@ -258,17 +214,14 @@ function getScheduleTag(fromInput: unknown, toInput: unknown) {
 
   const now = new Date();
 
-  // ongoing
   if (end && start <= now && end > now) {
     return { label: 'ONGOING', className: 'bg-sky-600 text-white' };
   }
 
-  // ended
   if (end && end <= now) {
     return { label: 'PAST', className: 'bg-muted text-muted-foreground border border-border' };
   }
 
-  // if no end but already started
   if (!end && start <= now) {
     return { label: 'ONGOING', className: 'bg-sky-600 text-white' };
   }
@@ -283,20 +236,11 @@ function getScheduleTag(fromInput: unknown, toInput: unknown) {
   return { label: 'PAST', className: 'bg-muted text-muted-foreground border border-border' };
 }
 
-function PaymentStatusBadge({ status }: { status?: string | null }) {
-  const s = (status || '').toLowerCase();
-
-  const cls =
-    s === 'paid'
-      ? 'bg-emerald-600 text-white'
-      : s === 'partial'
-        ? 'bg-amber-500 text-black'
-        : s === 'unpaid'
-          ? 'bg-red-600 text-white'
-          : 'bg-muted text-foreground border border-border';
-
-  const label = s ? s.charAt(0).toUpperCase() + s.slice(1) : '-';
-  return <Badge className={cls}>{label}</Badge>;
+function formatMoney(value: number) {
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function getCreatedByLabel(b: any): string {
@@ -335,11 +279,58 @@ function normalizeLabel(label: any): string {
   return raw.replace(/&laquo;|&raquo;/g, '').replace(/<[^>]*>/g, '').trim();
 }
 
+function paymentTone(status?: string | null) {
+  const s = String(status ?? '').toLowerCase();
+  if (s === 'paid') return 'bg-emerald-600 text-white';
+  if (s === 'partial') return 'bg-amber-500 text-black';
+  if (s === 'unpaid' || s === 'owing') return 'bg-red-600 text-white';
+  return 'bg-muted text-foreground border border-border';
+}
+
+function paymentLabel(status?: string | null) {
+  const s = String(status ?? '').toLowerCase();
+  if (!s) return '-';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function getOutstandingBalance(booking: Booking) {
+  const itemsTotal = Number(booking?.totals?.items_total ?? 0);
+  const paid = Number(
+    booking?.totals?.confirmed_payments_total ?? booking?.totals?.payments_total ?? 0,
+  );
+  return Math.max(itemsTotal - paid, 0);
+}
+
+function getItemsTotal(booking: Booking) {
+  return Number(booking?.totals?.items_total ?? 0);
+}
+
+function getServicesPreview(booking: Booking) {
+  if (Array.isArray(booking.items) && booking.items.length > 0) {
+    return booking.items.map((item) => item.service_name || 'Service').filter(Boolean).join(', ');
+  }
+
+  if (booking.service_name) return booking.service_name;
+  return 'No service items attached';
+}
+
+function getPrimaryArea(booking: Booking) {
+  const firstItem = Array.isArray(booking.items) ? booking.items[0] : null;
+  return (firstItem as any)?.area || '—';
+}
+
+function toCsvValue(value: unknown) {
+  const raw = String(value ?? '');
+  if (/[",\n]/.test(raw)) {
+    return `"${raw.replace(/"/g, '""')}"`;
+  }
+  return raw;
+}
+
 export default function Bookings(props: BookingsPageProps) {
   const page = usePage().props as any;
   const roleNames = getRoleNames(page?.auth);
   const isClient = roleNames.includes('user');
-
   const defaultSort: SortKey = isClient ? 'newest' : 'upcoming';
 
   const bookings = props.bookings ?? { data: [] };
@@ -360,6 +351,7 @@ export default function Bookings(props: BookingsPageProps) {
 
   const [selected, setSelected] = useState<Booking | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('cards');
 
   const [bookingStatus, setBookingStatus] = useState<string>(filters.booking_status ?? '');
   const [paymentStatus, setPaymentStatus] = useState<string>(filters.payment_status ?? '');
@@ -372,6 +364,19 @@ export default function Bookings(props: BookingsPageProps) {
   const serviceOptions = useMemo(() => {
     return [...services].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [services]);
+
+  const visibleMetrics = useMemo(() => {
+    const visibleCount = bookingRows.length;
+    const urgentCount = bookingRows.filter((booking) => {
+      const tag = getScheduleTag(booking.booking_date_from, booking.booking_date_to);
+      return tag?.label === 'TODAY' || tag?.label === 'TOMORROW' || tag?.label === 'ONGOING';
+    }).length;
+    const unpaidCount = bookingRows.filter((booking) => ['unpaid', 'partial', 'owing'].includes(String(booking.payment_status ?? '').toLowerCase())).length;
+    const totalGuests = bookingRows.reduce((sum, booking) => sum + Number(booking.number_of_guests ?? 0), 0);
+    const outstanding = bookingRows.reduce((sum, booking) => sum + getOutstandingBalance(booking), 0);
+
+    return { visibleCount, urgentCount, unpaidCount, totalGuests, outstanding };
+  }, [bookingRows]);
 
   function openDelete(booking: Booking) {
     setSelected(booking);
@@ -395,6 +400,18 @@ export default function Bookings(props: BookingsPageProps) {
     );
   }
 
+  function resetFilters() {
+    setBookingStatus('');
+    setPaymentStatus('');
+    setServiceId('');
+    setQ('');
+    setDateFrom('');
+    setDateTo('');
+    setSort(defaultSort);
+
+    router.get(bookingsRoutes.index.url(), {}, { preserveScroll: true, preserveState: true, replace: true });
+  }
+
   const handlePagination = (url: string | null) => (e: React.MouseEvent) => {
     if (!url) {
       e.preventDefault();
@@ -404,22 +421,171 @@ export default function Bookings(props: BookingsPageProps) {
     router.visit(url, { preserveScroll: true, preserveState: true, replace: true });
   };
 
+  function exportVisibleCsv() {
+    const headers = [
+      'Booking ID',
+      'Client',
+      'Company',
+      'Email',
+      'Contact',
+      'Event Type',
+      'Schedule From',
+      'Schedule To',
+      'Guests',
+      'Booking Status',
+      'Payment Status',
+      'Items Total',
+      'Outstanding Balance',
+      'Services',
+      'Area',
+      'Created By',
+      'Created At',
+    ];
+
+    const rows = bookingRows.map((booking) => [
+      booking.id,
+      booking.client_name,
+      booking.company_name,
+      booking.client_email,
+      booking.client_contact_number,
+      booking.type_of_event,
+      formatScheduleDateTime(booking.booking_date_from),
+      formatScheduleDateTime(booking.booking_date_to),
+      booking.number_of_guests,
+      booking.booking_status,
+      booking.payment_status,
+      formatMoney(getItemsTotal(booking)),
+      formatMoney(getOutstandingBalance(booking)),
+      getServicesPreview(booking),
+      getPrimaryArea(booking),
+      getCreatedByLabel(booking),
+      formatScheduleDateTime(booking.created_at),
+    ]);
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => toCsvValue(cell)).join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `bookings-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Bookings" />
 
       <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
         <Card>
-          <CardHeader className="flex flex-col gap-3 px-6">
-            <div className="flex items-center justify-between">
-              <CardTitle>Bookings</CardTitle>
+          <CardHeader className="space-y-4 px-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <CardTitle className="text-2xl">Bookings command center</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Better list management, quick urgency spotting, payment visibility, and CSV export without adding a new backend endpoint.
+                </p>
+              </div>
 
-              <Button asChild size="sm">
-                <Link href={bookingsRoutes.create.url()}>New Booking</Link>
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex rounded-lg border p-1">
+                  <Button
+                    type="button"
+                    variant={viewMode === 'cards' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('cards')}
+                  >
+                    <LayoutGrid className="mr-2 h-4 w-4" /> Cards
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={viewMode === 'table' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('table')}
+                  >
+                    <List className="mr-2 h-4 w-4" /> Table
+                  </Button>
+                </div>
+                
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/bookings/analytics">
+                    <Activity className="mr-2 h-4 w-4" /> Analytics
+                  </Link>
+                </Button>
+
+                <Button type="button" variant="outline" size="sm" onClick={exportVisibleCsv}>
+                  <Download className="mr-2 h-4 w-4" /> Export CSV
+                </Button>
+
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/bookings/audit">Audit Trail</Link>
+                </Button>
+
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/bookings/operations">Operations Center</Link>
+                </Button>
+                
+                <Button asChild size="sm">
+                  <Link href={bookingsRoutes.create.url()}>New Booking</Link>
+                </Button>
+              </div>
             </div>
 
-            {/* Status summary */}
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <div className="rounded-2xl border bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-primary/10 p-2 text-primary"><CalendarDays className="h-4 w-4" /></div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Visible bookings</div>
+                    <div className="text-2xl font-semibold">{visibleMetrics.visibleCount}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-amber-500/10 p-2 text-amber-600"><AlertTriangle className="h-4 w-4" /></div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Urgent schedules</div>
+                    <div className="text-2xl font-semibold">{visibleMetrics.urgentCount}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-red-500/10 p-2 text-red-600"><Wallet className="h-4 w-4" /></div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Needs payment</div>
+                    <div className="text-2xl font-semibold">{visibleMetrics.unpaidCount}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-sky-500/10 p-2 text-sky-600"><Users className="h-4 w-4" /></div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Visible guests</div>
+                    <div className="text-2xl font-semibold">{visibleMetrics.totalGuests}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-emerald-500/10 p-2 text-emerald-600"><Clock3 className="h-4 w-4" /></div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Outstanding</div>
+                    <div className="text-2xl font-semibold">₱ {formatMoney(visibleMetrics.outstanding)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
               {[
                 { key: 'all', label: 'All', count: statusCounts.all },
@@ -453,7 +619,6 @@ export default function Bookings(props: BookingsPageProps) {
               })}
             </div>
 
-            {/* Filters + Sort */}
             <form
               className="grid grid-cols-1 gap-2 lg:grid-cols-8"
               onSubmit={(e) => {
@@ -462,7 +627,7 @@ export default function Bookings(props: BookingsPageProps) {
               }}
             >
               <select
-                className="border bg-background rounded-md px-2 py-1 text-sm"
+                className="rounded-md border bg-background px-2 py-1 text-sm"
                 value={bookingStatus}
                 onChange={(e) => setBookingStatus(e.target.value)}
               >
@@ -476,7 +641,7 @@ export default function Bookings(props: BookingsPageProps) {
               </select>
 
               <select
-                className="border bg-background rounded-md px-2 py-1 text-sm"
+                className="rounded-md border bg-background px-2 py-1 text-sm"
                 value={paymentStatus}
                 onChange={(e) => setPaymentStatus(e.target.value)}
               >
@@ -484,10 +649,11 @@ export default function Bookings(props: BookingsPageProps) {
                 <option value="unpaid">Unpaid</option>
                 <option value="partial">Partial</option>
                 <option value="paid">Paid</option>
+                <option value="owing">Owing</option>
               </select>
 
               <select
-                className="border bg-background rounded-md px-2 py-1 text-sm"
+                className="rounded-md border bg-background px-2 py-1 text-sm"
                 value={serviceId}
                 onChange={(e) => setServiceId(e.target.value)}
               >
@@ -499,280 +665,247 @@ export default function Bookings(props: BookingsPageProps) {
                 ))}
               </select>
 
-              <Input
-                placeholder="Search client/company/email"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-              />
+              <div className="relative lg:col-span-2">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Search client/company/email"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                />
+              </div>
 
               <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
 
               <select
-                className="border bg-background rounded-md px-2 py-1 text-sm"
+                className="rounded-md border bg-background px-2 py-1 text-sm"
                 value={sort}
-                onChange={(e) => {
-                  const v = e.target.value as SortKey;
-                  setSort(v);
-
-                  router.get(
-                    bookingsRoutes.index.url(),
-                    {
-                      booking_status: bookingStatus || undefined,
-                      payment_status: paymentStatus || undefined,
-                      service_id: serviceId || undefined,
-                      q: q || undefined,
-                      date_from: dateFrom || undefined,
-                      date_to: dateTo || undefined,
-                      sort: v,
-                    },
-                    { preserveScroll: true, preserveState: true, replace: true },
-                  );
-                }}
+                onChange={(e) => setSort(e.target.value as SortKey)}
               >
-                {SORT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
 
-              <div className="flex gap-2">
-                <Button type="submit" size="sm">
-                  Filter
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setBookingStatus('');
-                    setPaymentStatus('');
-                    setServiceId('');
-                    setQ('');
-                    setDateFrom('');
-                    setDateTo('');
-                    setSort(defaultSort);
-                    router.get(bookingsRoutes.index.url(), {}, { preserveScroll: true, replace: true });
-                  }}
-                >
-                  Clear
-                </Button>
+              <div className="lg:col-span-8 flex flex-wrap gap-2">
+                <Button type="submit" size="sm">Apply filters</Button>
+                <Button type="button" size="sm" variant="outline" onClick={resetFilters}>Reset</Button>
               </div>
             </form>
           </CardHeader>
 
-          <CardContent>
-            <Table>
-              <TableCaption>Bookings list</TableCaption>
-
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Event</TableHead>
-                  <TableHead>Schedule</TableHead>
-                  <TableHead>Guests</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Payment</TableHead>
-                  <TableHead className="text-right w-[130px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {bookingRows.map((b) => {
-                  const clientEmail = (b as any).client_email ?? '-';
-                  const createdBy = getCreatedByLabel(b as any);
-                  const isUnviewed = (b as any).is_unviewed_for_current_user === true;
-
-                  const fromRaw = (b as any).booking_date_from ?? null;
-                  const toRaw = (b as any).booking_date_to ?? null;
-
-                  const tag = getScheduleTag(fromRaw, toRaw);
-                  const duration = formatDuration(fromRaw, toRaw);
-
-                  const startDate = parseScheduleDateTime(fromRaw);
-                  const endDate = parseScheduleDateTime(toRaw);
-
-                  const fromIsDateOnly =
-                    fromRaw !== null && fromRaw !== undefined
-                      ? isDateOnlyString(String(fromRaw).trim())
-                      : false;
-
-                  const toIsDateOnly =
-                    toRaw !== null && toRaw !== undefined
-                      ? isDateOnlyString(String(toRaw).trim())
-                      : false;
-
-                  const showToTimeOnly =
-                    !!startDate &&
-                    !!endDate &&
-                    !fromIsDateOnly &&
-                    !toIsDateOnly &&
-                    sameCalendarDay(startDate, endDate);
+          <CardContent className="space-y-4 px-6 pb-6">
+            {bookingRows.length === 0 ? (
+              <div className="rounded-2xl border border-dashed px-6 py-12 text-center text-sm text-muted-foreground">
+                No bookings found for the current filter set.
+              </div>
+            ) : viewMode === 'cards' ? (
+              <div className="grid gap-4 xl:grid-cols-2">
+                {bookingRows.map((booking) => {
+                  const scheduleTag = getScheduleTag(booking.booking_date_from, booking.booking_date_to);
+                  const duration = formatDuration(booking.booking_date_from, booking.booking_date_to);
+                  const servicesPreview = getServicesPreview(booking);
+                  const outstanding = getOutstandingBalance(booking);
+                  const itemsTotal = getItemsTotal(booking);
 
                   return (
-                    <TableRow
-                      key={b.id}
-                      className={
-                        isUnviewed
-                          ? 'bg-amber-50/60 dark:bg-amber-950/20 transition-colors'
-                          : 'transition-colors'
-                      }
-                    >
-                      <TableCell className="font-medium">
-                        <div className="flex flex-col">
-                          <Link
-                            href={bookingsRoutes.show.url({ booking: b.id })}
-                            className="hover:underline"
-                          >
-                            {(b as any).client_name ?? '-'}
-                          </Link>
+                    <div key={booking.id} className="rounded-3xl border bg-card p-5 shadow-sm">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-xl font-semibold">{booking.company_name || booking.client_name}</div>
+                            <BookingStatusBadge status={booking.booking_status} />
+                            <Badge className={paymentTone(booking.payment_status)}>{paymentLabel(booking.payment_status)}</Badge>
+                            {scheduleTag ? <Badge className={scheduleTag.className}>{scheduleTag.label}</Badge> : null}
+                          </div>
 
-                          <span className="text-xs text-muted-foreground">{clientEmail}</span>
+                          <div className="text-sm text-muted-foreground">
+                            {booking.client_name} • {booking.client_email || 'No email'}
+                          </div>
 
-                          {isUnviewed && (
-                            <span className="mt-1 inline-flex w-fit items-center rounded-md bg-amber-200/70 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
-                              NEW
-                            </span>
-                          )}
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="rounded-2xl border bg-muted/20 p-4">
+                              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Schedule</div>
+                              <div className="mt-2 text-sm font-medium">
+                                {formatScheduleDateTime(booking.booking_date_from)}
+                              </div>
+                              <div className="mt-1 text-sm text-muted-foreground">
+                                to {formatScheduleDateTime(booking.booking_date_to)}
+                              </div>
+                              {duration ? <div className="mt-2 text-xs text-muted-foreground">Duration: {duration}</div> : null}
+                            </div>
 
-                          <span className="text-[11px] text-muted-foreground">
-                            Created by: {createdBy}
-                          </span>
+                            <div className="rounded-2xl border bg-muted/20 p-4">
+                              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Event</div>
+                              <div className="mt-2 text-sm font-medium">{booking.type_of_event || '—'}</div>
+                              <div className="mt-1 text-sm text-muted-foreground">Guests: {booking.number_of_guests ?? 0}</div>
+                              <div className="mt-1 text-sm text-muted-foreground">Primary area: {getPrimaryArea(booking)}</div>
+                            </div>
+                          </div>
                         </div>
-                      </TableCell>
 
-                      <TableCell>{(b as any).company_name ?? '-'}</TableCell>
-                      <TableCell>{(b as any).type_of_event ?? '-'}</TableCell>
-
-                      <TableCell className="whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          {tag && (
-                            <Badge className={`w-fit text-[10px] px-2 py-0.5 ${tag.className}`}>
-                              {tag.label}
-                            </Badge>
-                          )}
-
-                          <span>{formatScheduleDateTime(fromRaw)}</span>
-
-                          {toRaw ? (
-                            <span className="text-muted-foreground text-xs">
-                              to{' '}
-                              {showToTimeOnly
-                                ? formatScheduleTimeOnly(toRaw) // ✅ if same date, show time only (fixes confusion)
-                                : formatScheduleDateTime(toRaw)}{' '}
-                              {duration ? ` • ${duration}` : ''}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">
-                              No end time{duration ? ` • ${duration}` : ''}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-
-                      <TableCell>{(b as any).number_of_guests ?? '-'}</TableCell>
-
-                      <TableCell>
-                        <BookingStatusBadge status={(b as any).booking_status ?? null} />
-                      </TableCell>
-
-                      <TableCell>
-                        <PaymentStatusBadge status={(b as any).payment_status ?? null} />
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="icon" asChild>
-                            <Link href={bookingsRoutes.edit.url({ booking: b.id })}>
-                              <Pencil className="h-4 w-4" />
-                            </Link>
+                        <div className="flex flex-wrap gap-2 sm:flex-col sm:items-end">
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/bookings/${booking.id}`}><Eye className="mr-2 h-4 w-4" /> Open</Link>
                           </Button>
-
-                          {!isClient && (
-                            <Button variant="destructive" size="icon" onClick={() => openDelete(b)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/bookings/${booking.id}/edit`}><Pencil className="mr-2 h-4 w-4" /> Edit</Link>
+                          </Button>
+                          <Button variant="destructive" size="sm" onClick={() => openDelete(booking)}>
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                          </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
+                        <div className="rounded-2xl border p-4">
+                          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Services</div>
+                          <div className="mt-2 text-sm leading-7">{servicesPreview}</div>
+                          <div className="mt-2 text-xs text-muted-foreground">Created by: {getCreatedByLabel(booking)}</div>
+                        </div>
+
+                        <div className="rounded-2xl border p-4">
+                          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Billing snapshot</div>
+                          <div className="mt-2 flex items-center justify-between text-sm">
+                            <span>Items total</span>
+                            <span className="font-medium">₱ {formatMoney(itemsTotal)}</span>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between text-sm">
+                            <span>Outstanding</span>
+                            <span className={`font-semibold ${outstanding > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                              ₱ {formatMoney(outstanding)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   );
                 })}
+              </div>
+            ) : (
+              <div className="rounded-2xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Booking</TableHead>
+                      <TableHead>Schedule</TableHead>
+                      <TableHead>Guests</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Payment</TableHead>
+                      <TableHead>Outstanding</TableHead>
+                      <TableHead>Services</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bookingRows.map((booking) => {
+                      const scheduleTag = getScheduleTag(booking.booking_date_from, booking.booking_date_to);
+                      const outstanding = getOutstandingBalance(booking);
 
-                {bookingRows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                      No bookings found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                      return (
+                        <TableRow key={booking.id}>
+                          <TableCell>
+                            <div className="font-medium">{booking.company_name || booking.client_name}</div>
+                            <div className="text-xs text-muted-foreground">{booking.client_name}</div>
+                            <div className="text-xs text-muted-foreground">{booking.client_email || 'No email'}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">{formatScheduleDateTime(booking.booking_date_from)}</div>
+                            <div className="text-xs text-muted-foreground">to {formatScheduleDateTime(booking.booking_date_to)}</div>
+                            {scheduleTag ? <Badge className={`mt-2 ${scheduleTag.className}`}>{scheduleTag.label}</Badge> : null}
+                          </TableCell>
+                          <TableCell>{booking.number_of_guests ?? 0}</TableCell>
+                          <TableCell>
+                            <BookingStatusBadge status={booking.booking_status} />
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={paymentTone(booking.payment_status)}>{paymentLabel(booking.payment_status)}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className={outstanding > 0 ? 'font-semibold text-red-600' : 'font-semibold text-emerald-600'}>
+                              ₱ {formatMoney(outstanding)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="max-w-[260px] truncate text-sm">{getServicesPreview(booking)}</div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button asChild variant="outline" size="sm">
+                                <Link href={`/bookings/${booking.id}`}><Eye className="h-4 w-4" /></Link>
+                              </Button>
+                              <Button asChild variant="outline" size="sm">
+                                <Link href={`/bookings/${booking.id}/edit`}><Pencil className="h-4 w-4" /></Link>
+                              </Button>
+                              <Button variant="destructive" size="sm" onClick={() => openDelete(booking)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
 
-            {paginationLinks.length > 0 && (
+            {paginationLinks.length > 0 ? (
               <Pagination>
                 <PaginationContent>
-                  {paginationLinks.map((link: LaravelPaginationLink, i: number) => {
+                  {paginationLinks.map((link, index) => {
                     const label = normalizeLabel(link.label);
-                    const lower = label.toLowerCase();
+                    const isPrev = label.toLowerCase() === 'previous';
+                    const isNext = label.toLowerCase() === 'next';
+                    const isEllipsis = label === '...';
 
-                    const isPrev = lower.includes('previous');
-                    const isNext = lower.includes('next');
-                    const isDots = label === '...';
+                    if (isPrev) {
+                      return (
+                        <PaginationItem key={`prev-${index}`}>
+                          <PaginationPrevious href={link.url ?? '#'} onClick={handlePagination(link.url)} />
+                        </PaginationItem>
+                      );
+                    }
+
+                    if (isNext) {
+                      return (
+                        <PaginationItem key={`next-${index}`}>
+                          <PaginationNext href={link.url ?? '#'} onClick={handlePagination(link.url)} />
+                        </PaginationItem>
+                      );
+                    }
+
+                    if (isEllipsis) {
+                      return (
+                        <PaginationItem key={`ellipsis-${index}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      );
+                    }
 
                     return (
-                      <PaginationItem key={i}>
-                        {isPrev ? (
-                          <PaginationPrevious
-                            href={link.url ?? '#'}
-                            aria-disabled={!link.url}
-                            tabIndex={link.url ? 0 : -1}
-                            onClick={handlePagination(link.url)}
-                          />
-                        ) : isNext ? (
-                          <PaginationNext
-                            href={link.url ?? '#'}
-                            aria-disabled={!link.url}
-                            tabIndex={link.url ? 0 : -1}
-                            onClick={handlePagination(link.url)}
-                          />
-                        ) : isDots ? (
-                          <PaginationEllipsis />
-                        ) : (
-                          <PaginationLink
-                            isActive={!!link.active}
-                            href={link.url ?? '#'}
-                            aria-current={link.active ? 'page' : undefined}
-                            aria-disabled={!link.url}
-                            tabIndex={link.url ? 0 : -1}
-                            onClick={handlePagination(link.url)}
-                          >
-                            {label}
-                          </PaginationLink>
-                        )}
+                      <PaginationItem key={`page-${label}-${index}`}>
+                        <PaginationLink
+                          href={link.url ?? '#'}
+                          onClick={handlePagination(link.url)}
+                          isActive={Boolean(link.active)}
+                        >
+                          {label}
+                        </PaginationLink>
                       </PaginationItem>
                     );
                   })}
                 </PaginationContent>
               </Pagination>
-            )}
+            ) : null}
           </CardContent>
         </Card>
-      </div>
 
-      {/* Prevent crash: only render when selected exists */}
-      {selected && (
-        <DeleteBookingDialog
-          open={deleteOpen}
-          onOpenChange={(v: boolean) => {
-            setDeleteOpen(v);
-            if (!v) setSelected(null);
-          }}
-          booking={selected}
-        />
-      )}
+        <DeleteBookingDialog open={deleteOpen} onOpenChange={setDeleteOpen} booking={selected} />
+      </div>
     </AppLayout>
   );
 }

@@ -21,15 +21,69 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
-
+use Illuminate\Support\Arr;
 
 class BookingController extends Controller
 {
     public function __construct(
         private readonly BookingServiceInterface $bookings,
         private readonly NotificationService $notifications,
+        
     ) {
     }
+    private function normalizePaymentPayload(Request $request, array $data, bool $canManage): array
+{
+    $data['amount'] = round((float) ($data['amount'] ?? 0), 2);
+
+    $gateway = strtolower((string) ($data['payment_gateway'] ?? ''));
+    $paymentType = strtolower((string) ($data['payment_type'] ?? ''));
+
+    if ($request->hasFile('proof_image')) {
+        $stored = $request->file('proof_image')?->store('booking-payment-proofs', 'public');
+        if ($stored) {
+            $data['proof_image_path'] = $stored;
+        }
+    }
+
+    $cardNumber = preg_replace('/\D+/', '', (string) $request->input('card_number', ''));
+    $cardLastFour = $cardNumber !== '' ? substr($cardNumber, -4) : null;
+
+    $data['payer_name'] = trim((string) ($data['payer_name'] ?? '')) ?: null;
+    $data['card_holder_name'] = trim((string) ($data['card_holder_name'] ?? '')) ?: null;
+    $data['card_last_four'] = $cardLastFour;
+    $data['card_expiration'] = trim((string) ($data['card_expiration'] ?? '')) ?: null;
+    $data['marketing_consent'] = (bool) ($data['marketing_consent'] ?? false);
+    $data['payment_type'] = $paymentType !== '' ? $paymentType : null;
+    $data['payment_gateway'] = $gateway !== '' ? $gateway : null;
+    $data['paid_at'] = now();
+
+    $data['payment_meta'] = array_filter([
+        'gateway' => $gateway !== '' ? $gateway : null,
+        'payment_type' => $paymentType !== '' ? $paymentType : null,
+        'card_holder_name' => trim((string) $request->input('card_holder_name', '')) ?: null,
+        'card_expiration' => trim((string) $request->input('card_expiration', '')) ?: null,
+        'marketing_consent' => (bool) $request->boolean('marketing_consent'),
+    ], static fn ($value) => $value !== null && $value !== '');
+
+    if ($canManage) {
+        $data['status'] = strtolower((string) ($data['status'] ?? 'pending'));
+        return $data;
+    }
+
+    $hasProof = !empty($data['proof_image_path']);
+    $hasReference = !empty($data['transaction_reference']);
+    $isTrialOnline = in_array($gateway, ['card', 'paypal', 'gcash'], true);
+
+    // Important fix:
+    // the old code always forced client payments to "pending".
+    // that kept payment_status = unpaid and lifecycle status = pending.
+    // for trial online flows with sufficient evidence, mark it confirmed immediately.
+    $data['status'] = ($isTrialOnline && ($gateway === 'card' || ($hasProof && $hasReference)))
+        ? 'confirmed'
+        : 'pending';
+
+    return $data;
+}
 
     public function index(Request $request): Response
     {
@@ -135,7 +189,14 @@ class BookingController extends Controller
     $this->markAsViewed($request, $booking);
 
     $this->bookings->syncLifecycleStatus($booking);
-    $booking->refresh()->loadMissing(['service', 'bookingServices.service', 'payments', 'createdBy']);
+    $booking->refresh()->loadMissing([
+    'service',
+    'bookingServices.service',
+    'payments',
+    'createdBy',
+    'lifecycleEvents.actor',
+]);
+
 
 
         $services = ServiceResource::collection(Service::orderBy('name')->get())
@@ -177,22 +238,28 @@ class BookingController extends Controller
     }
 
     public function edit(Request $request, Booking $booking): Response
-    {
+{
     $this->ensureBookingAccess($request, $booking);
-
     $this->markAsViewed($request, $booking);
-
     $this->bookings->syncLifecycleStatus($booking);
-    $booking->refresh()->loadMissing(['createdBy']);
+
+    $booking->refresh()->loadMissing([
+    'service',
+    'bookingServices.service',
+    'payments',
+    'createdBy',
+    'lifecycleEvents.actor',
+]);
 
 
-        $unavailableDates = $this->bookings->getUnavailableDates($booking->id);
+    $unavailableDates = $this->bookings->getUnavailableDates($booking->id);
 
-        return Inertia::render('bookings/edit', [
-            'booking'          => (new BookingResource($booking))->resolve($request),
-            'unavailableDates' => $unavailableDates,
-        ]);
-    }
+    return Inertia::render('bookings/edit', [
+        'booking' => (new BookingResource($booking))->resolve($request),
+        'unavailableDates' => $unavailableDates,
+    ]);
+}
+
 
     public function update(UpdateBookingRequest $request, Booking $booking): RedirectResponse
     {
@@ -265,21 +332,13 @@ class BookingController extends Controller
     $this->ensureBookingAccess($request, $booking);
 
     $data = $request->validated();
-
     $actor = $request->user();
     $canManage = $actor ? $actor->can('payments.manage') : false;
 
-    $data['amount'] = round((float) ($data['amount'] ?? 0), 2);
-
-    if (! $canManage) {
-        $data['status'] = 'pending';
-    } else {
-        $data['status'] = strtolower((string) ($data['status'] ?? 'pending'));
-    }
+    $data = $this->normalizePaymentPayload($request, $data, $canManage);
 
     /** @var BookingPayment $payment */
     $payment = $booking->payments()->create($data);
-
     unset($payment);
 
     $this->bookings->recalculatePaymentStatus($booking->refresh());
@@ -288,7 +347,6 @@ class BookingController extends Controller
         ->back()
         ->with('success', 'Payment recorded.');
 }
-
 
     public function updatePayment(UpdateBookingPaymentRequest $request, Booking $booking, BookingPayment $payment): RedirectResponse
 {
@@ -299,9 +357,13 @@ class BookingController extends Controller
     }
 
     $data = $request->validated();
-    $data['amount'] = round((float) ($data['amount'] ?? 0), 2);
-    $data['status'] = strtolower((string) ($data['status'] ?? 'pending'));
+    $data = $this->normalizePaymentPayload($request, $data, true);
 
+    if ($request->hasFile('proof_image') && !empty($payment->proof_image_path)) {
+        Storage::disk('public')->delete($payment->proof_image_path);
+    } else {
+        $data['proof_image_path'] = $payment->proof_image_path;
+    }
     $payment->update($data);
 
     $this->bookings->recalculatePaymentStatus($booking->refresh());
@@ -310,7 +372,6 @@ class BookingController extends Controller
         ->back()
         ->with('success', 'Payment updated.');
 }
-
 
     public function availability(Request $request): JsonResponse
 {
