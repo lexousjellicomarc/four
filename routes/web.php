@@ -29,6 +29,7 @@ use App\Http\Controllers\CalendarManagementController;
 use App\Http\Requests\BulkCalendarBlockRequest;
 use App\Http\Controllers\PaymentReviewController;
 use App\Http\Controllers\BookingOperationsController;
+use App\Http\Controllers\AdminGuidelinesContactController;
 
 /*
 |--------------------------------------------------------------------------
@@ -37,9 +38,14 @@ use App\Http\Controllers\BookingOperationsController;
 */
 
 Route::post('/public/availability-check', [PublicAvailabilityController::class, 'check'])
+    ->middleware('throttle:30,1')
     ->name('public.availability.check');
 
+Route::get('/public/calendar-month', [PublicAvailabilityController::class, 'month'])
+    ->name('public.calendar.month');
+
 Route::post('/inquiries', [PublicInquiryController::class, 'store'])
+    ->middleware('throttle:5,1')
     ->name('public.inquiries.store');
 
 Route::get('/', [PublicSiteController::class, 'home'])
@@ -115,6 +121,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('/spaces', [AdminSortController::class, 'spaces'])->name('spaces');
             Route::post('/stats', [AdminSortController::class, 'stats'])->name('stats');
         });
+        Route::get('/admin/guidelines-contacts', [AdminGuidelinesContactController::class, 'index'])
+    ->name('admin.guidelines-contacts');
+
+Route::post('/admin/guidelines-contacts', [AdminGuidelinesContactController::class, 'update'])
+    ->name('admin.guidelines-contacts.update');
     Route::get('/calendar/analytics', [CalendarAnalyticsController::class, 'index'])
         ->middleware('role:admin|manager')
         ->name('calendar.analytics');

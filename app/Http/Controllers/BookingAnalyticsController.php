@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BookingLifecycleEvent;
 use App\Models\Service;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -31,6 +31,7 @@ class BookingAnalyticsController extends Controller
     public function export(Request $request): StreamedResponse
     {
         $filters = $this->filters($request);
+
         $rows = $this->filteredBookingsWithTotalsQuery($filters)
             ->orderByDesc('bookings.created_at')
             ->get()
@@ -88,7 +89,7 @@ class BookingAnalyticsController extends Controller
     private function buildPayload(Request $request): array
     {
         $filters = $this->filters($request);
-        $base = $this->filteredBookingsQuery($filters);
+        $base = $this->filteredBookingsBaseQuery($filters);
 
         $summary = [
             'total_bookings' => (clone $base)->count('bookings.id'),
@@ -182,7 +183,6 @@ class BookingAnalyticsController extends Controller
         $monthlyTrend = $this->buildMonthlyTrend($filters);
         $upcomingWorkload = $this->buildUpcomingWorkload($filters);
         $topServices = $this->buildTopServices($filters);
-
         $automation = $this->buildAutomationSummary($filters);
 
         return [
@@ -217,7 +217,7 @@ class BookingAnalyticsController extends Controller
         ];
     }
 
-    private function filteredBookingsQuery(array $filters): Builder
+    private function filteredBookingsBaseQuery(array $filters): Builder
     {
         return DB::table('bookings')
             ->when($filters['q'] !== '', function (Builder $query) use ($filters) {
@@ -240,9 +240,17 @@ class BookingAnalyticsController extends Controller
                         ->where('booking_services.service_id', $serviceId);
                 });
             })
-            ->when($filters['date_from'] !== '', fn (Builder $query) => $query->whereDate('bookings.booking_date_from', '>=', $filters['date_from']))
-            ->when($filters['date_to'] !== '', fn (Builder $query) => $query->whereDate('bookings.booking_date_to', '<=', $filters['date_to']))
-            ->select('bookings.*');
+            ->when($filters['date_from'] !== '' && $filters['date_to'] !== '', function (Builder $query) use ($filters) {
+                $query->whereDate('bookings.booking_date_to', '>=', $filters['date_from'])
+                    ->whereDate('bookings.booking_date_from', '<=', $filters['date_to']);
+            })
+            ->when($filters['date_from'] !== '' && $filters['date_to'] === '', fn (Builder $query) => $query->whereDate('bookings.booking_date_to', '>=', $filters['date_from']))
+            ->when($filters['date_to'] !== '' && $filters['date_from'] === '', fn (Builder $query) => $query->whereDate('bookings.booking_date_from', '<=', $filters['date_to']));
+    }
+
+    private function filteredBookingsRowsQuery(array $filters): Builder
+    {
+        return $this->filteredBookingsBaseQuery($filters)->select('bookings.*');
     }
 
     private function filteredBookingsWithTotalsQuery(array $filters): Builder
@@ -258,7 +266,7 @@ class BookingAnalyticsController extends Controller
             )
             ->groupBy('booking_payments.booking_id');
 
-        return $this->filteredBookingsQuery($filters)
+        return $this->filteredBookingsRowsQuery($filters)
             ->leftJoinSub($serviceTotals, 'service_totals', fn ($join) => $join->on('service_totals.booking_id', '=', 'bookings.id'))
             ->leftJoinSub($paymentTotals, 'payment_totals', fn ($join) => $join->on('payment_totals.booking_id', '=', 'bookings.id'))
             ->addSelect([
@@ -274,6 +282,7 @@ class BookingAnalyticsController extends Controller
         $months = collect(range(11, 0))
             ->map(function (int $offset) {
                 $date = now()->startOfMonth()->subMonths($offset);
+
                 return [
                     'key' => $date->format('Y-m'),
                     'label' => $date->format('M Y'),
@@ -284,7 +293,7 @@ class BookingAnalyticsController extends Controller
             })
             ->keyBy('key');
 
-        $bookingGroups = $this->filteredBookingsQuery($filters)
+        $bookingGroups = $this->filteredBookingsBaseQuery($filters)
             ->whereDate('bookings.booking_date_from', '>=', now()->startOfMonth()->subMonths(11)->toDateString())
             ->selectRaw("DATE_FORMAT(bookings.booking_date_from, '%Y-%m') as ym, COUNT(DISTINCT bookings.id) as total, COALESCE(SUM(bookings.number_of_guests), 0) as guests")
             ->groupBy('ym')
@@ -320,8 +329,12 @@ class BookingAnalyticsController extends Controller
                         ->where('booking_services.service_id', $serviceId);
                 });
             })
-            ->when($filters['date_from'] !== '', fn (Builder $query) => $query->whereDate('bookings.booking_date_from', '>=', $filters['date_from']))
-            ->when($filters['date_to'] !== '', fn (Builder $query) => $query->whereDate('bookings.booking_date_to', '<=', $filters['date_to']))
+            ->when($filters['date_from'] !== '' && $filters['date_to'] !== '', function (Builder $query) use ($filters) {
+                $query->whereDate('bookings.booking_date_to', '>=', $filters['date_from'])
+                    ->whereDate('bookings.booking_date_from', '<=', $filters['date_to']);
+            })
+            ->when($filters['date_from'] !== '' && $filters['date_to'] === '', fn (Builder $query) => $query->whereDate('bookings.booking_date_to', '>=', $filters['date_from']))
+            ->when($filters['date_to'] !== '' && $filters['date_from'] === '', fn (Builder $query) => $query->whereDate('bookings.booking_date_from', '<=', $filters['date_to']))
             ->whereDate('booking_payments.created_at', '>=', now()->startOfMonth()->subMonths(11)->toDateString())
             ->selectRaw("DATE_FORMAT(booking_payments.created_at, '%Y-%m') as ym, COALESCE(SUM(booking_payments.amount), 0) as total")
             ->groupBy('ym')
@@ -341,7 +354,7 @@ class BookingAnalyticsController extends Controller
         $today = now()->startOfDay();
         $end = now()->copy()->addDays(29)->endOfDay();
 
-        $rows = $this->filteredBookingsQuery($filters)
+        $rows = $this->filteredBookingsBaseQuery($filters)
             ->whereBetween('bookings.booking_date_from', [$today, $end])
             ->selectRaw('DATE(bookings.booking_date_from) as work_date, COUNT(DISTINCT bookings.id) as bookings_count, COALESCE(SUM(bookings.number_of_guests), 0) as guests_total')
             ->groupBy('work_date')
@@ -373,8 +386,12 @@ class BookingAnalyticsController extends Controller
             ->when($filters['booking_status'] !== '', fn (Builder $query) => $query->where('bookings.booking_status', $filters['booking_status']))
             ->when($filters['payment_status'] !== '', fn (Builder $query) => $query->where('bookings.payment_status', $filters['payment_status']))
             ->when($filters['service_id'] !== '', fn (Builder $query) => $query->where('booking_services.service_id', (int) $filters['service_id']))
-            ->when($filters['date_from'] !== '', fn (Builder $query) => $query->whereDate('bookings.booking_date_from', '>=', $filters['date_from']))
-            ->when($filters['date_to'] !== '', fn (Builder $query) => $query->whereDate('bookings.booking_date_to', '<=', $filters['date_to']))
+            ->when($filters['date_from'] !== '' && $filters['date_to'] !== '', function (Builder $query) use ($filters) {
+                $query->whereDate('bookings.booking_date_to', '>=', $filters['date_from'])
+                    ->whereDate('bookings.booking_date_from', '<=', $filters['date_to']);
+            })
+            ->when($filters['date_from'] !== '' && $filters['date_to'] === '', fn (Builder $query) => $query->whereDate('bookings.booking_date_to', '>=', $filters['date_from']))
+            ->when($filters['date_to'] !== '' && $filters['date_from'] === '', fn (Builder $query) => $query->whereDate('bookings.booking_date_from', '<=', $filters['date_to']))
             ->selectRaw('services.name as label, COUNT(*) as usage_count, COALESCE(SUM(services.price), 0) as revenue_total')
             ->groupBy('services.name')
             ->orderByDesc('usage_count')
@@ -391,7 +408,7 @@ class BookingAnalyticsController extends Controller
 
     private function buildAutomationSummary(array $filters): array
     {
-        if (!class_exists(\App\Models\BookingLifecycleEvent::class)) {
+        if (! class_exists(BookingLifecycleEvent::class)) {
             return [
                 'automation_events_7d' => 0,
                 'auto_declined_7d' => 0,
@@ -399,13 +416,14 @@ class BookingAnalyticsController extends Controller
             ];
         }
 
-        $eventClass = \App\Models\BookingLifecycleEvent::class;
-        $base = $eventClass::query()->where('created_at', '>=', now()->subDays(7));
+        $base = BookingLifecycleEvent::query()
+            ->with(['actor:id,name,email'])
+            ->where('event_at', '>=', now()->subDays(7));
 
         if ($filters['booking_status'] !== '') {
             $base->where(function ($query) use ($filters) {
-                $query->where('to_booking_status', $filters['booking_status'])
-                    ->orWhere('from_booking_status', $filters['booking_status']);
+                $query->where('to_status', $filters['booking_status'])
+                    ->orWhere('from_status', $filters['booking_status']);
             });
         }
 
@@ -417,18 +435,22 @@ class BookingAnalyticsController extends Controller
         }
 
         if ($filters['q'] !== '') {
-            $base->where(function ($query) use ($filters) {
-                $search = '%' . $filters['q'] . '%';
-                $query->where('reason', 'like', $search)
-                    ->orWhere('event_type', 'like', $search)
-                    ->orWhere('actor_name', 'like', $search);
+            $search = '%' . $filters['q'] . '%';
+            $base->where(function ($query) use ($search) {
+                $query->where('title', 'like', $search)
+                    ->orWhere('reason', 'like', $search)
+                    ->orWhere('event_key', 'like', $search)
+                    ->orWhereHas('actor', function ($actor) use ($search) {
+                        $actor->where('name', 'like', $search)
+                            ->orWhere('email', 'like', $search);
+                    });
             });
         }
 
         return [
-            'automation_events_7d' => (clone $base)->where('actor_type', 'system')->count(),
-            'auto_declined_7d' => (clone $base)->where('to_booking_status', 'declined')->where('actor_type', 'system')->count(),
-            'auto_deleted_7d' => (clone $base)->where('event_type', 'booking.auto_deleted')->count(),
+            'automation_events_7d' => (clone $base)->whereNull('actor_user_id')->count(),
+            'auto_declined_7d' => (clone $base)->whereNull('actor_user_id')->where('to_status', 'declined')->count(),
+            'auto_deleted_7d' => (clone $base)->whereNull('actor_user_id')->where('event_key', 'booking_auto_deleted')->count(),
         ];
     }
 
@@ -451,7 +473,7 @@ class BookingAnalyticsController extends Controller
         $isClosed = in_array((string) ($row->booking_status ?? ''), ['declined', 'cancelled', 'completed'], true);
 
         if (! $isClosed && $createdAt) {
-            if ($submittedTotal < $halfRequired) {
+            if ($confirmedTotal + 0.00001 < $halfRequired) {
                 if ($downDue && $now->greaterThan($downDue)) {
                     $state = '24h_overdue';
                     $stateLabel = '50% down payment overdue';
@@ -459,11 +481,11 @@ class BookingAnalyticsController extends Controller
                     $state = '24h_soon';
                     $stateLabel = '50% down payment due soon';
                 }
-            } elseif ($confirmedTotal < $itemsTotal && $itemsTotal > 0) {
+            } elseif ($confirmedTotal + 0.00001 < $itemsTotal) {
                 if ($fullDue && $now->greaterThan($fullDue)) {
                     $state = '48h_overdue';
                     $stateLabel = 'Full payment overdue';
-                } elseif ($fullDue && $now->diffInHours($fullDue, false) <= 12) {
+                } elseif ($fullDue && $now->diffInHours($fullDue, false) <= 8) {
                     $state = '48h_soon';
                     $stateLabel = 'Full payment due soon';
                 }
@@ -475,8 +497,10 @@ class BookingAnalyticsController extends Controller
             'label' => $stateLabel,
             'hours_since_created' => $hoursSinceCreated,
             'half_required' => round($halfRequired, 2),
-            'half_paid_met' => $submittedTotal >= $halfRequired && $halfRequired > 0,
-            'fully_paid_met' => $itemsTotal > 0 ? $confirmedTotal >= $itemsTotal : false,
+            'submitted_total' => round($submittedTotal, 2),
+            'confirmed_total' => round($confirmedTotal, 2),
+            'half_paid_met' => $itemsTotal > 0 ? $confirmedTotal + 0.00001 >= $halfRequired : false,
+            'fully_paid_met' => $itemsTotal > 0 ? $confirmedTotal + 0.00001 >= $itemsTotal : false,
             'down_payment_due_at' => optional($downDue)->toIso8601String(),
             'full_payment_due_at' => optional($fullDue)->toIso8601String(),
         ];

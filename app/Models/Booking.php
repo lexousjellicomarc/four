@@ -2,12 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\NotificationService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
 
 class Booking extends Model
@@ -38,6 +37,8 @@ class Booking extends Model
         'survey_proof_image',
         'survey_proof_image_mime',
         'survey_proof_image_name',
+        'is_public_calendar_visible',
+        'public_calendar_title',
     ];
 
     protected $hidden = [
@@ -48,29 +49,25 @@ class Booking extends Model
         'survey_proof_image_url',
     ];
 
+    protected $casts = [
+        'booking_date_from' => 'datetime',
+        'booking_date_to' => 'datetime',
+        'flexible_date_from' => 'datetime',
+        'flexible_date_to' => 'datetime',
+        'number_of_guests' => 'integer',
+        'is_public_calendar_visible' => 'boolean',
+    ];
+
     public function getSurveyProofImageUrlAttribute(): ?string
     {
+        if (empty($this->survey_proof_image_path) && empty($this->survey_proof_image_name)) {
+            return null;
+        }
+
         $version = $this->updated_at?->timestamp ?? $this->created_at?->timestamp ?? time();
 
-        if (!empty($this->survey_proof_image_name)) {
-            return url("/bookings/{$this->id}/survey-proof-image") . '?v=' . $version;
-        }
-
-        if (!empty($this->survey_proof_image_path)) {
-            $diskUrl = Storage::disk('public')->url($this->survey_proof_image_path);
-            return $diskUrl . (str_contains($diskUrl, '?') ? '&' : '?') . 'v=' . $version;
-        }
-
-        return null;
+        return url("/bookings/{$this->id}/survey-proof-image") . '?v=' . $version;
     }
-
-    protected $casts = [
-        'booking_date_from'  => 'datetime',
-        'booking_date_to'    => 'datetime',
-        'flexible_date_from' => 'datetime',
-        'flexible_date_to'   => 'datetime',
-        'number_of_guests'   => 'integer',
-    ];
 
     public function service(): BelongsTo
     {
@@ -109,7 +106,9 @@ class Booking extends Model
     protected static function booted(): void
     {
         static::created(function (Booking $booking) {
-            if (app()->runningInConsole()) return;
+            if (app()->runningInConsole()) {
+                return;
+            }
 
             try {
                 app(NotificationService::class)->bookingCreated($booking, Auth::user());
@@ -122,7 +121,10 @@ class Booking extends Model
             $changes = [];
 
             foreach ($booking->getDirty() as $field => $newValue) {
-                if ($field === 'updated_at') continue;
+                if ($field === 'updated_at') {
+                    continue;
+                }
+
                 $changes[$field] = [$booking->getOriginal($field), $newValue];
             }
 
@@ -130,10 +132,14 @@ class Booking extends Model
         });
 
         static::updated(function (Booking $booking) {
-            if (app()->runningInConsole()) return;
+            if (app()->runningInConsole()) {
+                return;
+            }
 
             $changes = $booking->notificationChanges ?? [];
-            if (empty($changes)) return;
+            if (empty($changes)) {
+                return;
+            }
 
             try {
                 app(NotificationService::class)->bookingUpdated($booking, Auth::user(), $changes);
@@ -143,7 +149,9 @@ class Booking extends Model
         });
 
         static::deleted(function (Booking $booking) {
-            if (app()->runningInConsole()) return;
+            if (app()->runningInConsole()) {
+                return;
+            }
 
             try {
                 app(NotificationService::class)->bookingDeleted($booking, Auth::user());

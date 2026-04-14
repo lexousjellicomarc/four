@@ -4,6 +4,7 @@ import { dashboard } from '@/routes';
 import { type Auth, type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
+  ArrowRight,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -11,7 +12,6 @@ import {
   Clock3,
   Lock,
   Users,
-  ArrowRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -36,7 +36,6 @@ import {
   shiftMonth,
 } from '@/lib/unified-schedule';
 
-
 const breadcrumbs: BreadcrumbItem[] = [
   {
     title: 'Dashboard',
@@ -58,19 +57,18 @@ type DashboardEvent = {
   groupKey?: string;
 };
 
+type DashboardAvailabilityDay = {
+  AM: boolean;
+  PM: boolean;
+  EVE: boolean;
+  is_fully_booked?: boolean;
+  day_status?: 'available' | 'limited' | 'public_booked' | 'private_booked' | 'blocked' | string;
+};
+
 type DashboardProps = {
   counts?: Partial<Record<string, number>>;
   month: string;
-  monthAvailability: Record<
-    string,
-    {
-      AM: boolean;
-      PM: boolean;
-      EVE: boolean;
-      is_fully_booked?: boolean;
-      day_status?: 'available' | 'limited' | 'public_booked' | 'private_booked' | 'blocked' | string;
-    }
-  >;
+  monthAvailability: Record<string, DashboardAvailabilityDay>;
   events: DashboardEvent[];
 };
 
@@ -88,11 +86,6 @@ type EventLaneSegment = {
 };
 
 const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const blockLabels: Record<BlockKey, { title: string; time: string }> = {
-  AM: { title: 'AM', time: '6:00 AM – 12:00 PM' },
-  PM: { title: 'PM', time: '12:00 PM – 6:00 PM' },
-  EVE: { title: 'EVE', time: '6:00 PM – 11:59 PM' },
-};
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
@@ -113,66 +106,23 @@ function getRoleNames(auth: unknown): string[] {
     .map((name) => String(name).toLowerCase());
 }
 
+function normalizeDashboardStatus(status: string, isClientOwnBooking: boolean): CalendarStatus {
+  if (isClientOwnBooking) return 'my-booking';
 
-function longDate(dateKeyValue: string) {
-  const date = new Date(`${dateKeyValue}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return dateKeyValue;
-
-  return date.toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function pickInitialSelectedDate(
-  month: string,
-  availability: DashboardProps['monthAvailability'],
-  events: DashboardEvent[],
-) {
-  const today = dateKey(new Date());
-
-  if (today.startsWith(`${month}-`) && (availability[today] || events.some((event) => eventSpansDate(event, today)))) {
-    return today;
+  switch (status) {
+    case 'limited':
+      return 'partial';
+    case 'public_booked':
+      return 'public';
+    case 'private_booked':
+      return 'private';
+    case 'blocked':
+      return 'blocked';
+    case 'full':
+      return 'full';
+    default:
+      return 'available';
   }
-
-  const eventMatch = events.find((event) => normalizeEventRange(event).startDate.slice(0, 7) === month);
-  if (eventMatch) {
-    return normalizeEventRange(eventMatch).startDate;
-  }
-
-  const firstAvailabilityDate = Object.keys(availability)
-    .filter((key) => key.startsWith(`${month}-`))
-    .sort()[0];
-
-  return firstAvailabilityDate ?? `${month}-01`;
-}
-
-function deriveDayStatus(
-  date: string,
-  availability: DashboardProps['monthAvailability'],
-  events: DashboardEvent[],
-  isClient: boolean,
-): CalendarStatus {
-  const day = availability[date];
-  const dayEvents = events.filter((event) => eventSpansDate(event, date));
-  const hasOwnBooking = dayEvents.some((event) => event.kind === 'booking');
-
-  if (isClient && hasOwnBooking) return 'my-booking';
-
-  const dayStatus = String(day?.day_status || '').toLowerCase();
-
-  if (dayStatus === 'blocked') return 'blocked';
-  if (dayStatus === 'public_booked') return 'public';
-  if (dayStatus === 'private_booked') return 'private';
-  if (dayStatus === 'limited') return 'partial';
-  if (day?.is_fully_booked) return 'full';
-
-  const unavailableCount = [day?.AM, day?.PM, day?.EVE].filter((value) => value === false).length;
-  if (unavailableCount > 0) return 'partial';
-
-  return 'available';
 }
 
 function dayStyle(status: CalendarStatus, selected: boolean, today: boolean) {
@@ -217,21 +167,10 @@ function statusChipTone(status?: string | null) {
 function eventBarTone(event: DashboardEvent) {
   const normalized = String(event.status ?? '').toLowerCase();
 
-  if (normalized === 'public_booked') {
-    return 'border-[#c9bcff] bg-[#ede8ff] text-[#5532c7]';
-  }
-
-  if (['private_booked', 'confirmed', 'active'].includes(normalized)) {
-    return 'border-[#dec57a] bg-[#f7ebc1] text-[#6a4f00]';
-  }
-
-  if (normalized === 'blocked') {
-    return 'border-[#f0b1b1] bg-[#ffe3e3] text-[#a52a2a]';
-  }
-
-  if (normalized === 'completed') {
-    return 'border-[#b8ddd1] bg-[#eef7f4] text-[#174f40]';
-  }
+  if (normalized === 'public_booked') return 'border-[#c9bcff] bg-[#ede8ff] text-[#5532c7]';
+  if (['private_booked', 'confirmed', 'active'].includes(normalized)) return 'border-[#dec57a] bg-[#f7ebc1] text-[#6a4f00]';
+  if (normalized === 'blocked') return 'border-[#f0b1b1] bg-[#ffe3e3] text-[#a52a2a]';
+  if (normalized === 'completed') return 'border-[#b8ddd1] bg-[#eef7f4] text-[#174f40]';
 
   return 'border-black/10 bg-[#f8f8f8] text-[#22221f] dark:border-white/10 dark:bg-[#202329] dark:text-white';
 }
@@ -323,11 +262,34 @@ function formatEventRange(event: DashboardEvent) {
   return `${startDate} ${startTime} → ${endDate} ${rawEndTime === '00:00' ? '23:59' : endTime}`;
 }
 
+function pickInitialSelectedDate(
+  month: string,
+  availability: DashboardProps['monthAvailability'],
+  events: DashboardEvent[],
+) {
+  const today = dateKey(new Date());
 
-export default function Dashboard({ counts, events, month, monthAvailability }: DashboardProps) {
+  if (today.startsWith(`${month}-`) && (availability[today] || events.some((event) => eventSpansDate(event, today)))) {
+    return today;
+  }
+
+  const eventMatch = events.find((event) => normalizeEventRange(event).startDate.slice(0, 7) === month);
+  if (eventMatch) {
+    return normalizeEventRange(eventMatch).startDate;
+  }
+
+  const firstAvailabilityDate = Object.keys(availability)
+    .filter((key) => key.startsWith(`${month}-`))
+    .sort()[0];
+
+  return firstAvailabilityDate ?? `${month}-01`;
+}
+
+export default function Dashboard({ counts, events = [], month, monthAvailability = {} }: DashboardProps) {
   const { props } = usePage<{ auth: Auth }>();
   const roleNames = useMemo(() => getRoleNames(props.auth), [props.auth]);
   const isClient = roleNames.includes('user');
+  const isStaff = !isClient;
   const todayKey = dateKey(new Date());
 
   const weeks = useMemo(() => buildMonthWeeks(month), [month]);
@@ -340,17 +302,25 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
 
   useEffect(() => {
     const selectedAvailability = monthAvailability[selectedDate];
-    const nextBlock = (['AM', 'PM', 'EVE'] as BlockKey[]).find((block) => selectedAvailability?.[block] !== false) ?? 'AM';
+    const nextBlock = BLOCK_KEYS.find((block) => selectedAvailability?.[block] !== false) ?? 'AM';
     setActiveBlock(nextBlock);
   }, [selectedDate, monthAvailability]);
 
   const selectedEvents = useMemo(
-    () => (events || []).filter((event) => eventSpansDate(event, selectedDate)),
+    () => events.filter((event) => eventSpansDate(event, selectedDate)),
     [events, selectedDate],
   );
 
   const selectedAvailability = monthAvailability[selectedDate];
-  const selectedStatus = statusForDate(selectedDate, monthAvailability, events, isClient);
+  const derivedStatus = deriveDayStatus({
+    availability: monthAvailability[selectedDate],
+    events: selectedEvents,
+    isClient,
+  });
+
+  const hasOwnBooking = isClient && selectedEvents.some((event) => event.kind === 'booking');
+  const selectedStatus = normalizeDashboardStatus(derivedStatus, hasOwnBooking);
+
   const blockEvents = useMemo(
     () => selectedEvents.filter((event) => eventTouchesBlockOnDate(event, selectedDate, activeBlock)),
     [activeBlock, selectedDate, selectedEvents],
@@ -375,11 +345,28 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
     {
       label: isClient ? 'Open Days' : 'Completed',
       value: isClient
-        ? Object.keys(monthAvailability).filter((day) => statusForDate(day, monthAvailability, events, true) === 'available').length
+        ? Object.keys(monthAvailability).filter((day) => {
+            const status = deriveDayStatus({
+              availability: monthAvailability[day],
+              events: events.filter((event) => eventSpansDate(event, day)),
+              isClient: true,
+            });
+
+            return status === 'available';
+          }).length
         : Number(counts?.completed ?? 0),
       icon: Users,
     },
   ];
+
+  const bookingHref = useMemo(() => {
+    const interval = blockIntervalForDate(selectedDate, activeBlock);
+    const start = interval.start.slice(11, 16);
+    const endRaw = interval.end.slice(11, 16);
+    const end = endRaw === '00:00' ? '23:59' : endRaw;
+
+    return `/bookings/create?date=${encodeURIComponent(selectedDate)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+  }, [selectedDate, activeBlock]);
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
@@ -400,7 +387,7 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300">
                   {isClient
                     ? 'This version keeps the calendar simple for clients. Click any date, review AM / PM / EVE availability, and continue to booking.'
-                    : 'This calendar now shows connected multi-day bars so blocks, bookings, and public events read more like Google Calendar while keeping your current booking logic.'}
+                    : 'This dashboard now follows the same shared schedule rules used by the public calendar and calendar management layer.'}
                 </p>
               </div>
 
@@ -412,15 +399,6 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
                   <CalendarDays className="h-4 w-4" />
                   Create Booking
                 </Link>
-                
-                {!isClient ? (
-                  <Link
-                    href="/calendar/analytics"
-                    className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-                  >
-                    View Calendar Analytics
-                  </Link>
-                ) : null}
 
                 {isClient ? (
                   <Link
@@ -429,7 +407,23 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
                   >
                     View Public Calendar
                   </Link>
-                ) : null}
+                ) : (
+                  <>
+                    <Link
+                      href="/calendar/manage"
+                      className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                    >
+                      Manage Calendar Center
+                    </Link>
+
+                    <Link
+                      href="/bookings/analytics"
+                      className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                    >
+                      View Calendar Analytics
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
 
@@ -537,12 +531,17 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
                         }
 
                         const key = dateKey(cell);
-                        const status = statusForDate(key, monthAvailability, events, isClient);
+                        const status = normalizeDashboardStatus(
+                          deriveDayStatus({
+                            availability: monthAvailability[key],
+                            events: events.filter((event) => eventSpansDate(event, key)),
+                            isClient,
+                          }),
+                          isClient && events.some((event) => event.kind === 'booking' && eventSpansDate(event, key)),
+                        );
                         const selected = key === selectedDate;
                         const today = key === todayKey;
-                        const availableBlocks = ['AM', 'PM', 'EVE'].filter(
-                          (block) => monthAvailability[key]?.[block as BlockKey] !== false,
-                        ).length;
+                        const availableBlocks = BLOCK_KEYS.filter((block) => monthAvailability[key]?.[block] !== false).length;
 
                         return (
                           <button
@@ -612,56 +611,17 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
                 Selected Date
               </div>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">
-                {prettyDate(selectedDate)}
+                {longDate(selectedDate)}
               </h2>
 
-              <div className="mt-4 space-y-3">
-                {selectedStatus === 'available' && (
-                  <div className="rounded-2xl border border-black/5 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                    This date is currently available.
-                  </div>
-                )}
-
-                {selectedStatus === 'partial' && (
-                  <div className="rounded-2xl border border-[#bfd2ff] bg-[#eef4ff] px-4 py-4 text-sm text-[#1645ac]">
-                    This date still has open time blocks, but some schedules are already occupied.
-                  </div>
-                )}
-
-                {selectedStatus === 'public' && (
-                  <div className="rounded-2xl border border-[#c9bcff] bg-[#f1ecff] px-4 py-4 text-sm text-[#5532c7]">
-                    This date already has a public event or public calendar activity.
-                  </div>
-                )}
-
-                {selectedStatus === 'private' && (
-                  <div className="rounded-2xl border border-[#d7b14b] bg-[#f7ebc1] px-4 py-4 text-sm text-[#6a4f00]">
-                    This date is already privately booked or reserved.
-                  </div>
-                )}
-
-                {selectedStatus === 'full' && (
-                  <div className="rounded-2xl border border-[#c9b061] bg-[#f7ebc1] px-4 py-4 text-sm text-[#6a4f00]">
-                    This date is fully occupied for the current schedule logic.
-                  </div>
-                )}
-
-                {selectedStatus === 'blocked' && (
-                  <div className="rounded-2xl border border-[#f1aaaa] bg-[#ffe5e5] px-4 py-4 text-sm text-[#a52a2a]">
-                    This date is blocked for internal schedule control.
-                  </div>
-                )}
-
-                {selectedStatus === 'my-booking' && (
-                  <div className="rounded-2xl border border-[#d9ece6] bg-[#eef7f4] px-4 py-4 text-sm text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
-                    You already have a booking on this date.
-                  </div>
-                )}
+              <div className={cn('mt-4 rounded-2xl border px-4 py-4 text-sm', scheduleStatusTone(derivedStatus))}>
+                <div className="font-semibold uppercase tracking-[0.16em]">{scheduleStatusLabel(derivedStatus)}</div>
+                <div className="mt-2">{scheduleStatusDescription(derivedStatus)}</div>
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                {(['AM', 'PM', 'EVE'] as const).map((block) => {
-                  const available = monthAvailability[selectedDate]?.[block] ?? true;
+                {BLOCK_KEYS.map((block) => {
+                  const available = selectedAvailability?.[block] ?? true;
                   const active = activeBlock === block;
 
                   return (
@@ -678,10 +638,10 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
                       )}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <span>{blockLabels[block].title}</span>
+                        <span>{BLOCK_META[block].label}</span>
                         <ArrowRight className={cn('h-4 w-4 transition', active ? 'opacity-100' : 'opacity-40')} />
                       </div>
-                      <div className="mt-1 text-xs font-medium opacity-80">{blockLabels[block].time}</div>
+                      <div className="mt-1 text-xs font-medium opacity-80">{BLOCK_META[block].time}</div>
                       <div className="mt-3 text-xs font-semibold uppercase tracking-[0.16em]">
                         {available ? 'Available' : 'Unavailable'}
                       </div>
@@ -694,9 +654,9 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
                   {activeBlock} Time Block
                 </div>
-                <div className="mt-1 text-lg font-semibold text-[#1f1f1c] dark:text-white">{blockLabels[activeBlock].time}</div>
+                <div className="mt-1 text-lg font-semibold text-[#1f1f1c] dark:text-white">{BLOCK_META[activeBlock].time}</div>
                 <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                  {(monthAvailability[selectedDate]?.[activeBlock] ?? true)
+                  {(selectedAvailability?.[activeBlock] ?? true)
                     ? 'This block is still open under the current dashboard availability rules.'
                     : 'This block is already occupied by a booking, event, or admin block.'}
                 </div>
@@ -740,6 +700,23 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
                   )}
                 </div>
               </div>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link
+                  href={bookingHref}
+                  className="inline-flex items-center gap-2 rounded-full bg-[#0f8b6d] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+                >
+                  <CalendarDays className="h-4 w-4" />
+                  Continue to Booking
+                </Link>
+
+                <Link
+                  href="/calendar"
+                  className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                >
+                  View Public Calendar
+                </Link>
+              </div>
             </div>
 
             <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
@@ -759,21 +736,27 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-lg font-semibold">{event.title}</div>
-                          <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">{formatEventRange(event)}</div>
-
+                          <div className="text-lg font-semibold text-[#1f1f1c] dark:text-white">{event.title}</div>
+                          <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{formatEventRange(event)}</div>
                           {event.area ? (
                             <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Area: {event.area}</div>
                           ) : null}
-
                           {event.block ? (
                             <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Block: {event.block}</div>
+                          ) : null}
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2">
+                          {event.kind ? (
+                            <div className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                              {String(event.kind).replaceAll('_', ' ')}
+                            </div>
                           ) : null}
 
                           {event.status ? (
                             <div
                               className={cn(
-                                'mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em]',
+                                'inline-flex rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
                                 statusChipTone(event.status),
                               )}
                             >
@@ -781,42 +764,53 @@ export default function Dashboard({ counts, events, month, monthAvailability }: 
                             </div>
                           ) : null}
                         </div>
-
-                        {event.kind === 'booking' ? (
-                          <Link
-                            href={`/bookings/${event.id}`}
-                            className="inline-flex rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-semibold dark:border-white/10 dark:bg-white/5"
-                          >
-                            Open
-                          </Link>
-                        ) : null}
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">
-                    No booking or event is registered on this date.
+                  <div className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">
+                    No bookings, public events, or calendar blocks were found for this date.
                   </div>
                 )}
               </div>
-
-              {isClient ? (
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <Link
-                    href={`/bookings/create?date=${selectedDate}`}
-                    className="inline-flex items-center gap-2 rounded-full bg-[#0f8b6d] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
-                  >
-                    Book this date
-                  </Link>
-                  <Link
-                    href="/calendar"
-                    className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-                  >
-                    Public calendar
-                  </Link>
-                </div>
-              ) : null}
             </div>
+
+            {isStaff ? (
+              <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-full bg-[#f7ebc1] p-2 text-[#6a4f00]">
+                    <Lock className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
+                      Staff Controls
+                    </div>
+                    <h3 className="mt-2 text-xl font-semibold text-[#1f1f1c] dark:text-white">
+                      Monitor and manage the calendar layer
+                    </h3>
+                    <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                      Use the calendar management area to add blocks, review overlaps, and keep the public and booking calendars aligned.
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <Link
+                        href="/calendar/manage"
+                        className="inline-flex items-center gap-2 rounded-full bg-[#174f40] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-[#294CFF]"
+                      >
+                        Manage Calendar
+                      </Link>
+
+                      <Link
+                        href="/bookings"
+                        className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                      >
+                        Open Booking List
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

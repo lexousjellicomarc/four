@@ -8,6 +8,7 @@ use App\Models\PublicEvent;
 use App\Services\BookingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -73,13 +74,12 @@ class CalendarManagementController extends Controller
             ->get([
                 'id',
                 'title',
-                'summary',
                 'description',
+                'note',
                 'venue',
                 'event_date',
                 'event_time',
-                'image_path',
-                'hero_image_path',
+                'images',
             ]);
 
         $publicEventItems = $publicEvents->map(function ($event) {
@@ -101,10 +101,10 @@ class CalendarManagementController extends Controller
                 'end' => $endAt->format('Y-m-d\TH:i'),
                 'status' => 'public_booked',
                 'area' => (string) ($event->venue ?? ''),
-                'summary' => (string) ($event->summary ?? ''),
+                'summary' => (string) (($event->note ?? '') !== '' ? $event->note : Str::limit((string) ($event->description ?? ''), 140)),
                 'description' => (string) ($event->description ?? ''),
                 'time' => (string) ($event->event_time ?? ''),
-                'image' => (string) ($event->hero_image_path ?? $event->image_path ?? ''),
+                'image' => (string) (is_array($event->images ?? null) && !empty($event->images) ? $event->images[0] : ''),
                 'groupKey' => substr(hash('sha1', 'public-event|' . $event->id), 0, 16),
             ];
         })->values();
@@ -212,9 +212,9 @@ class CalendarManagementController extends Controller
             'venue' => (string) ($event->venue ?? ''),
             'date' => optional($event->event_date)->format('Y-m-d') ?? (string) ($event->event_date ?? ''),
             'time' => (string) ($event->event_time ?? ''),
-            'summary' => (string) ($event->summary ?? ''),
+            'summary' => (string) (($event->note ?? '') !== '' ? $event->note : Str::limit((string) ($event->description ?? ''), 140)),
             'description' => (string) ($event->description ?? ''),
-            'image' => (string) ($event->hero_image_path ?? $event->image_path ?? ''),
+            'image' => (string) (is_array($event->images ?? null) && !empty($event->images) ? $event->images[0] : ''),
         ];
     }
 }

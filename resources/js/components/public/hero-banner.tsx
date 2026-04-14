@@ -1,4 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
+import { MapPinned, Sparkles, TentTree } from 'lucide-react';
 import HeroAvailabilityBar from '@/components/public/hero-availability-bar';
 import type { SiteSettings } from '@/layouts/public-layout';
 
@@ -13,12 +14,37 @@ type Props = {
   venueOptions: VenueOption[];
 };
 
+function FloatingPromo({ href, title, caption, icon: Icon, offset }: { href: string; title: string; caption: string; icon: typeof Sparkles; offset: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className={`absolute right-3 ${offset} hidden w-[210px] rounded-[1.35rem] border border-white/25 bg-white/18 p-3 text-left text-white shadow-[0_18px_45px_rgba(15,23,42,0.22)] backdrop-blur-md transition hover:-translate-y-1 hover:bg-white/24 lg:block`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="rounded-full bg-white/20 p-2">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/85">Quick Link</div>
+          <div className="mt-1 text-sm font-semibold leading-5">{title}</div>
+          <div className="mt-1 text-xs leading-5 text-white/80">{caption}</div>
+        </div>
+      </div>
+    </a>
+  );
+}
+
 export default function HeroBanner({ venueOptions }: Props) {
   const page = usePage<{ siteSettings?: SiteSettings }>();
   const siteSettings = page.props.siteSettings;
 
+  const visitaUrl = siteSettings?.visitaUrl || '/events';
+  const creativeUrl = siteSettings?.creativeBaguioUrl || '/tourism-office';
+
   return (
-    <section className="relative min-h-screen w-full mt-0 overflow-hidden">
+    <section className="relative mt-0 min-h-screen w-full overflow-hidden">
       <img
         src="/marketing/images/hero/noon2.jpg"
         alt="Baguio panoramic view"
@@ -31,6 +57,22 @@ export default function HeroBanner({ venueOptions }: Props) {
       />
 
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.18)_0%,rgba(15,23,42,0.10)_20%,rgba(15,23,42,0.24)_58%,rgba(15,23,42,0.42)_100%)] dark:bg-[linear-gradient(180deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.16)_20%,rgba(2,6,23,0.36)_58%,rgba(2,6,23,0.60)_100%)]" />
+
+      <FloatingPromo
+        href={visitaUrl}
+        title="Need accommodation or itinerary ideas?"
+        caption="Tap the VISITA Baguio guide for travel, stay, and destination planning."
+        icon={TentTree}
+        offset="top-[150px]"
+      />
+
+      <FloatingPromo
+        href={creativeUrl}
+        title="Looking for arts and culture stops?"
+        caption="Open the arts website for creative spaces, programs, and city culture updates."
+        icon={MapPinned}
+        offset="top-[330px]"
+      />
 
       <div className="relative flex min-h-screen flex-col items-center justify-center px-4 pb-10 pt-28 text-center sm:px-6 lg:px-10">
         <div className="max-w-5xl">
@@ -48,12 +90,8 @@ export default function HeroBanner({ venueOptions }: Props) {
           </div>
 
           <div>
-            <h1 className='font-extrabold text-5xl'>
-              Baguio Convention & Cultural Center
-            </h1>
-            <h3 className='font-extrabold text-4xl'>
-              Events Access & Scheduling Engine
-            </h3>
+            <h1 className="text-4xl font-extrabold sm:text-5xl lg:text-6xl">Baguio Convention &amp; Cultural Center</h1>
+            <h3 className="mt-2 text-2xl font-extrabold sm:text-3xl lg:text-4xl">Events Access &amp; Scheduling Engine</h3>
           </div>
 
           <div className="mt-7 flex flex-wrap justify-center gap-3">
@@ -65,7 +103,7 @@ export default function HeroBanner({ venueOptions }: Props) {
             </Link>
 
             <Link
-              href={siteSettings?.visitaUrl || '/events'}
+              href="/events"
               className="inline-flex items-center rounded-full border border-white/25 bg-white/10 px-8 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/15"
             >
               Explore Events

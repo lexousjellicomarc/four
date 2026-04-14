@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Booking;
 use App\Models\BookingPayment;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -24,125 +28,70 @@ class PaymentReviewController extends Controller
             'deadline' => trim((string) $request->string('deadline')->value('')),
         ];
 
-        $baseQuery = BookingPayment::query()
+        $query = BookingPayment::query()
+            ->with([
+                'booking' => function ($query) {
+                    $query->with(['bookingServices.service', 'payments', 'createdBy']);
+                },
+            ])
+            ->latest('created_at');
+
+        $this->applyDirectFilters($query, $filters);
+
+        $directMatches = $query->get();
+
+        $visiblePayments = $directMatches
+            ->filter(fn (BookingPayment $payment) => $this->matchesDeadlineFilter($payment, $filters['deadline'] ?? ''))
+            ->values();
+
+        $paginator = $this->paginateCollection(
+            $visiblePayments,
+            max(1, (int) $request->integer('page', 1)),
+            12,
+            $request
+        );
+
+        $paginator->setCollection(
+            $paginator->getCollection()->map(fn (BookingPayment $payment) => $this->transformPayment($payment))->values()
+        );
+
+        $statsBase = BookingPayment::query()
             ->with([
                 'booking' => function ($query) {
                     $query->with(['bookingServices.service', 'payments', 'createdBy']);
                 },
             ]);
 
-        $this->applyFilters($baseQuery, $filters);
+        $this->applyDirectFilters($statsBase, array_merge($filters, ['status' => '', 'deadline' => '']));
 
-        $payments = $baseQuery
-            ->latest('created_at')
-            ->paginate(12)
-            ->withQueryString()
-            ->through(function (BookingPayment $payment) {
-                $booking = $payment->booking;
+        $statsPayments = $statsBase->get();
 
-                $itemsTotal = 0.0;
-                $confirmedTotal = 0.0;
-                $submittedTotal = 0.0;
+        $statusCounts = $statsPayments
+            ->groupBy(fn (BookingPayment $payment) => strtolower((string) ($payment->status ?? 'unknown')))
+            ->map(fn (Collection $rows) => $rows->count());
 
-                if ($booking) {
-                    $itemsTotal = collect($booking->bookingServices ?? [])->reduce(function ($sum, $item) {
-                        $price = (float) ($item->service->price ?? 0);
-                        return $sum + $price;
-                    }, 0.0);
-
-                    $submittedTotal = collect($booking->payments ?? [])->reduce(function ($sum, $row) {
-                        return $sum + (float) ($row->amount ?? 0);
-                    }, 0.0);
-
-                    $confirmedTotal = collect($booking->payments ?? [])->reduce(function ($sum, $row) {
-                        return $sum + (($row->status ?? '') === 'confirmed' ? (float) ($row->amount ?? 0) : 0);
-                    }, 0.0);
-                }
-
-                return [
-                    'id' => $payment->id,
-                    'status' => $payment->status,
-                    'payment_method' => $payment->payment_method,
-                    'payment_gateway' => $payment->payment_gateway,
-                    'payment_type' => $payment->payment_type,
-                    'amount' => (float) $payment->amount,
-                    'transaction_reference' => $payment->transaction_reference,
-                    'remarks' => $payment->remarks,
-                    'payer_name' => $payment->payer_name,
-                    'card_holder_name' => $payment->card_holder_name,
-                    'card_last_four' => $payment->card_last_four,
-                    'marketing_consent' => (bool) $payment->marketing_consent,
-                    'proof_image_url' => $payment->proof_image_url,
-                    'paid_at' => optional($payment->paid_at)->toIso8601String(),
-                    'created_at' => optional($payment->created_at)->toIso8601String(),
-                    'updated_at' => optional($payment->updated_at)->toIso8601String(),
-                    'booking' => $booking ? [
-                        'id' => $booking->id,
-                        'company_name' => $booking->company_name,
-                        'client_name' => $booking->client_name,
-                        'client_email' => $booking->client_email,
-                        'type_of_event' => $booking->type_of_event,
-                        'booking_status' => $booking->booking_status,
-                        'payment_status' => $booking->payment_status,
-                        'booking_date_from' => optional($booking->booking_date_from)->toIso8601String(),
-                        'booking_date_to' => optional($booking->booking_date_to)->toIso8601String(),
-                        'created_at' => optional($booking->created_at)->toIso8601String(),
-                        'created_by_name' => $booking->createdBy?->name,
-                        'items' => collect($booking->bookingServices ?? [])->map(function ($item) {
-                            return [
-                                'id' => $item->id,
-                                'service_name' => $item->service?->name,
-                                'area' => $item->service?->serviceType?->name,
-                                'line_total' => (float) ($item->service->price ?? 0),
-                            ];
-                        })->values()->all(),
-                        'totals' => [
-                            'items_total' => $itemsTotal,
-                            'submitted_payments_total' => $submittedTotal,
-                            'confirmed_payments_total' => $confirmedTotal,
-                            'remaining_balance' => max(0, $itemsTotal - $confirmedTotal),
-                        ],
-                    ] : null,
-                ];
-            });
-
-        $countsQuery = BookingPayment::query();
-        $this->applyFilters($countsQuery, array_merge($filters, ['status' => '', 'deadline' => '']));
-
-        $statusCounts = (clone $countsQuery)
-            ->selectRaw('status, COUNT(*) as aggregate')
-            ->groupBy('status')
-            ->pluck('aggregate', 'status');
-
-        $allCount = (clone $countsQuery)->count();
-
-        $reviewQuery = BookingPayment::query();
-        $this->applyFilters($reviewQuery, array_merge($filters, ['status' => '', 'deadline' => 'review']));
-
-        $dueSoonQuery = BookingPayment::query();
-        $this->applyFilters($dueSoonQuery, array_merge($filters, ['status' => '', 'deadline' => 'due_soon']));
-
-        $overdueQuery = BookingPayment::query();
-        $this->applyFilters($overdueQuery, array_merge($filters, ['status' => '', 'deadline' => 'overdue']));
+        $reviewNeeded = $statsPayments->filter(fn (BookingPayment $payment) => strtolower((string) $payment->status) === 'pending')->count();
+        $dueSoon = $statsPayments->filter(fn (BookingPayment $payment) => $this->deadlineBucket($payment) === 'due_soon')->count();
+        $overdue = $statsPayments->filter(fn (BookingPayment $payment) => $this->deadlineBucket($payment) === 'overdue')->count();
 
         return Inertia::render('payments/review', [
             'filters' => $filters,
-            'payments' => $payments,
+            'payments' => $paginator,
             'stats' => [
-                'all' => $allCount,
+                'all' => $statsPayments->count(),
                 'pending' => (int) ($statusCounts['pending'] ?? 0),
                 'confirmed' => (int) ($statusCounts['confirmed'] ?? 0),
                 'failed' => (int) ($statusCounts['failed'] ?? 0),
                 'declined' => (int) ($statusCounts['declined'] ?? 0),
                 'refunded' => (int) ($statusCounts['refunded'] ?? 0),
-                'review_needed' => $reviewQuery->count(),
-                'due_soon' => $dueSoonQuery->count(),
-                'overdue' => $overdueQuery->count(),
+                'review_needed' => $reviewNeeded,
+                'due_soon' => $dueSoon,
+                'overdue' => $overdue,
             ],
         ]);
     }
 
-    protected function applyFilters(Builder $query, array $filters): void
+    protected function applyDirectFilters(Builder $query, array $filters): void
     {
         $query->when($filters['q'] ?? null, function (Builder $builder, string $search) {
             $builder->where(function (Builder $nested) use ($search) {
@@ -166,58 +115,187 @@ class PaymentReviewController extends Controller
         $query->when($filters['booking_status'] ?? null, function (Builder $builder, string $status) {
             $builder->whereHas('booking', fn (Builder $booking) => $booking->where('booking_status', $status));
         });
+    }
 
-        $deadline = $filters['deadline'] ?? '';
-        if ($deadline !== '') {
-            $query->whereHas('booking', function (Builder $bookingQuery) use ($deadline) {
-                $bookingQuery->whereNotIn('booking_status', ['cancelled', 'declined', 'completed']);
-
-                $now = now();
-                $firstDeadline = now()->subHours(24);
-                $finalDeadline = now()->subHours(48);
-                $soon24 = now()->addHours(2);
-                $soon48 = now()->addHours(6);
-
-                if ($deadline === 'review') {
-                    $bookingQuery->where(function (Builder $nested) {
-                        $nested->where('payment_status', '!=', 'paid')->orWhereNull('payment_status');
-                    });
-                    return;
-                }
-
-                if ($deadline === 'overdue') {
-                    $bookingQuery->where(function (Builder $nested) use ($firstDeadline, $finalDeadline) {
-                        $nested
-                            ->where(function (Builder $q) use ($firstDeadline) {
-                                $q->where('created_at', '<=', $firstDeadline)
-                                    ->where(function (Builder $qq) {
-                                        $qq->where('payment_status', 'unpaid')->orWhereNull('payment_status');
-                                    });
-                            })
-                            ->orWhere(function (Builder $q) use ($finalDeadline) {
-                                $q->where('created_at', '<=', $finalDeadline)
-                                    ->where('payment_status', 'partial');
-                            });
-                    });
-                    return;
-                }
-
-                if ($deadline === 'due_soon') {
-                    $bookingQuery->where(function (Builder $nested) use ($now, $soon24, $soon48) {
-                        $nested
-                            ->where(function (Builder $q) use ($now, $soon24) {
-                                $q->whereBetween('created_at', [$now->copy()->subHours(22), $soon24])
-                                    ->where(function (Builder $qq) {
-                                        $qq->where('payment_status', 'unpaid')->orWhereNull('payment_status');
-                                    });
-                            })
-                            ->orWhere(function (Builder $q) use ($now, $soon48) {
-                                $q->whereBetween('created_at', [$now->copy()->subHours(42), $soon48])
-                                    ->where('payment_status', 'partial');
-                            });
-                    });
-                }
-            });
+    protected function matchesDeadlineFilter(BookingPayment $payment, string $deadline): bool
+    {
+        if ($deadline === '') {
+            return true;
         }
+
+        if ($deadline === 'review') {
+            return strtolower((string) $payment->status) === 'pending';
+        }
+
+        return $this->deadlineBucket($payment) === $deadline;
+    }
+
+    protected function deadlineBucket(BookingPayment $payment): string
+    {
+        $summary = $this->bookingDeadlineSummary($payment->booking);
+
+        return match ($summary['state']) {
+            'first_due_soon', 'final_due_soon' => 'due_soon',
+            'first_overdue', 'final_overdue' => 'overdue',
+            default => 'none',
+        };
+    }
+
+    protected function bookingDeadlineSummary(?Booking $booking): array
+    {
+        if (! $booking) {
+            return ['state' => 'not_applicable'];
+        }
+
+        $itemsTotal = collect($booking->bookingServices ?? [])->reduce(function ($sum, $item) {
+            return $sum + (float) ($item->service->price ?? 0);
+        }, 0.0);
+
+        $submittedTotal = collect($booking->payments ?? [])->reduce(fn ($sum, $payment) => $sum + (float) ($payment->amount ?? 0), 0.0);
+        $confirmedTotal = collect($booking->payments ?? [])->reduce(fn ($sum, $payment) => $sum + (($payment->status ?? '') === 'confirmed' ? (float) ($payment->amount ?? 0) : 0.0), 0.0);
+
+        $status = strtolower((string) ($booking->booking_status ?? 'pending'));
+        if (in_array($status, ['cancelled', 'declined', 'completed'], true)) {
+            return ['state' => 'not_applicable'];
+        }
+
+        $createdAt = $booking->created_at instanceof Carbon
+            ? $booking->created_at->copy()
+            : ($booking->created_at ? Carbon::parse($booking->created_at) : null);
+
+        if (! $createdAt || $itemsTotal <= 0 || $confirmedTotal + 0.00001 >= $itemsTotal) {
+            return ['state' => 'fulfilled'];
+        }
+
+        $firstDeadline = $createdAt->copy()->addHours(24);
+        $finalDeadline = $createdAt->copy()->addHours(48);
+        $now = now();
+        $halfRequired = round($itemsTotal * 0.5, 2);
+
+        if ($confirmedTotal + 0.00001 < $halfRequired) {
+            if ($now->greaterThan($firstDeadline)) {
+                return [
+                    'state' => 'first_overdue',
+                    'submitted_total' => $submittedTotal,
+                    'confirmed_total' => $confirmedTotal,
+                ];
+            }
+
+            if ($now->diffInHours($firstDeadline, false) <= 2) {
+                return [
+                    'state' => 'first_due_soon',
+                    'submitted_total' => $submittedTotal,
+                    'confirmed_total' => $confirmedTotal,
+                ];
+            }
+
+            return ['state' => 'monitoring'];
+        }
+
+        if ($confirmedTotal + 0.00001 < $itemsTotal) {
+            if ($now->greaterThan($finalDeadline)) {
+                return [
+                    'state' => 'final_overdue',
+                    'submitted_total' => $submittedTotal,
+                    'confirmed_total' => $confirmedTotal,
+                ];
+            }
+
+            if ($now->diffInHours($finalDeadline, false) <= 6) {
+                return [
+                    'state' => 'final_due_soon',
+                    'submitted_total' => $submittedTotal,
+                    'confirmed_total' => $confirmedTotal,
+                ];
+            }
+        }
+
+        return ['state' => 'fulfilled'];
+    }
+
+    protected function transformPayment(BookingPayment $payment): array
+    {
+        $booking = $payment->booking;
+
+        $itemsTotal = 0.0;
+        $confirmedTotal = 0.0;
+        $submittedTotal = 0.0;
+
+        if ($booking) {
+            $itemsTotal = collect($booking->bookingServices ?? [])->reduce(function ($sum, $item) {
+                return $sum + (float) ($item->service->price ?? 0);
+            }, 0.0);
+
+            $submittedTotal = collect($booking->payments ?? [])->reduce(function ($sum, $row) {
+                return $sum + (float) ($row->amount ?? 0);
+            }, 0.0);
+
+            $confirmedTotal = collect($booking->payments ?? [])->reduce(function ($sum, $row) {
+                return $sum + (($row->status ?? '') === 'confirmed' ? (float) ($row->amount ?? 0) : 0.0);
+            }, 0.0);
+        }
+
+        return [
+            'id' => $payment->id,
+            'status' => $payment->status,
+            'payment_method' => $payment->payment_method,
+            'payment_gateway' => $payment->payment_gateway,
+            'payment_type' => $payment->payment_type,
+            'amount' => (float) $payment->amount,
+            'transaction_reference' => $payment->transaction_reference,
+            'remarks' => $payment->remarks,
+            'payer_name' => $payment->payer_name,
+            'card_holder_name' => $payment->card_holder_name,
+            'card_last_four' => $payment->card_last_four,
+            'marketing_consent' => (bool) $payment->marketing_consent,
+            'proof_image_url' => $payment->proof_image_url,
+            'paid_at' => optional($payment->paid_at)->toIso8601String(),
+            'created_at' => optional($payment->created_at)->toIso8601String(),
+            'updated_at' => optional($payment->updated_at)->toIso8601String(),
+            'booking' => $booking ? [
+                'id' => $booking->id,
+                'company_name' => $booking->company_name,
+                'client_name' => $booking->client_name,
+                'client_email' => $booking->client_email,
+                'type_of_event' => $booking->type_of_event,
+                'booking_status' => $booking->booking_status,
+                'payment_status' => $booking->payment_status,
+                'booking_date_from' => optional($booking->booking_date_from)->toIso8601String(),
+                'booking_date_to' => optional($booking->booking_date_to)->toIso8601String(),
+                'created_at' => optional($booking->created_at)->toIso8601String(),
+                'created_by_name' => $booking->createdBy?->name,
+                'items' => collect($booking->bookingServices ?? [])->map(function ($item) {
+                    return [
+                        'id' => $item->id,
+                        'service_name' => $item->service?->name,
+                        'area' => $item->service?->serviceType?->name,
+                        'line_total' => (float) ($item->service->price ?? 0),
+                    ];
+                })->values()->all(),
+                'totals' => [
+                    'items_total' => $itemsTotal,
+                    'submitted_payments_total' => $submittedTotal,
+                    'confirmed_payments_total' => $confirmedTotal,
+                    'remaining_balance' => max(0, $itemsTotal - $confirmedTotal),
+                ],
+            ] : null,
+        ];
+    }
+
+    protected function paginateCollection(Collection $items, int $page, int $perPage, Request $request): LengthAwarePaginator
+    {
+        $page = max(1, $page);
+        $results = $items->forPage($page, $perPage)->values();
+
+        return new LengthAwarePaginator(
+            $results,
+            $items->count(),
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ]
+        );
     }
 }

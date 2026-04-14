@@ -23,6 +23,8 @@ export type DeadlineSummary = {
   createdAt: Date | null;
   firstDeadline: Date | null;
   finalDeadline: Date | null;
+  down_deadline: Date | null;
+  full_deadline: Date | null;
   itemsTotal: number;
   confirmedTotal: number;
   submittedTotal: number;
@@ -37,6 +39,7 @@ export type DeadlineSummary = {
   description: string;
   timeRemainingLabel: string;
   actionLabel: string;
+  recommended: string;
 };
 
 function parseDate(value?: string | null): Date | null {
@@ -74,6 +77,15 @@ export function formatDeadlineDateTime(value: Date | null) {
   }).format(value);
 }
 
+function makeSummary(summary: Omit<DeadlineSummary, 'down_deadline' | 'full_deadline' | 'recommended'>): DeadlineSummary {
+  return {
+    ...summary,
+    down_deadline: summary.firstDeadline,
+    full_deadline: summary.finalDeadline,
+    recommended: summary.actionLabel,
+  };
+}
+
 export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date()): DeadlineSummary {
   const bookingStatus = String(booking?.booking_status ?? 'pending').toLowerCase();
   const createdAt = parseDate(booking?.created_at ?? null);
@@ -89,7 +101,7 @@ export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date(
   const remainingToFull = Math.max(itemsTotal - confirmedTotal, 0);
 
   if (['cancelled', 'declined', 'completed'].includes(bookingStatus)) {
-    return {
+    return makeSummary({
       state: 'not_applicable',
       bookingStatus,
       createdAt,
@@ -109,11 +121,11 @@ export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date(
       description: 'This booking status is no longer inside the pencil-booking payment countdown flow.',
       timeRemainingLabel: '—',
       actionLabel: 'No action',
-    };
+    });
   }
 
   if (itemsTotal <= 0 || !createdAt || remainingToFull <= 0) {
-    return {
+    return makeSummary({
       state: 'fulfilled',
       bookingStatus,
       createdAt,
@@ -133,7 +145,7 @@ export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date(
       description: 'Confirmed payments already satisfy the current payment requirement for this booking.',
       timeRemainingLabel: 'Settled',
       actionLabel: 'No action',
-    };
+    });
   }
 
   const msToFirst = firstDeadline ? firstDeadline.getTime() - now.getTime() : null;
@@ -143,7 +155,7 @@ export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date(
 
   if (remainingToReachHalf <= 0) {
     if ((msToFinal ?? 0) < 0) {
-      return {
+      return makeSummary({
         state: 'final_overdue',
         bookingStatus,
         createdAt,
@@ -163,11 +175,11 @@ export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date(
         description: 'The 50% down payment has been met, but the booking still has remaining balance after the 48-hour payment window.',
         timeRemainingLabel: formatRelativeDistance(finalDeadline, now),
         actionLabel: 'Review for delete / escalation',
-      };
+      });
     }
 
     if ((msToFinal ?? Infinity) <= sixHours) {
-      return {
+      return makeSummary({
         state: 'final_due_soon',
         bookingStatus,
         createdAt,
@@ -187,10 +199,10 @@ export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date(
         description: 'The booking passed the down payment requirement, but the remaining balance is nearing the 48-hour cutoff.',
         timeRemainingLabel: formatRelativeDistance(finalDeadline, now),
         actionLabel: 'Collect remaining balance',
-      };
+      });
     }
 
-    return {
+    return makeSummary({
       state: 'fulfilled',
       bookingStatus,
       createdAt,
@@ -210,11 +222,11 @@ export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date(
       description: 'The 50% down payment requirement is satisfied. Monitor the remaining balance before the 48-hour deadline.',
       timeRemainingLabel: formatRelativeDistance(finalDeadline, now),
       actionLabel: 'Monitor remaining balance',
-    };
+    });
   }
 
   if ((msToFirst ?? 0) < 0) {
-    return {
+    return makeSummary({
       state: 'first_overdue',
       bookingStatus,
       createdAt,
@@ -234,11 +246,11 @@ export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date(
       description: 'The required 50% down payment was not reached within the first 24 hours.',
       timeRemainingLabel: formatRelativeDistance(firstDeadline, now),
       actionLabel: 'Review for auto-decline',
-    };
+    });
   }
 
   if ((msToFirst ?? Infinity) <= twoHours) {
-    return {
+    return makeSummary({
       state: 'first_due_soon',
       bookingStatus,
       createdAt,
@@ -258,10 +270,10 @@ export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date(
       description: 'The 24-hour down payment cutoff is approaching and the booking has not yet reached 50% confirmed payment.',
       timeRemainingLabel: formatRelativeDistance(firstDeadline, now),
       actionLabel: 'Follow up with client',
-    };
+    });
   }
 
-  return {
+  return makeSummary({
     state: 'first_due_soon',
     bookingStatus,
     createdAt,
@@ -281,5 +293,5 @@ export function getDeadlineSummary(booking: DeadlineBookingLike, now = new Date(
     description: 'This booking is still inside the first 24-hour window and is waiting to reach the required 50% down payment.',
     timeRemainingLabel: formatRelativeDistance(firstDeadline, now),
     actionLabel: 'Monitor down payment',
-  };
+  });
 }

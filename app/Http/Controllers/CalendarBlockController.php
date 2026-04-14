@@ -7,6 +7,7 @@ use App\Http\Requests\StoreCalendarBlockRequest;
 use App\Models\CalendarBlock;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class CalendarBlockController extends Controller
 {
@@ -86,8 +87,10 @@ class CalendarBlockController extends Controller
         ]);
     }
 
-    public function destroy(StoreCalendarBlockRequest $request, CalendarBlock $calendarBlock): JsonResponse
+    public function destroy(Request $request, CalendarBlock $calendarBlock): JsonResponse
     {
+        $this->ensureManageAccess($request);
+
         $id = $calendarBlock->id;
         $calendarBlock->delete();
 
@@ -158,5 +161,14 @@ class CalendarBlockController extends Controller
             'gold' => 'Private / reserved',
             default => 'Blocked / unavailable',
         };
+    }
+
+    protected function ensureManageAccess(Request $request): void
+    {
+        $user = $request->user();
+
+        if (! $user || ! $user->hasAnyRole(['admin', 'manager'])) {
+            abort(403);
+        }
     }
 }

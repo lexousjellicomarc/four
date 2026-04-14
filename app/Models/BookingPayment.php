@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 
 class BookingPayment extends Model
 {
@@ -52,15 +51,13 @@ class BookingPayment extends Model
 
     public function getProofImageUrlAttribute(): ?string
     {
-        if (! $this->proof_image_path) {
+        if (! $this->proof_image_path || ! $this->booking_id) {
             return null;
         }
 
-        if (preg_match('/^(https?:\/\/|\/)/i', (string) $this->proof_image_path)) {
-            return $this->proof_image_path;
-        }
+        $version = $this->updated_at?->timestamp ?? $this->created_at?->timestamp ?? time();
 
-        return Storage::disk('public')->url($this->proof_image_path);
+        return url("/bookings/{$this->booking_id}/payments/{$this->id}/proof-image") . '?v=' . $version;
     }
 
     public array $notificationChanges = [];

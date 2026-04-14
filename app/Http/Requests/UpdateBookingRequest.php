@@ -20,6 +20,7 @@ class UpdateBookingRequest extends FormRequest
         'client_address',
         'head_of_organization',
         'type_of_event',
+        'public_calendar_title',
     ];
 
     foreach ($trimmedStrings as $field) {
@@ -47,6 +48,10 @@ class UpdateBookingRequest extends FormRequest
 
     if (array_key_exists('payment_status', $payload) && is_string($payload['payment_status'])) {
         $payload['payment_status'] = strtolower(trim($payload['payment_status']));
+    }
+
+    if (array_key_exists('is_public_calendar_visible', $payload)) {
+        $payload['is_public_calendar_visible'] = filter_var($payload['is_public_calendar_visible'], FILTER_VALIDATE_BOOL);
     }
 
     [$fromN, $toN] = $this->normalizeSchedulePair(
@@ -95,7 +100,7 @@ class UpdateBookingRequest extends FormRequest
 
             $normalizedItems[] = [
                 'service_id' => $serviceId,
-                'quantity' => 1,
+                'quantity' => max(1, (int) ($row['quantity'] ?? 1)),
             ];
         }
 
@@ -139,7 +144,7 @@ class UpdateBookingRequest extends FormRequest
 
             'company_name' => ['nullable', 'string', 'max:255'],
             'client_name' => ['required', 'string', 'max:255'],
-            'client_contact_number' => ['required', 'string', 'max:255'],
+            'client_contact_number' => ['required', 'regex:/^09\d{9}$/'],
             'client_email' => ['required', 'string', 'email', 'max:255'],
 
             'survey_email' => ['required', 'string', 'email', 'max:255'],
@@ -158,10 +163,12 @@ class UpdateBookingRequest extends FormRequest
             'extra_schedules.*.from' => ['required_with:extra_schedules.*.to', 'date'],
             'extra_schedules.*.to'   => ['required_with:extra_schedules.*.from', 'date'],
 
-            'number_of_guests' => ['required', 'integer', 'min:1'],
+            'number_of_guests' => ['required', 'integer', 'min:1', 'max:2000'],
 
             'booking_status' => ['required', 'in:pending,active,confirmed,cancelled,declined,completed'],
             'payment_status' => ['sometimes', 'in:unpaid,partial,paid,owing'],
+            'is_public_calendar_visible' => ['sometimes', 'boolean'],
+            'public_calendar_title' => ['nullable', 'string', 'max:255'],
         ];
     }
 

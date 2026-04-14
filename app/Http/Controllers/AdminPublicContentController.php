@@ -437,32 +437,30 @@ public function destroyTourismMember(Request $request, TourismMember $tourismMem
         $this->ensureAdmin($request);
 
         $data = $request->validate([
-            'map_embed_url' => ['nullable', 'string'],
-            'open_map_url' => ['nullable', 'string'],
+            'map_embed_url' => ['nullable', 'string', 'max:2000'],
+            'open_map_url' => ['nullable', 'url', 'max:2000'],
             'address' => ['nullable', 'string'],
             'phone' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
-            'visita_url' => ['nullable', 'string'],
-            'creative_baguio_url' => ['nullable', 'string'],
+            'visita_url' => ['nullable', 'url', 'max:2000'],
+            'creative_baguio_url' => ['nullable', 'url', 'max:2000'],
             'footer_description' => ['nullable', 'string'],
             'footer_copyright' => ['nullable', 'string', 'max:255'],
         ]);
 
-
         $settings = SiteSetting::query()->firstOrCreate([]);
 
         $settings->update([
-            'map_embed_url' => $data['map_embed_url'] ?? null,
-            'open_map_url' => $data['open_map_url'] ?? null,
-            'address' => $data['address'] ?? null,
-            'phone' => $data['phone'] ?? null,
-            'email' => $data['email'] ?? null,
-            'visita_url' => $data['visita_url'] ?? null,
-            'creative_baguio_url' => $data['creative_baguio_url'] ?? null,
-            'footer_description' => $data['footer_description'] ?? null,
-            'footer_copyright' => $data['footer_copyright'] ?? null,
+            'map_embed_url' => $this->sanitizeMapEmbedUrl($data['map_embed_url'] ?? null),
+            'open_map_url' => $this->sanitizeHttpsUrl($data['open_map_url'] ?? null),
+            'address' => $this->nullableTrim($data['address'] ?? null),
+            'phone' => $this->nullableTrim($data['phone'] ?? null),
+            'email' => $this->nullableTrim($data['email'] ?? null),
+            'visita_url' => $this->sanitizeHttpsUrl($data['visita_url'] ?? null),
+            'creative_baguio_url' => $this->sanitizeHttpsUrl($data['creative_baguio_url'] ?? null),
+            'footer_description' => $this->nullableTrim($data['footer_description'] ?? null),
+            'footer_copyright' => $this->nullableTrim($data['footer_copyright'] ?? null),
         ]);
-
 
         return response()->json([
             'message' => 'Site settings updated successfully.',
@@ -693,7 +691,10 @@ protected function memberRow(TourismMember $member): array
                 continue;
             }
 
-            $paths[] = '/storage/' . $file->store($directory, 'public');
+            $stored = $file->store($directory, 'public');
+            if ($stored) {
+                $paths[] = '/storage/' . ltrim($stored, '/');
+            }
         }
 
         return array_values(array_slice($paths, 0, 3));
@@ -701,9 +702,14 @@ protected function memberRow(TourismMember $member): array
 
     protected function replaceManyImages(Request $request, string $field, string $directory, array $oldPaths): array
     {
-        $this->deleteManyImages($oldPaths);
+        $newPaths = $this->storeManyImages($request, $field, $directory);
 
-        return $this->storeManyImages($request, $field, $directory);
+        if (! empty($newPaths)) {
+            $this->deleteManyImages($oldPaths);
+            return $newPaths;
+        }
+
+        return array_values($oldPaths);
     }
 
     protected function deleteManyImages(array $paths): void
@@ -719,14 +725,21 @@ protected function memberRow(TourismMember $member): array
             return null;
         }
 
-        return '/storage/' . $request->file($field)->store($directory, 'public');
+        $stored = $request->file($field)->store($directory, 'public');
+
+        return $stored ? '/storage/' . ltrim($stored, '/') : null;
     }
 
     protected function replaceSingleImage(Request $request, string $field, string $directory, ?string $oldPath): ?string
     {
-        $this->deleteSingleImage($oldPath);
+        $newPath = $this->storeSingleImage($request, $field, $directory);
 
-        return $this->storeSingleImage($request, $field, $directory);
+        if ($newPath) {
+            $this->deleteSingleImage($oldPath);
+            return $newPath;
+        }
+
+        return $oldPath;
     }
 
     protected function deleteSingleImage(?string $path): void
@@ -735,10 +748,51 @@ protected function memberRow(TourismMember $member): array
             return;
         }
 
-        $relative = ltrim(str_replace('/storage/', '', $path), '/');
+        $relative = ltrim(str_replace('/storage/', '', (string) $path), '/');
 
         if ($relative !== '') {
             Storage::disk('public')->delete($relative);
         }
+    }
+
+    protected function nullableTrim(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return $value !== '' ? $value : null;
+    }
+
+    protected function sanitizeHttpsUrl(?string $value): ?string
+    {
+        $value = $this->nullableTrim($value);
+
+        if (! $value || ! filter_var($value, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        $scheme = strtolower((string) parse_url($value, PHP_URL_SCHEME));
+        if (! in_array($scheme, ['http', 'https'], true)) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    protected function sanitizeMapEmbedUrl(?string $value): ?string
+    {
+        $value = $this->sanitizeHttpsUrl($value);
+
+        if (! $value) {
+            return null;
+        }
+
+        $host = strtolower((string) parse_url($value, PHP_URL_HOST));
+        $allowedHosts = ['www.google.com', 'google.com', 'maps.google.com', 'www.google.com.ph', 'google.com.ph'];
+
+        return in_array($host, $allowedHosts, true) ? $value : null;
     }
 }

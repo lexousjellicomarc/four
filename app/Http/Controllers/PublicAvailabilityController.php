@@ -32,4 +32,30 @@ class PublicAvailabilityController extends Controller
 
         return response()->json($result);
     }
+
+    public function month(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'month' => ['required', 'regex:/^\d{4}-\d{2}$/'],
+            'venue' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        try {
+            $days = $this->bookings->getPublicMonthCalendar(
+                $data['month'],
+                isset($data['venue']) ? (string) $data['venue'] : null,
+            );
+        } catch (\Throwable) {
+            return response()->json([
+                'message' => 'Invalid month format. Use YYYY-MM.',
+            ], 422);
+        }
+
+        return response()->json([
+            'month' => $data['month'],
+            'venue' => $data['venue'] ?? null,
+            'days' => $days,
+        ]);
+    }
+
 }

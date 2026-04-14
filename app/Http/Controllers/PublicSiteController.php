@@ -100,6 +100,7 @@ class PublicSiteController extends Controller
     {
         return Inertia::render('public/contact', [
             'siteSettings' => $this->siteSettingsPayload(),
+            'venueOptions' => $this->venueOptionsPayload()->all(),
         ]);
     }
 
@@ -114,14 +115,21 @@ class PublicSiteController extends Controller
     {
         $settings = SiteSetting::query()->first();
 
+        $openMapUrl = $this->safeExternalUrl($settings?->open_map_url)
+            ?: 'https://www.google.com/maps/search/?api=1&query=CH3X%2BRRW%2C%20Baguio%2C%20Benguet%2C%20Philippines';
+
+        $visitaUrl = $this->safeExternalUrl($settings?->visita_url) ?: '';
+        $creativeBaguioUrl = $this->safeExternalUrl($settings?->creative_baguio_url) ?: '';
+        $mapEmbedUrl = $this->safeMapEmbedUrl($settings?->map_embed_url);
+
         return [
-            'mapEmbedUrl' => $settings?->map_embed_url,
-            'openMapUrl' => $settings?->open_map_url ?: 'https://www.google.com/maps/search/?api=1&query=CH3X%2BRRW%2C%20Baguio%2C%20Benguet%2C%20Philippines',
+            'mapEmbedUrl' => $mapEmbedUrl,
+            'openMapUrl' => $openMapUrl,
             'address' => $settings?->address ?: 'CH3X+RRW, Baguio, Benguet, Philippines',
             'phone' => $settings?->phone ?: '(074) 446 2009',
             'email' => $settings?->email ?: 'info@bccc-ease.com',
-            'visitaUrl' => $settings?->visita_url ?: '',
-            'creativeBaguioUrl' => $settings?->creative_baguio_url ?: '',
+            'visitaUrl' => $visitaUrl,
+            'creativeBaguioUrl' => $creativeBaguioUrl,
             'footerDescription' => $settings?->footer_description ?: 'A public-facing venue platform for space discovery, event highlights, schedule visibility, and booking guidance for the Baguio Convention and Cultural Center.',
             'footerCopyright' => $settings?->footer_copyright ?: '© 2026 BCCC EASE • City Government of Baguio • All Rights Reserved',
         ];
@@ -130,48 +138,13 @@ class PublicSiteController extends Controller
     protected function venueOptionsPayload(): Collection
     {
         return collect([
-            [
-                'label' => 'FULL HALL',
-                'value' => 'Full Hall',
-                'category' => 'Whole venue access',
-                'capacity' => 'Layout dependent',
-            ],
-            [
-                'label' => 'MAIN HALL',
-                'value' => 'Main Hall',
-                'category' => 'Primary hall',
-                'capacity' => 'Large-format events',
-            ],
-            [
-                'label' => 'FOYER & LOBBY AREA',
-                'value' => 'Foyer & Lobby Area',
-                'category' => 'Reception space',
-                'capacity' => 'Guest flow area',
-            ],
-            [
-                'label' => 'VIP LOUNGE',
-                'value' => 'VIP Lounge',
-                'category' => 'Executive space',
-                'capacity' => 'VIP holding',
-            ],
-            [
-                'label' => 'BOARD ROOM',
-                'value' => 'Board Room',
-                'category' => 'Meeting space',
-                'capacity' => 'Small-group setup',
-            ],
-            [
-                'label' => 'BASEMENT',
-                'value' => 'Basement',
-                'category' => 'Support / event space',
-                'capacity' => 'Flexible use',
-            ],
-            [
-                'label' => 'GALLERY2600',
-                'value' => 'Gallery2600',
-                'category' => 'Gallery space',
-                'capacity' => 'Exhibit-ready',
-            ],
+            ['label' => 'FULL HALL', 'value' => 'Full Hall', 'category' => 'Whole venue access', 'capacity' => 'Layout dependent'],
+            ['label' => 'MAIN HALL', 'value' => 'Main Hall', 'category' => 'Primary hall', 'capacity' => 'Large-format events'],
+            ['label' => 'FOYER & LOBBY AREA', 'value' => 'Foyer & Lobby Area', 'category' => 'Reception space', 'capacity' => 'Guest flow area'],
+            ['label' => 'VIP LOUNGE', 'value' => 'VIP Lounge', 'category' => 'Executive space', 'capacity' => 'VIP holding'],
+            ['label' => 'BOARD ROOM', 'value' => 'Board Room', 'category' => 'Meeting space', 'capacity' => 'Small-group setup'],
+            ['label' => 'BASEMENT', 'value' => 'Basement', 'category' => 'Support / event space', 'capacity' => 'Flexible use'],
+            ['label' => 'GALLERY2600', 'value' => 'Gallery2600', 'category' => 'Gallery space', 'capacity' => 'Exhibit-ready'],
         ]);
     }
 
@@ -341,38 +314,7 @@ class PublicSiteController extends Controller
                 ];
             });
 
-        return $manualBlocks
-            ->concat($bookingBlocks)
-            ->sortBy('dateFrom')
-            ->values();
-    }
-
-    protected function normalizePublicCalendarStartDate(mixed $value): string
-    {
-        try {
-            return \Carbon\Carbon::parse($value)->format('Y-m-d');
-        } catch (\Throwable $e) {
-            return substr((string) $value, 0, 10);
-        }
-    }
-
-    protected function normalizePublicCalendarEndDate(mixed $fromValue, mixed $toValue): string
-    {
-        try {
-            $from = \Carbon\Carbon::parse($fromValue);
-            $to = \Carbon\Carbon::parse($toValue);
-
-            if (
-                $to->format('H:i') === '00:00'
-                && $to->copy()->startOfDay()->equalTo($from->copy()->startOfDay()->addDay())
-            ) {
-                return $from->format('Y-m-d');
-            }
-
-            return $to->format('Y-m-d');
-        } catch (\Throwable $e) {
-            return substr((string) $toValue, 0, 10);
-        }
+        return $manualBlocks->concat($bookingBlocks)->values();
     }
 
     protected function membersPayload(): Collection
@@ -381,33 +323,86 @@ class PublicSiteController extends Controller
             ->where('is_active', true)
             ->orderByDesc('is_featured')
             ->orderBy('sort_order')
-            ->orderBy('full_name')
             ->get()
-            ->map(function (TourismMember $member) {
-                return [
-                    'id' => $member->id,
-                    'fullName' => $member->full_name,
-                    'designation' => $member->designation,
-                    'unitName' => $member->unit_name,
-                    'email' => $member->email,
-                    'phone' => $member->phone,
-                    'shortBio' => $member->short_bio ?? '',
-                    'details' => is_array($member->details) ? $member->details : [],
-                    'photo' => $member->photo_path,
-                    'featured' => (bool) $member->is_featured,
-                ];
-            })
+            ->map(fn (TourismMember $member) => [
+                'id' => $member->id,
+                'name' => $member->name,
+                'position' => $member->position,
+                'shortBio' => $member->short_bio,
+                'details' => is_array($member->details) ? $member->details : [],
+                'photo' => $member->photo_path ?: '/marketing/images/branding/breathe-dark.png',
+                'featured' => (bool) $member->is_featured,
+            ])
             ->values();
     }
 
     protected function isTourismOfficeSpace(array $item): bool
     {
-        $slug = Str::slug((string) ($item['slug'] ?? ''));
-        $title = Str::lower(trim((string) ($item['title'] ?? '')));
-        $category = Str::lower(trim((string) ($item['category'] ?? '')));
+        $title = strtolower((string) ($item['title'] ?? ''));
+        $slug = strtolower((string) ($item['slug'] ?? ''));
+        $category = strtolower((string) ($item['category'] ?? ''));
 
-        return $slug === 'tourism-office'
-            || str_contains($title, 'tourism office')
-            || str_contains($category, 'tourism');
+        return str_contains($title, 'tourism')
+            || str_contains($slug, 'tourism')
+            || str_contains($category, 'tourism office');
+    }
+
+    protected function normalizePublicCalendarStartDate($value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        if (! $value) {
+            return null;
+        }
+
+        try {
+            return \Carbon\Carbon::parse($value)->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    protected function normalizePublicCalendarEndDate($from, $to): ?string
+    {
+        $fromDate = $this->normalizePublicCalendarStartDate($from);
+        $toDate = $this->normalizePublicCalendarStartDate($to);
+
+        return $toDate ?: $fromDate;
+    }
+
+    protected function safeExternalUrl(?string $value): ?string
+    {
+        $value = is_string($value) ? trim($value) : null;
+
+        if (! $value || ! filter_var($value, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        $scheme = strtolower((string) parse_url($value, PHP_URL_SCHEME));
+
+        return in_array($scheme, ['http', 'https'], true) ? $value : null;
+    }
+
+    protected function safeMapEmbedUrl(?string $value): ?string
+    {
+        $value = $this->safeExternalUrl($value);
+
+        if (! $value) {
+            return null;
+        }
+
+        $host = strtolower((string) parse_url($value, PHP_URL_HOST));
+
+        $allowedHosts = [
+            'www.google.com',
+            'google.com',
+            'maps.google.com',
+            'www.google.com.ph',
+            'google.com.ph',
+        ];
+
+        return in_array($host, $allowedHosts, true) ? $value : null;
     }
 }

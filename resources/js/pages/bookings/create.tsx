@@ -26,26 +26,30 @@ interface ServiceTypeWithServices {
 
 interface CreateBookingProps {
   serviceTypes: ServiceTypeWithServices[];
-  unavailableDates: string[];
+  unavailableDates?: string[];
   initialSchedule?: {
     date?: string | null;
     start_time?: string | null;
     end_time?: string | null;
   };
+  initialVenue?: string | null;
+  initialEventType?: string | null;
+  initialGuests?: number | null;
 }
 
 type RoleLike = string | { name?: string | null } | null | undefined;
+type BlockKey = 'AM' | 'PM' | 'EVE';
+
 type CartItem = {
   service_id: number;
   name: string;
   area: string;
   price: number;
+  quantity: number;
   min_guests?: number | null;
   max_guests?: number | null;
   capacity_note?: string | null;
 };
-
-type BlockKey = 'AM' | 'PM' | 'EVE';
 
 type AvailabilityBlock = {
   key?: string;
@@ -56,15 +60,90 @@ type AvailabilityBlock = {
 
 type DailyAvailability = {
   date: string;
+  venue?: string | null;
   blocks?: Record<string, AvailabilityBlock> | AvailabilityBlock[];
   is_fully_booked?: boolean;
 };
 
-const BLOCKS: Record<BlockKey, { label: string; time: string; start: string; end: string }> = {
-  AM: { label: 'AM', time: '6:00 AM – 12:00 PM', start: '06:00', end: '12:00' },
-  PM: { label: 'PM', time: '12:00 PM – 6:00 PM', start: '12:00', end: '18:00' },
-  EVE: { label: 'EVE', time: '6:00 PM – 11:59 PM', start: '18:00', end: '23:59' },
+type FormShape = {
+  service_id: number | null;
+  company_name: string;
+  client_name: string;
+  client_contact_number: string;
+  client_email: string;
+  survey_email: string;
+  survey_proof_image: File | null;
+  client_address: string;
+  head_of_organization: string;
+  type_of_event: string;
+  booking_date_from: string;
+  booking_date_to: string;
+  number_of_guests: string;
+  booking_status: string;
+  is_public_calendar_visible: boolean;
+  public_calendar_title: string;
 };
+
+type LocalFieldErrors = Partial<Record<keyof FormShape | 'booking_date' | 'selected_blocks' | 'items' | 'survey', string>>;
+type SectionKey = 'client' | 'schedule' | 'services' | 'survey';
+
+type BookingDraftPayload = {
+  version: number;
+  saved_at: string;
+  survey_proof_name: string;
+  form: Omit<FormShape, 'survey_proof_image'>;
+  bookingDate: string;
+  selectedBlocks: BlockKey[];
+  selectedVenue: string;
+  search: string;
+  cart: CartItem[];
+  extraDates: string[];
+};
+
+const BOOKING_DRAFT_VERSION = 2;
+
+const EVENT_TYPE_OPTIONS = [
+  'Convention',
+  'Conference',
+  'Seminar',
+  'Workshop',
+  'Training',
+  'Meeting',
+  'Exhibit',
+  'Expo',
+  'Product Launch',
+  'Cultural Program',
+  'Government Event',
+  'Community Event',
+  'Private Event',
+  'Others',
+] as const;
+
+const DEFAULT_COMPANY_OPTIONS = [
+  'Baguio City Government',
+  'Baguio Country Club',
+  'Baguio Water District',
+  'Benguet Electric Cooperative',
+  'Benguet State University',
+  'Department of Education - Baguio',
+  'Department of Tourism - CAR',
+  'John Hay Management Corporation',
+  'Saint Louis University',
+  'University of the Cordilleras',
+  'University of Baguio',
+  'Others',
+] as const;
+
+const GUEST_OPTIONS = [
+  { label: 'Less than 50 pax', value: '49' },
+  { label: '50 to 100 pax', value: '100' },
+  { label: '101 to 200 pax', value: '200' },
+  { label: '201 to 500 pax', value: '500' },
+  { label: '501 to 1000 pax', value: '1000' },
+  { label: '1001 to 1500 pax', value: '1500' },
+  { label: '1501 to 2000 pax', value: '2000' },
+  { label: 'Custom number', value: 'custom' },
+] as const;
 
 function getRoleNames(auth: any): string[] {
   const raw: RoleLike[] = auth?.roles ?? auth?.user?.roles ?? [];
@@ -74,6 +153,52 @@ function getRoleNames(auth: any): string[] {
     .map((role) => (typeof role === 'string' ? role : role?.name))
     .filter(Boolean)
     .map((name) => String(name).toLowerCase());
+}
+
+
+function cleanPhoneInput(value: string) {
+  return value.replace(/\D+/g, '').slice(0, 11);
+}
+
+function isWholeDayServiceName(name: string) {
+  const v = name.toLowerCase();
+  return v.includes('whole day') || v.includes('whole-day') || v.includes('whole venue') || v.includes('whole hall') || v.includes('full day');
+}
+
+function isHalfDayServiceName(name: string) {
+  const v = name.toLowerCase();
+  return v.includes('half day') || v.includes('half-day');
+}
+
+function isAdditionalHourServiceName(name: string) {
+  return name.toLowerCase().includes('additional hour');
+}
+
+
+function sameServiceTypeLabel(value?: string | null) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function daySpanFromSelections(primaryDate: string, extraDates: string[]) {
+  const valid = [primaryDate, ...extraDates].filter(Boolean);
+  return Math.max(new Set(valid).size, 1);
+}
+
+function isPopularService(service: Service, typeName: string) {
+  const value = `${service.name} ${typeName}`.toLowerCase();
+  return value.includes('main hall') || value.includes('full hall') || value.includes('foyer') || value.includes('vip lounge');
+}
+
+function serviceBehaviorBadges(service: Service, typeName: string) {
+  const serviceName = String(service.name ?? '');
+  const badges: string[] = [];
+
+  if (isPopularService(service, typeName)) badges.push('Popular');
+  if (isWholeDayServiceName(serviceName)) badges.push('Whole Day');
+  if (isHalfDayServiceName(serviceName)) badges.push('Half Day');
+  if (isAdditionalHourServiceName(serviceName)) badges.push('Additional Hour');
+
+  return badges;
 }
 
 function pad2(n: number) {
@@ -136,26 +261,71 @@ function computeDateRange(date: string, blocks: BlockKey[]) {
   };
 }
 
+function availabilityCacheKey(date: string, venue?: string | null) {
+  return `${date}::${String(venue ?? '').trim().toLowerCase()}`;
+}
+
+function normalizeAreaKey(value?: string | null) {
+  const raw = String(value ?? '').trim().toLowerCase();
+  const compact = raw.replace(/[^a-z0-9]+/g, '');
+
+  const map: Record<string, string> = {
+    fullhall: 'full_hall',
+    fullvenue: 'full_hall',
+    wholehall: 'full_hall',
+    mainhall: 'main_hall',
+    foyerlobbyarea: 'foyer_lobby',
+    foyerandlobbyarea: 'foyer_lobby',
+    foyerlobby: 'foyer_lobby',
+    foyer: 'foyer_lobby',
+    lobby: 'foyer_lobby',
+    lobbyarea: 'foyer_lobby',
+    viplounge: 'vip_lounge',
+    boardroom: 'board_room',
+    basement: 'basement',
+    gallery2600: 'gallery2600',
+    gallery: 'gallery2600',
+    wholevenue: 'whole_venue',
+    allareas: 'whole_venue',
+    allspaces: 'whole_venue',
+    groundsparkingarea: 'whole_venue',
+    lobbyfoyer: 'foyer_lobby',
+  };
+
+  return map[compact] ?? compact;
+}
+
+function areaLabelsOverlap(a?: string | null, b?: string | null) {
+  const ak = normalizeAreaKey(a);
+  const bk = normalizeAreaKey(b);
+
+  if (!ak || !bk) return false;
+  if (ak === bk) return true;
+
+  const matrix: Record<string, string[]> = {
+    whole_venue: ['whole_venue', 'full_hall', 'main_hall', 'foyer_lobby', 'vip_lounge', 'board_room', 'basement', 'gallery2600'],
+    full_hall: ['whole_venue', 'full_hall', 'main_hall', 'foyer_lobby', 'vip_lounge', 'board_room', 'basement', 'gallery2600'],
+    main_hall: ['whole_venue', 'full_hall', 'main_hall'],
+    foyer_lobby: ['whole_venue', 'full_hall', 'foyer_lobby'],
+    vip_lounge: ['whole_venue', 'full_hall', 'vip_lounge'],
+    board_room: ['whole_venue', 'full_hall', 'board_room'],
+    basement: ['whole_venue', 'full_hall', 'basement'],
+    gallery2600: ['whole_venue', 'full_hall', 'gallery2600'],
+  };
+
+  return (matrix[ak] ?? []).includes(bk) || (matrix[bk] ?? []).includes(ak);
+}
+
+function isAreaCartItem(item: Pick<CartItem, 'area' | 'name'>) {
+  return String(item.area ?? '').trim().toLowerCase() === 'area'
+    || ['whole_venue', 'full_hall', 'main_hall', 'foyer_lobby', 'vip_lounge', 'board_room', 'basement', 'gallery2600'].includes(normalizeAreaKey(item.name));
+}
+
 function formatMoney(value: number) {
   return value.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-function isBlockAvailable(availability: DailyAvailability | null | undefined, key: BlockKey) {
-  if (!availability?.blocks) return true;
-
-  if (Array.isArray(availability.blocks)) {
-    const found = availability.blocks.find((block) => (block.key ?? block.label) === key);
-    if (!found) return true;
-    return Boolean(found.is_available ?? found.available ?? true);
-  }
-
-  const found = availability.blocks[key] ?? availability.blocks[key.toLowerCase()];
-  if (!found) return true;
-
-  return Boolean(found.is_available ?? found.available ?? true);
 }
 
 function getCapacityLabel(service: Service) {
@@ -186,7 +356,11 @@ function getCapacityError(service: Pick<Service, 'name' | 'min_guests' | 'max_gu
   return null;
 }
 
-function normalizeAssetUrl(url: string): string {
+function isBlockAvailable(availability: DailyAvailability | null | undefined, key: BlockKey) {
+  return resolveBlockAvailable(availability?.blocks, key);
+}
+
+function normalizeAssetUrl(url: string) {
   const value = String(url || '').trim();
   if (!value) return value;
   if (/^(https?:\/\/|data:|blob:|\/)/i.test(value)) return value;
@@ -205,44 +379,6 @@ function FieldError({ message }: { message?: string | null }) {
   return <p className="text-sm font-medium text-red-600 dark:text-red-400">{message}</p>;
 }
 
-type FormShape = {
-  service_id: string | null;
-  company_name: string;
-  client_name: string;
-  client_contact_number: string;
-  client_email: string;
-  survey_email: string;
-  survey_proof_image: File | null;
-  client_address: string;
-  head_of_organization: string;
-  type_of_event: string;
-  booking_date_from: string;
-  booking_date_to: string;
-  number_of_guests: string;
-  booking_status: string;
-};
-
-
-type LocalFieldErrors = Partial<Record<keyof FormShape | 'booking_date' | 'selected_blocks' | 'items' | 'survey', string>>;
-
-type SectionKey = 'client' | 'schedule' | 'services' | 'survey';
-
-const SECTION_ORDER: SectionKey[] = ['client', 'schedule', 'services', 'survey'];
-
-
-type BookingDraftPayload = {
-  version: number;
-  saved_at: string;
-  survey_proof_name: string;
-  form: Omit<FormShape, 'survey_proof_image'>;
-  bookingDate: string;
-  selectedBlocks: BlockKey[];
-  search: string;
-  cart: CartItem[];
-};
-
-const BOOKING_DRAFT_VERSION = 1;
-
 function buildDraftKey(seed?: string | null) {
   const normalized = String(seed ?? '').trim().toLowerCase() || 'guest';
   return `bccc-ease:booking-create-draft:${normalized}`;
@@ -260,10 +396,14 @@ function hasMeaningfulDraftContent(payload: BookingDraftPayload) {
       payload.form.number_of_guests.trim() ||
       payload.bookingDate.trim() ||
       payload.selectedBlocks.length > 0 ||
+      payload.selectedVenue.trim() ||
       payload.search.trim() ||
       payload.cart.length > 0 ||
+      payload.extraDates.length > 0 ||
       payload.form.survey_email.trim() ||
-      payload.survey_proof_name.trim()
+      payload.form.public_calendar_title.trim() ||
+      payload.form.is_public_calendar_visible ||
+      payload.survey_proof_name.trim(),
   );
 }
 
@@ -327,7 +467,13 @@ function sectionForField(field?: keyof LocalFieldErrors): SectionKey {
   }
 }
 
-export default function CreateBooking({ serviceTypes, initialSchedule }: CreateBookingProps) {
+export default function CreateBooking({
+  serviceTypes,
+  initialSchedule,
+  initialVenue,
+  initialEventType,
+  initialGuests,
+}: CreateBookingProps) {
   const page = usePage<any>();
   const auth = page.props.auth ?? {};
   const survey = page.props.survey ?? {};
@@ -351,15 +497,20 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
     survey_proof_image: null,
     client_address: '',
     head_of_organization: '',
-    type_of_event: '',
+    type_of_event: initialEventType ? String(initialEventType) : '',
     booking_date_from: '',
     booking_date_to: '',
-    number_of_guests: '',
+    number_of_guests: initialGuests ? String(initialGuests) : '',
     booking_status: 'pending',
+    is_public_calendar_visible: false,
+    public_calendar_title: '',
   });
 
   const [bookingDate, setBookingDate] = useState<string>(initialSchedule?.date ?? '');
+  const [extraDates, setExtraDates] = useState<string[]>([]);
+  const [extraDateInput, setExtraDateInput] = useState('');
   const [selectedBlocks, setSelectedBlocks] = useState<BlockKey[]>(() => parseInitialBlocks(initialSchedule));
+  const [selectedVenue, setSelectedVenue] = useState<string>(initialVenue ? String(initialVenue) : '');
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
@@ -367,11 +518,12 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
   const [availabilityCache, setAvailabilityCache] = useState<Record<string, DailyAvailability>>({});
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [qrStage, setQrStage] = useState<'remote' | 'fallback' | 'none'>(
-    survey?.qr_image_url ? 'remote' : 'fallback',
-  );
-
+  const [guestPreset, setGuestPreset] = useState<string>(() => (initialGuests ? String(initialGuests) : 'custom'));
+  const [companyPreset, setCompanyPreset] = useState<string>('');
+  const [eventTypePreset, setEventTypePreset] = useState<string>(() => (initialEventType ? String(initialEventType) : ''));
+  const [qrStage, setQrStage] = useState<'remote' | 'fallback' | 'none'>(survey?.qr_image_url ? 'remote' : 'fallback');
   const [localErrors, setLocalErrors] = useState<LocalFieldErrors>({});
+
   const draftKey = useMemo(() => buildDraftKey(authEmail || data.client_email || auth?.user?.id), [authEmail, data.client_email, auth?.user?.id]);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [draftRestoreCandidate, setDraftRestoreCandidate] = useState<BookingDraftPayload | null>(null);
@@ -385,6 +537,145 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
     services: null,
     survey: null,
   });
+
+  const venueOptions = useMemo(() => {
+    const seen = new Set<string>();
+
+    return serviceTypes
+      .flatMap((type) =>
+        (type.services ?? [])
+          .filter((service) => String(service.service_type ?? type.name).trim().toLowerCase() === 'area')
+          .map((service) => ({ label: service.name, value: service.name })),
+      )
+      .filter((item) => {
+        const key = normalizeAreaKey(item.value);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [serviceTypes]);
+
+  const guestCount = useMemo(() => {
+    const parsed = Number(data.number_of_guests || 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [data.number_of_guests]);
+
+
+  const multiBlockSelection = selectedBlocks.length >= 2;
+
+  function serviceDisabledReason(service: Service, serviceTypeName: string) {
+    const serviceName = String(service.name ?? '');
+    const normalizedType = sameServiceTypeLabel(service.service_type ?? serviceTypeName);
+    const capacityError = getCapacityError(service, guestCount);
+    if (capacityError) return capacityError;
+
+    if (multiBlockSelection && isHalfDayServiceName(serviceName)) {
+      return 'Half-day options are disabled when two or more time blocks are selected.';
+    }
+
+    if (!multiBlockSelection && isWholeDayServiceName(serviceName)) {
+      return 'Whole-day options become available once two or more time blocks are selected.';
+    }
+
+    if (isAdditionalHourServiceName(serviceName)) {
+      const hasBaseSameType = cart.some((item) => !isAdditionalHourServiceName(item.name) && sameServiceTypeLabel(item.area) === normalizedType);
+      if (!hasBaseSameType) {
+        return 'Select a base service from the same service type before adding additional hours.';
+      }
+    }
+
+    if (cart.some((item) => item.service_id === service.id) && !isAdditionalHourServiceName(serviceName)) {
+      return 'Already selected.';
+    }
+
+    return '';
+  }
+
+  const filteredServiceTypes = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const selectedIds = new Set(cart.map((item) => item.service_id));
+
+    return serviceTypes
+      .map((type) => ({
+        ...type,
+        services: (type.services ?? []).filter((service) => {
+          if (selectedIds.has(service.id)) return false;
+          if (!query) return true;
+
+          const haystack = `${service.name} ${service.description} ${type.name}`.toLowerCase();
+          return haystack.includes(query);
+        }),
+      }))
+      .filter((type) => type.services.length > 0);
+  }, [serviceTypes, search, cart]);
+
+  const totalAmount = useMemo(() => {
+    const base = cart.reduce((sum, item) => sum + (Number(item.price) * Math.max(1, Number(item.quantity || 1))), 0);
+    return base * daySpanFromSelections(bookingDate, extraDates);
+  }, [cart, bookingDate, extraDates]);
+
+  useEffect(() => {
+    if (cart.length === 0) return;
+
+    const removed: string[] = [];
+    const kept = cart.filter((item) => {
+      const capacityProblem = getCapacityError({
+        name: item.name,
+        min_guests: item.min_guests ?? null,
+        max_guests: item.max_guests ?? null,
+        capacity_note: item.capacity_note ?? null,
+      }, guestCount);
+
+      if (capacityProblem) {
+        removed.push(item.name);
+        return false;
+      }
+
+      if (multiBlockSelection && isHalfDayServiceName(item.name)) {
+        removed.push(item.name);
+        return false;
+      }
+
+      if (!multiBlockSelection && isWholeDayServiceName(item.name)) {
+        removed.push(item.name);
+        return false;
+      }
+
+      if (isAdditionalHourServiceName(item.name)) {
+        const hasBaseSameType = cart.some((other) =>
+          other.service_id !== item.service_id &&
+          !isAdditionalHourServiceName(other.name) &&
+          sameServiceTypeLabel(other.area) === sameServiceTypeLabel(item.area),
+        );
+
+        if (!hasBaseSameType) {
+          removed.push(item.name);
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    if (removed.length > 0 && kept.length !== cart.length) {
+      setCart(kept);
+      setCapacityError(`Some selected services were removed because they no longer match the guest count or selected block combination: ${Array.from(new Set(removed)).join(', ')}.`);
+    }
+  }, [cart, guestCount, multiBlockSelection]);
+
+  const hasAreaServiceSelected = useMemo(() => cart.some((item) => isAreaCartItem(item)), [cart]);
+
+  const selectedVenueMatchesCart = useMemo(() => {
+    if (!selectedVenue) return true;
+    return cart.some((item) => isAreaCartItem(item) && areaLabelsOverlap(item.name, selectedVenue));
+  }, [cart, selectedVenue]);
+
+  const surveyQrUrl = survey?.qr_image_url ? normalizeAssetUrl(String(survey.qr_image_url)) : null;
+  const qrSrc = qrStage === 'remote' ? surveyQrUrl : qrStage === 'fallback' ? qrFallback : null;
+
+  const currentAvailability = bookingDate
+    ? availabilityCache[availabilityCacheKey(bookingDate, selectedVenue)] ?? null
+    : null;
 
   function setSectionRef(section: SectionKey) {
     return (element: HTMLDivElement | null) => {
@@ -417,10 +708,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
   function updateField<K extends keyof FormShape>(field: K, value: FormShape[K]) {
     setData(field, value);
     clearLocalError(field);
-    if (!draftGateResolved) {
-      setDraftGateResolved(true);
-      setDraftRestoreCandidate(null);
-    }
+    markDraftInteractive();
   }
 
   function buildDraftPayload(): BookingDraftPayload {
@@ -442,25 +730,16 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
         booking_date_to: data.booking_date_to,
         number_of_guests: data.number_of_guests,
         booking_status: data.booking_status,
+        is_public_calendar_visible: data.is_public_calendar_visible,
+        public_calendar_title: data.public_calendar_title,
       },
       bookingDate,
       selectedBlocks,
+      selectedVenue,
       search,
       cart,
+      extraDates,
     };
-  }
-
-  function persistDraft(payload = buildDraftPayload()) {
-    if (typeof window === 'undefined') return;
-
-    if (!hasMeaningfulDraftContent(payload)) {
-      window.localStorage.removeItem(draftKey);
-      setDraftSavedAt(null);
-      return;
-    }
-
-    window.localStorage.setItem(draftKey, JSON.stringify(payload));
-    setDraftSavedAt(payload.saved_at);
   }
 
   function clearDraftStorage() {
@@ -468,7 +747,6 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
     window.localStorage.removeItem(draftKey);
     setDraftSavedAt(null);
     setDraftRestoreCandidate(null);
-    setDraftGateResolved(true);
   }
 
   function restoreDraft(payload: BookingDraftPayload) {
@@ -483,8 +761,17 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
         ? payload.selectedBlocks.filter((block): block is BlockKey => ['AM', 'PM', 'EVE'].includes(block))
         : [],
     );
+    setSelectedVenue(payload.selectedVenue || '');
     setSearch(payload.search || '');
     setCart(Array.isArray(payload.cart) ? payload.cart : []);
+    setExtraDates(Array.isArray(payload.extraDates) ? payload.extraDates.filter(Boolean) : []);
+    setCompanyPreset(DEFAULT_COMPANY_OPTIONS.includes((payload.form.company_name || '') as any) ? payload.form.company_name : (payload.form.company_name ? 'Others' : ''));
+    setEventTypePreset(EVENT_TYPE_OPTIONS.includes((payload.form.type_of_event || '') as any) ? payload.form.type_of_event : (payload.form.type_of_event ? 'Others' : ''));
+    setGuestPreset(
+      payload.form.number_of_guests && GUEST_OPTIONS.some((option) => option.value === payload.form.number_of_guests)
+        ? payload.form.number_of_guests
+        : 'custom',
+    );
     setPreviewUrl(null);
     setLocalErrors({});
     setScheduleError(null);
@@ -495,11 +782,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
   }
 
   useEffect(() => {
-    if (!isClient || !authEmail) return;
-    if (data.client_email !== authEmail) {
-      setData('client_email', authEmail);
+    if (guestPreset !== 'custom') {
+      updateField('number_of_guests', guestPreset as any);
     }
-  }, [isClient, authEmail, data.client_email]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guestPreset]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -507,41 +794,25 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
     try {
       const raw = window.localStorage.getItem(draftKey);
       if (!raw) {
-        setDraftRestoreCandidate(null);
-        setDraftSavedAt(null);
-        setDraftGateResolved(true);
         setDraftReady(true);
+        setDraftGateResolved(true);
         return;
       }
 
       const parsed = JSON.parse(raw) as BookingDraftPayload;
-      if (!parsed || parsed.version !== BOOKING_DRAFT_VERSION) {
+      if (!parsed || parsed.version !== BOOKING_DRAFT_VERSION || !hasMeaningfulDraftContent(parsed)) {
         window.localStorage.removeItem(draftKey);
-        setDraftRestoreCandidate(null);
-        setDraftSavedAt(null);
-        setDraftGateResolved(true);
         setDraftReady(true);
-        return;
-      }
-
-      if (!hasMeaningfulDraftContent(parsed)) {
-        window.localStorage.removeItem(draftKey);
-        setDraftRestoreCandidate(null);
-        setDraftSavedAt(null);
         setDraftGateResolved(true);
-        setDraftReady(true);
         return;
       }
 
       setDraftRestoreCandidate(parsed);
-      setDraftSavedAt(parsed.saved_at || null);
-      setDraftGateResolved(false);
-    } catch {
-      setDraftRestoreCandidate(null);
-      setDraftSavedAt(null);
-      setDraftGateResolved(true);
-    } finally {
+      setDraftSavedAt(parsed.saved_at ?? null);
       setDraftReady(true);
+    } catch {
+      setDraftReady(true);
+      setDraftGateResolved(true);
     }
   }, [draftKey]);
 
@@ -554,8 +825,16 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
     }
 
     draftTimerRef.current = window.setTimeout(() => {
-      persistDraft();
-    }, 800);
+      const payload = buildDraftPayload();
+      if (!hasMeaningfulDraftContent(payload)) {
+        window.localStorage.removeItem(draftKey);
+        setDraftSavedAt(null);
+        return;
+      }
+
+      window.localStorage.setItem(draftKey, JSON.stringify(payload));
+      setDraftSavedAt(payload.saved_at);
+    }, 700);
 
     return () => {
       if (draftTimerRef.current) {
@@ -565,7 +844,7 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
   }, [
     draftReady,
     draftGateResolved,
-    data.service_id,
+    draftKey,
     data.company_name,
     data.client_name,
     data.client_contact_number,
@@ -574,37 +853,19 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
     data.client_address,
     data.head_of_organization,
     data.type_of_event,
-    data.booking_status,
     data.number_of_guests,
+    data.booking_status,
     bookingDate,
     selectedBlocks,
+    selectedVenue,
     search,
     cart,
-    draftKey,
+    data.survey_proof_image,
   ]);
 
   useEffect(() => {
-    const hasFileThatCannotBeAutosaved = Boolean(data.survey_proof_image);
-    if (!hasFileThatCannotBeAutosaved) return;
+    if (!errors || Object.keys(errors).length === 0) return;
 
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [data.survey_proof_image]);
-
-  useEffect(() => {
-    if (!draftRestoreCandidate) return;
-    if (data.client_name || data.company_name || data.type_of_event || cart.length > 0 || bookingDate) {
-      setDraftGateResolved(true);
-      setDraftRestoreCandidate(null);
-    }
-  }, [draftRestoreCandidate, data.client_name, data.company_name, data.type_of_event, cart.length, bookingDate]);
-
-  useEffect(() => {
     const mergedErrors: LocalFieldErrors = {
       client_name: errors.client_name,
       company_name: errors.company_name,
@@ -642,71 +903,6 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
     return () => URL.revokeObjectURL(objectUrl);
   }, [data.survey_proof_image]);
 
-  async function fetchAvailability(date: string) {
-    if (!date) return null;
-    if (availabilityCache[date]) return availabilityCache[date];
-
-    setLoadingAvailability(true);
-
-    try {
-      const response = await fetch(`/bookings/availability?date=${encodeURIComponent(date)}`);
-      if (!response.ok) throw new Error('Unable to load availability');
-
-      const payload = (await response.json()) as DailyAvailability;
-      setAvailabilityCache((prev) => ({ ...prev, [date]: payload }));
-      return payload;
-    } catch {
-      return null;
-    } finally {
-      setLoadingAvailability(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!bookingDate) return;
-    fetchAvailability(bookingDate);
-  }, [bookingDate]);
-
-  const currentAvailability = bookingDate ? availabilityCache[bookingDate] ?? null : null;
-
-  useEffect(() => {
-    setScheduleError(null);
-
-    if (!bookingDate || selectedBlocks.length === 0) {
-      setData('booking_date_from', '');
-      setData('booking_date_to', '');
-      return;
-    }
-
-    const badBlocks = selectedBlocks.filter((block) => !isBlockAvailable(currentAvailability, block));
-    if (badBlocks.length > 0) {
-      setScheduleError(`The selected block is not available: ${badBlocks.join(', ')}.`);
-      setData('booking_date_from', '');
-      setData('booking_date_to', '');
-      return;
-    }
-
-    const range = computeDateRange(bookingDate, selectedBlocks);
-    if (!range) return;
-
-    setData('booking_date_from', range.from);
-    setData('booking_date_to', range.to);
-  }, [bookingDate, selectedBlocks, currentAvailability]);
-
-  const allServices = useMemo(() => {
-    return serviceTypes.flatMap((type) =>
-      (type.services ?? []).map((service) => ({
-        ...service,
-        service_type: service.service_type ?? type.name,
-      })),
-    );
-  }, [serviceTypes]);
-
-  const guestCount = useMemo(() => {
-    const parsed = Number(data.number_of_guests || 0);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }, [data.number_of_guests]);
-
   useEffect(() => {
     if (cart.length === 0) {
       setCapacityError(null);
@@ -731,36 +927,93 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
     setCapacityError(firstError);
   }, [cart, guestCount]);
 
-  const filteredServiceTypes = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const selectedIds = new Set(cart.map((item) => item.service_id));
+  useEffect(() => {
+    setScheduleError(null);
 
-    return serviceTypes
-      .map((type) => ({
-        ...type,
-        services: (type.services ?? []).filter((service) => {
-          if (selectedIds.has(service.id)) return false;
-          if (!query) return true;
+    if (!bookingDate || selectedBlocks.length === 0) {
+      setData('booking_date_from', '');
+      setData('booking_date_to', '');
+      return;
+    }
 
-          const haystack = `${service.name} ${service.description} ${type.name}`.toLowerCase();
-          return haystack.includes(query);
-        }),
-      }))
-      .filter((type) => type.services.length > 0);
-  }, [serviceTypes, search, cart]);
+    const badBlocks = selectedBlocks.filter((block) => !isBlockAvailable(currentAvailability, block));
+    if (badBlocks.length > 0) {
+      setScheduleError(`The selected block is not available: ${badBlocks.join(', ')}.`);
+      setData('booking_date_from', '');
+      setData('booking_date_to', '');
+      return;
+    }
+
+    const range = computeDateRange(bookingDate, selectedBlocks);
+    if (!range) return;
+
+    setData('booking_date_from', range.from);
+    setData('booking_date_to', range.to);
+  }, [bookingDate, selectedBlocks, currentAvailability, setData]);
+
+  useEffect(() => {
+    if (!bookingDate) return;
+
+    const key = availabilityCacheKey(bookingDate, selectedVenue);
+    if (availabilityCache[key]) return;
+
+    let alive = true;
+
+    async function run() {
+      setLoadingAvailability(true);
+      try {
+        const params = new URLSearchParams({ date: bookingDate });
+        if (selectedVenue) params.set('venue', selectedVenue);
+
+        const response = await fetch(`/bookings/availability?${params.toString()}`, {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        });
+
+        if (!response.ok) {
+          throw new Error('Unable to load availability');
+        }
+
+        const payload = (await response.json()) as DailyAvailability;
+        if (!alive) return;
+
+        setAvailabilityCache((prev) => ({ ...prev, [key]: payload }));
+      } catch {
+        if (!alive) return;
+        setAvailabilityCache((prev) => ({
+          ...prev,
+          [key]: { date: bookingDate, venue: selectedVenue || null },
+        }));
+      } finally {
+        if (alive) setLoadingAvailability(false);
+      }
+    }
+
+    run();
+
+    return () => {
+      alive = false;
+    };
+  }, [bookingDate, selectedVenue, availabilityCache]);
+
+  function updateCartQuantity(serviceId: number, quantity: number) {
+    markDraftInteractive();
+    setCart((prev) => prev.map((item) => item.service_id === serviceId ? { ...item, quantity: Math.max(1, Math.min(24, quantity)) } : item));
+  }
 
   function addService(service: Service, serviceTypeName: string) {
     if (cart.some((item) => item.service_id === service.id)) {
       return;
     }
 
-    const error = getCapacityError(service, guestCount);
-    if (error) {
-      setCapacityError(error);
+    const disabledReason = serviceDisabledReason(service, serviceTypeName);
+    if (disabledReason && disabledReason !== 'Already selected.') {
+      setCapacityError(disabledReason);
       return;
     }
 
     markDraftInteractive();
+
     setCart((prev) => [
       ...prev,
       {
@@ -768,11 +1021,17 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
         name: service.name,
         area: service.service_type ?? serviceTypeName,
         price: Number(service.price),
+        quantity: 1,
         min_guests: service.min_guests ?? null,
         max_guests: service.max_guests ?? null,
         capacity_note: service.capacity_note ?? null,
       },
     ]);
+
+    if (!selectedVenue && String(service.service_type ?? serviceTypeName).trim().toLowerCase() === 'area') {
+      setSelectedVenue(service.name);
+    }
+
     clearLocalError('items');
   }
 
@@ -781,25 +1040,16 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
     setCart((prev) => prev.filter((item) => item.service_id !== serviceId));
   }
 
-  const totalAmount = useMemo(
-    () => cart.reduce((sum, item) => sum + Number(item.price), 0),
-    [cart],
-  );
-
-  const surveyQrUrl = survey?.qr_image_url ? normalizeAssetUrl(String(survey.qr_image_url)) : null;
-  const qrSrc = qrStage === 'remote' ? surveyQrUrl : qrStage === 'fallback' ? qrFallback : null;
-
-
   function validateBeforeSubmit() {
     const nextErrors: LocalFieldErrors = {};
 
     if (!data.client_name.trim()) nextErrors.client_name = 'Please enter the client name.';
-    if (!data.client_contact_number.trim()) nextErrors.client_contact_number = 'Please enter the contact number.';
+    if (!/^09\d{9}$/.test(data.client_contact_number.trim())) nextErrors.client_contact_number = 'Contact number must start with 09 and contain exactly 11 digits.';
     if (!data.client_email.trim()) nextErrors.client_email = 'Please enter the client email.';
     if (!data.type_of_event.trim()) nextErrors.type_of_event = 'Please enter the type of event.';
     if (!data.client_address.trim()) nextErrors.client_address = 'Please enter the client address.';
-    if (!data.number_of_guests.trim() || Number(data.number_of_guests) <= 0) {
-      nextErrors.number_of_guests = 'Please enter a valid number of guests.';
+    if (!data.number_of_guests.trim() || Number(data.number_of_guests) <= 0 || Number(data.number_of_guests) > 2000) {
+      nextErrors.number_of_guests = 'Please enter a valid number of guests from 1 to 2000.';
     }
 
     if (!bookingDate) {
@@ -814,8 +1064,25 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
       nextErrors.items = 'Please select at least one service.';
     }
 
+    if (!hasAreaServiceSelected) {
+      nextErrors.items = 'Please select at least one venue/area service before submitting the booking.';
+    }
+
+    if (selectedVenue && !selectedVenueMatchesCart) {
+      nextErrors.items = 'The selected availability venue does not match the chosen area service. Please select the matching area service or change the venue reference.';
+    }
+
     if (capacityError) {
       nextErrors.items = capacityError;
+    }
+
+    if (data.is_public_calendar_visible && !data.public_calendar_title.trim()) {
+      nextErrors.public_calendar_title = 'Please enter the title that should appear on the public calendar.';
+    }
+
+    const duplicateExtraDates = new Set(extraDates.filter(Boolean)).size !== extraDates.filter(Boolean).length;
+    if (duplicateExtraDates) {
+      nextErrors.booking_date = 'Additional dates must be unique.';
     }
 
     if (!data.survey_email.trim()) {
@@ -863,18 +1130,26 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
       return;
     }
 
+    const extraSchedules = extraDates
+      .map((date) => ({ date, range: computeDateRange(date, selectedBlocks) }))
+      .filter((entry) => entry.range)
+      .map((entry) => ({ from: entry.range!.from, to: entry.range!.to }));
+
     transform(() => ({
       ...data,
       service_id: cart[0]?.service_id ?? null,
       booking_date_from: range.from,
       booking_date_to: range.to,
       booking_status: isClient ? 'pending' : data.booking_status,
-      number_of_guests: Number(data.number_of_guests || 0),
+      number_of_guests: String(Number(data.number_of_guests || 0)),
+      is_public_calendar_visible: data.is_public_calendar_visible ? '1' : '0',
+      public_calendar_title: data.public_calendar_title.trim(),
+      extra_schedules: extraSchedules,
       items: cart.map((item) => ({
         service_id: item.service_id,
-        quantity: 1,
+        quantity: Math.max(1, Number(item.quantity || 1)),
       })),
-    }));
+    } as any));
 
     post('/bookings', {
       forceFormData: true,
@@ -890,6 +1165,35 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
       <BookingViewSwitch showBackend={canAccessBackendDesign} backendHref={backendDesignHref} />
 
       <div className="space-y-6 p-4 md:p-6">
+        {draftReady && draftRestoreCandidate ? (
+          <Card className="border-amber-200 bg-amber-50 dark:border-amber-400/20 dark:bg-amber-500/10">
+            <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">Recovered draft found</div>
+                <div className="text-sm text-amber-800/90 dark:text-amber-100/80">
+                  {formatDraftSavedAt(draftRestoreCandidate.saved_at)}
+                  {draftRestoreCandidate.survey_proof_name ? ` • Previous proof image: ${draftRestoreCandidate.survey_proof_name}` : ''}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => restoreDraft(draftRestoreCandidate)}>
+                  Restore draft
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    clearDraftStorage();
+                    setDraftGateResolved(true);
+                  }}
+                >
+                  Discard
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card className="overflow-hidden border-black/5 bg-white shadow-sm dark:border-white/10 dark:bg-[#121318]">
           <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="space-y-4 px-6 py-8 sm:px-8">
@@ -898,11 +1202,9 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
               </div>
 
               <div>
-                <h1 className="text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">
-                  Book your schedule
-                </h1>
+                <h1 className="text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">Book your schedule</h1>
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300">
-                  Choose your details, date, time block, and service. When the form is incomplete, the page now jumps to the first missing section so the client can correct it quickly.
+                  Choose your client details, booking date, time blocks, venue, services, and survey proof. This version keeps the booking-form availability aligned with the selected venue reference.
                 </p>
               </div>
 
@@ -920,258 +1222,212 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                   className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
                 >
                   <Info className="h-4 w-4" />
-                  Need Assistance
+                  Contact Office
                 </Link>
               </div>
             </div>
 
-            <div className="border-t border-black/5 bg-[#f7f5ef] px-6 py-8 dark:border-white/10 dark:bg-white/5 lg:border-l lg:border-t-0">
-              <div className="rounded-[1.5rem] border border-black/5 bg-white p-5 dark:border-white/10 dark:bg-[#17181c]">
-                <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
-                  Current Selection
+            <div className="border-t border-black/5 bg-[#f7f5ef] px-6 py-8 dark:border-white/10 dark:bg-[#0f1014] sm:px-8 lg:border-l lg:border-t-0">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Draft status</div>
+                  <div className="mt-2 text-sm text-slate-700 dark:text-slate-200">{formatDraftSavedAt(draftSavedAt)}</div>
                 </div>
+                <Button type="button" variant="outline" size="sm" onClick={clearDraftStorage}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Clear draft
+                </Button>
+              </div>
 
-                <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-slate-500 dark:text-slate-300">Booking date</span>
-                    <span className="font-semibold text-right">{bookingDate || '-'}</span>
-                  </div>
-
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-slate-500 dark:text-slate-300">Blocks</span>
-                    <span className="font-semibold text-right">
-                      {selectedBlocks.length > 0 ? selectedBlocks.join(' + ') : '-'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-slate-500 dark:text-slate-300">Selected services</span>
-                    <span className="font-semibold text-right">{cart.length}</span>
-                  </div>
-
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-slate-500 dark:text-slate-300">Estimated total</span>
-                    <span className="font-semibold text-right">₱ {formatMoney(totalAmount)}</span>
-                  </div>
-
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-slate-500 dark:text-slate-300">Guest count</span>
-                    <span className="font-semibold text-right">{data.number_of_guests || '-'}</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-[#dce9e4] bg-[#eef7f4] px-4 py-3 text-xs leading-6 text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
-                  Capacity notes are checked against the selected service and guest count before submission. After saving, the flow continues to the payment screen.
+              <div className="mt-6 rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/5">
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">Booking summary</div>
+                <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                  <div>Date: {bookingDate || '—'}</div>
+                  <div>Blocks: {selectedBlocks.length > 0 ? selectedBlocks.join(', ') : '—'}</div>
+                  {selectedVenue ? (
+                    <div>
+                      Venue reference: <strong>{selectedVenue}</strong>
+                    </div>
+                  ) : null}
+                  <div>Services selected: {cart.length}</div>
+                  <div>Scheduled days: {daySpanFromSelections(bookingDate, extraDates)}</div>
+                  <div>Estimated total: ₱ {formatMoney(totalAmount)}</div>
                 </div>
               </div>
             </div>
           </div>
         </Card>
 
-        {draftRestoreCandidate ? (
-          <Card className="border-[#bfd2ff] bg-[#eef4ff] dark:border-[#263541] dark:bg-[#16212b]">
-            <CardContent className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 rounded-full border border-[#bfd2ff] bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#1645ac] dark:border-[#3f5b9d] dark:bg-[#1c2740] dark:text-[#9dc0ff]">
-                  <Save className="h-3.5 w-3.5" /> Draft Found
-                </div>
-                <div className="text-lg font-semibold text-[#1f1f1c] dark:text-white">
-                  A saved booking draft is available on this device.
-                </div>
-                <div className="text-sm leading-7 text-slate-600 dark:text-slate-300">
-                  {formatDraftSavedAt(draftRestoreCandidate.saved_at)}. You can restore it and continue where you left off. For security reasons, the survey proof image file cannot be restored automatically and must be uploaded again.
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button type="button" variant="outline" onClick={() => clearDraftStorage()}>
-                  Discard Draft
-                </Button>
-                <Button type="button" onClick={() => restoreDraft(draftRestoreCandidate)}>
-                  Restore Draft
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-black/5 bg-white/80 dark:border-white/10 dark:bg-[#121318]">
-            <CardContent className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 rounded-full border border-[#dce9e4] bg-[#eef7f4] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
-                  <Save className="h-3.5 w-3.5" /> Draft Autosave
-                </div>
-                <div className="text-sm leading-7 text-slate-600 dark:text-slate-300">
-                  {formatDraftSavedAt(draftSavedAt)} The form now saves locally while you type so refreshes or accidental tab closes do not wipe the whole booking.
-                </div>
-                {data.survey_proof_image ? (
-                  <div className="text-xs text-amber-700 dark:text-amber-300">
-                    The uploaded survey proof image is not included in local draft storage. Re-upload it if the page is refreshed.
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button type="button" variant="outline" onClick={() => persistDraft()}>
-                  Save Draft Now
-                </Button>
-                <Button type="button" variant="outline" onClick={() => clearDraftStorage()}>
-                  Clear Saved Draft
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         <form onSubmit={submitBooking} className="space-y-6">
-          <Card ref={setSectionRef('client')}>
+          <Card ref={setSectionRef('client')} className="border-black/5 dark:border-white/10">
             <CardHeader>
-              <CardTitle>Client details</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Users className="h-5 w-5" />
+                Client details
+              </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="client_name">Client Name</Label>
-                <Input
-                  id="client_name"
-                  value={data.client_name}
-                  onChange={(e) => updateField('client_name', e.currentTarget.value)}
-                  required
-                  className={fieldClass(Boolean(localErrors.client_name || errors.client_name))}
-                />
+                <Label htmlFor="client_name">Client name</Label>
+                <Input id="client_name" value={data.client_name} onChange={(e) => updateField('client_name', e.target.value)} className={fieldClass(Boolean(localErrors.client_name || errors.client_name))} />
                 <FieldError message={localErrors.client_name || errors.client_name} />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="company_name">Company / Organization</Label>
-                <Input
-                  id="company_name"
-                  value={data.company_name}
-                  onChange={(e) => updateField('company_name', e.currentTarget.value)}
-                  className={fieldClass(Boolean(localErrors.company_name || errors.company_name))}
-                />
+                <Label htmlFor="company_name_preset">Company / organization</Label>
+                <select
+                  id="company_name_preset"
+                  value={companyPreset}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCompanyPreset(value);
+                    if (value && value !== 'Others') {
+                      updateField('company_name', value as any);
+                    } else if (value === '') {
+                      updateField('company_name', '' as any);
+                    }
+                  }}
+                  className={cn('h-10 w-full rounded-md border border-input bg-background px-3 text-sm', fieldClass(Boolean(localErrors.company_name || errors.company_name)))}
+                >
+                  <option value="">Select company / organization</option>
+                  {Array.from(DEFAULT_COMPANY_OPTIONS).sort((a, b) => a.localeCompare(b)).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+                {companyPreset === 'Others' || (!companyPreset && data.company_name && !DEFAULT_COMPANY_OPTIONS.includes(data.company_name as any)) ? (
+                  <Input id="company_name" value={data.company_name} onChange={(e) => updateField('company_name', e.target.value)} placeholder="Enter company / organization" className={fieldClass(Boolean(localErrors.company_name || errors.company_name))} />
+                ) : null}
                 <FieldError message={localErrors.company_name || errors.company_name} />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="client_contact_number">Contact Number</Label>
-                <Input
-                  id="client_contact_number"
-                  value={data.client_contact_number}
-                  onChange={(e) => updateField('client_contact_number', e.currentTarget.value)}
-                  required
-                  className={fieldClass(Boolean(localErrors.client_contact_number || errors.client_contact_number))}
-                />
+                <Label htmlFor="client_contact_number">Contact number</Label>
+                <Input id="client_contact_number" value={data.client_contact_number} maxLength={11} onChange={(e) => updateField('client_contact_number', cleanPhoneInput(e.target.value) as any)} placeholder="09XXXXXXXXX" className={fieldClass(Boolean(localErrors.client_contact_number || errors.client_contact_number))} />
                 <FieldError message={localErrors.client_contact_number || errors.client_contact_number} />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="client_email">Client Email</Label>
-                <Input
-                  id="client_email"
-                  type="email"
-                  value={data.client_email}
-                  onChange={(e) => updateField('client_email', e.currentTarget.value)}
-                  required
-                  disabled={isClient && !!authEmail}
-                  className={fieldClass(Boolean(localErrors.client_email || errors.client_email), isClient && !!authEmail ? 'bg-muted text-muted-foreground' : undefined)}
-                />
+                <Label htmlFor="client_email">Client email</Label>
+                <Input id="client_email" type="email" value={data.client_email} disabled={isClient && !!authEmail} onChange={(e) => updateField('client_email', e.target.value)} className={fieldClass(Boolean(localErrors.client_email || errors.client_email))} />
                 <FieldError message={localErrors.client_email || errors.client_email} />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="head_of_organization">Head of Organization</Label>
-                <Input
-                  id="head_of_organization"
-                  value={data.head_of_organization}
-                  onChange={(e) => updateField('head_of_organization', e.currentTarget.value)}
-                  className={fieldClass(Boolean(localErrors.head_of_organization || errors.head_of_organization))}
-                />
+                <Label htmlFor="head_of_organization">Head of organization</Label>
+                <Input id="head_of_organization" value={data.head_of_organization} onChange={(e) => updateField('head_of_organization', e.target.value)} className={fieldClass(Boolean(localErrors.head_of_organization || errors.head_of_organization))} />
                 <FieldError message={localErrors.head_of_organization || errors.head_of_organization} />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="type_of_event">Type of Event</Label>
-                <Input
-                  id="type_of_event"
-                  value={data.type_of_event}
-                  onChange={(e) => updateField('type_of_event', e.currentTarget.value)}
-                  required
-                  className={fieldClass(Boolean(localErrors.type_of_event || errors.type_of_event))}
-                />
+                <Label htmlFor="type_of_event">Type of event</Label>
+                <select id="type_of_event" value={eventTypePreset} onChange={(e) => {
+                  const value = e.target.value;
+                  setEventTypePreset(value);
+                  if (value && value !== 'Others') {
+                    updateField('type_of_event', value as any);
+                  } else if (value === '') {
+                    updateField('type_of_event', '' as any);
+                  }
+                }} className={cn('h-10 w-full rounded-md border border-input bg-background px-3 text-sm', fieldClass(Boolean(localErrors.type_of_event || errors.type_of_event)))}>
+                  <option value="">Select event type</option>
+                  {EVENT_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+                {eventTypePreset === 'Others' || (!eventTypePreset && data.type_of_event && !EVENT_TYPE_OPTIONS.includes(data.type_of_event as any)) ? (
+                  <Input id="type_of_event_custom" value={data.type_of_event} onChange={(e) => updateField('type_of_event', e.target.value)} placeholder="Enter event type" className={fieldClass(Boolean(localErrors.type_of_event || errors.type_of_event))} />
+                ) : null}
                 <FieldError message={localErrors.type_of_event || errors.type_of_event} />
               </div>
 
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="client_address">Address</Label>
-                <textarea
-                  id="client_address"
-                  value={data.client_address}
-                  onChange={(e) => updateField('client_address', e.currentTarget.value)}
-                  rows={3}
-                  className={fieldClass(Boolean(localErrors.client_address || errors.client_address), 'w-full rounded-md bg-background px-3 py-2 text-sm')}
-                  required
-                />
+                <Input id="client_address" value={data.client_address} onChange={(e) => updateField('client_address', e.target.value)} className={fieldClass(Boolean(localErrors.client_address || errors.client_address))} />
                 <FieldError message={localErrors.client_address || errors.client_address} />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="number_of_guests">Number of Guests</Label>
-                <Input
-                  id="number_of_guests"
-                  type="number"
-                  min="1"
-                  value={data.number_of_guests}
-                  onChange={(e) => updateField('number_of_guests', e.currentTarget.value)}
-                  required
-                  className={fieldClass(Boolean(localErrors.number_of_guests || errors.number_of_guests))}
-                />
+                <Label htmlFor="number_of_guests_preset">Number of guests</Label>
+                <select id="number_of_guests_preset" value={guestPreset} onChange={(e) => setGuestPreset(e.target.value)} className={cn('h-10 w-full rounded-md border border-input bg-background px-3 text-sm', fieldClass(Boolean(localErrors.number_of_guests || errors.number_of_guests)))}>
+                  {GUEST_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                {guestPreset === 'custom' ? (
+                  <Input id="number_of_guests" type="number" min={1} max={2000} value={data.number_of_guests} onChange={(e) => updateField('number_of_guests', e.target.value)} placeholder="Enter custom guest count" className={fieldClass(Boolean(localErrors.number_of_guests || errors.number_of_guests))} />
+                ) : null}
                 <FieldError message={localErrors.number_of_guests || errors.number_of_guests} />
               </div>
 
-              {!isClient && (
+              {!isClient ? (
                 <div className="space-y-2">
-                  <Label htmlFor="booking_status">Initial Booking Status</Label>
+                  <Label htmlFor="booking_status">Initial booking status</Label>
                   <select
                     id="booking_status"
                     value={data.booking_status}
-                    onChange={(e) => updateField('booking_status', e.currentTarget.value)}
-                    className={fieldClass(Boolean(localErrors.booking_status || errors.booking_status), 'h-10 w-full rounded-md bg-background px-3 text-sm')}
+                    onChange={(e) => updateField('booking_status', e.target.value)}
+                    className={cn('h-10 w-full rounded-md border border-input bg-background px-3 text-sm', fieldClass(Boolean(localErrors.booking_status || errors.booking_status)))}
                   >
                     <option value="pending">Pending</option>
                     <option value="confirmed">Confirmed</option>
                     <option value="active">Active</option>
-                    <option value="declined">Declined</option>
-                    <option value="cancelled">Cancelled</option>
-                    <option value="completed">Completed</option>
                   </select>
                   <FieldError message={localErrors.booking_status || errors.booking_status} />
                 </div>
-              )}
+              ) : null}
             </CardContent>
           </Card>
 
-          <Card ref={setSectionRef('schedule')}>
+          <Card ref={setSectionRef('schedule')} className="border-black/5 dark:border-white/10">
             <CardHeader>
-              <CardTitle>Choose date and time</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <CalendarDays className="h-5 w-5" />
+                Schedule and availability
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+              <div className="grid gap-4 lg:grid-cols-[260px_260px_1fr]">
                 <div className="space-y-2">
-                  <Label htmlFor="booking_date">Booking Date</Label>
+                  <Label htmlFor="booking_date">Booking date</Label>
                   <Input
                     id="booking_date"
                     type="date"
                     min={todayLocal()}
                     value={bookingDate}
-                    onChange={(e) => { setBookingDate(e.currentTarget.value); clearLocalError('booking_date'); clearLocalError('selected_blocks'); }}
-                    required
+                    onChange={(e) => {
+                      markDraftInteractive();
+                      setBookingDate(e.currentTarget.value);
+                      clearLocalError('booking_date');
+                      clearLocalError('selected_blocks');
+                    }}
                     className={fieldClass(Boolean(localErrors.booking_date || scheduleError || errors.booking_date_from || errors.booking_date_to))}
                   />
+                  <FieldError message={localErrors.booking_date || scheduleError || errors.booking_date_from || errors.booking_date_to} />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Time Block</Label>
+                  <Label htmlFor="booking_venue_reference">Availability venue reference</Label>
+                  <select
+                    id="booking_venue_reference"
+                    value={selectedVenue}
+                    onChange={(e) => {
+                      markDraftInteractive();
+                      setSelectedVenue(e.currentTarget.value);
+                    }}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Select venue reference</option>
+                    {venueOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    This keeps the booking form checker aligned with the area selected from the calendar flow.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Time block</Label>
                   <div className="grid gap-3 md:grid-cols-3">
-                    {(['AM', 'PM', 'EVE'] as BlockKey[]).map((block) => {
+                    {BLOCK_KEYS.map((block) => {
                       const selected = selectedBlocks.includes(block);
                       const available = isBlockAvailable(currentAvailability, block);
 
@@ -1179,8 +1435,11 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                         <button
                           key={block}
                           type="button"
-                          onClick={() => { markDraftInteractive();
-                      setSelectedBlocks((prev) => toggleBlock(prev, block)); clearLocalError('selected_blocks'); }}
+                          onClick={() => {
+                            markDraftInteractive();
+                            setSelectedBlocks((prev) => toggleBlock(prev, block));
+                            clearLocalError('selected_blocks');
+                          }}
                           disabled={!available || !bookingDate}
                           className={cn(
                             'rounded-2xl border px-4 py-4 text-left transition',
@@ -1190,301 +1449,353 @@ export default function CreateBooking({ serviceTypes, initialSchedule }: CreateB
                             (!available || !bookingDate) && 'cursor-not-allowed opacity-55',
                           )}
                         >
-                          <div className="text-sm font-semibold">{BLOCKS[block].label}</div>
-                          <div className="mt-1 text-xs opacity-85">{BLOCKS[block].time}</div>
+                          <div className="text-sm font-semibold">{BLOCK_META[block].label}</div>
+                          <div className="mt-1 text-xs opacity-85">{BLOCK_META[block].time}</div>
+                          <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em]">
+                            {available ? 'Available' : 'Unavailable'}
+                          </div>
                         </button>
                       );
                     })}
                   </div>
+                  <FieldError message={localErrors.selected_blocks} />
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-black/5 bg-[#f7f5ef] px-4 py-4 text-sm dark:border-white/10 dark:bg-white/5">
-                {loadingAvailability ? (
-                  <div>Checking availability...</div>
-                ) : data.booking_date_from && data.booking_date_to ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-[#0f8b6d]" />
-                    <span>
-                      Schedule selected:
-                      <strong className="ml-1">
-                        {data.booking_date_from} to {data.booking_date_to}
-                      </strong>
-                    </span>
+              <div className="rounded-2xl border border-black/5 bg-[#f7f5ef] p-4 dark:border-white/10 dark:bg-white/5">
+                <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700 dark:text-slate-200">
+                  <span className="font-semibold">Current availability</span>
+                  {loadingAvailability ? <span>Loading…</span> : null}
+                  {!loadingAvailability && currentAvailability?.is_fully_booked ? (
+                    <span className="rounded-full bg-red-100 px-3 py-1 text-red-700 dark:bg-red-500/10 dark:text-red-200">Fully booked</span>
+                  ) : null}
+                </div>
+                <div className="mt-4 space-y-3 rounded-2xl border border-black/5 bg-white px-4 py-4 dark:border-white/10 dark:bg-slate-950/50">
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white">Additional dates</div>
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      type="date"
+                      min={todayLocal()}
+                      value={extraDateInput}
+                      onChange={(e) => {
+                        markDraftInteractive();
+                        setExtraDateInput(e.currentTarget.value);
+                      }}
+                      className="max-w-[220px]"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        if (!extraDateInput || extraDateInput === bookingDate || extraDates.includes(extraDateInput)) return;
+                        markDraftInteractive();
+                        setExtraDates((prev) => [...prev, extraDateInput].sort());
+                        setExtraDateInput('');
+                      }}
+                    >
+                      Add date
+                    </Button>
                   </div>
-                ) : (
-                  <div>Select a date and at least one valid block.</div>
-                )}
-              </div>
-
-              {(scheduleError || errors.booking_date_from || errors.booking_date_to) && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
-                  {localErrors.booking_date || localErrors.selected_blocks || scheduleError || errors.booking_date_from || errors.booking_date_to}
+                  {extraDates.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {extraDates.map((date) => (
+                        <button
+                          key={date}
+                          type="button"
+                          onClick={() => {
+                            markDraftInteractive();
+                            setExtraDates((prev) => prev.filter((item) => item !== date));
+                          }}
+                          className="rounded-full border border-black/10 px-3 py-1 text-xs font-medium dark:border-white/10"
+                        >
+                          {date} ×
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Add more dates when the same booking should repeat using the same selected time blocks and items.</div>
+                  )}
                 </div>
-              )}
+
+                <div className="mt-4 space-y-3 rounded-2xl border border-black/5 bg-white px-4 py-4 dark:border-white/10 dark:bg-slate-950/50">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Public calendar visibility</div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Enable this only if the client wants the event title to appear on the public calendar instead of remaining private.</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={data.is_public_calendar_visible}
+                      onChange={(e) => updateField('is_public_calendar_visible', e.currentTarget.checked)}
+                      className="mt-1 h-4 w-4"
+                    />
+                  </div>
+                  {data.is_public_calendar_visible ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="public_calendar_title">Public calendar title</Label>
+                      <Input
+                        id="public_calendar_title"
+                        value={data.public_calendar_title}
+                        onChange={(e) => updateField('public_calendar_title', e.currentTarget.value)}
+                        placeholder="Example: City Youth Leadership Summit 2026"
+                      />
+                      <FieldError message={localErrors.public_calendar_title || (errors.public_calendar_title as string | undefined)} />
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  {BLOCK_KEYS.map((block) => {
+                    const available = isBlockAvailable(currentAvailability, block);
+                    return (
+                      <div key={block} className={cn('rounded-xl px-3 py-3 text-sm font-medium', available ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200' : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200')}>
+                        {BLOCK_META[block].label} • {available ? 'Available' : 'Unavailable'}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          <Card ref={setSectionRef('services')}>
+          <Card ref={setSectionRef('services')} className="border-black/5 dark:border-white/10">
             <CardHeader>
-              <CardTitle>Choose services</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Search className="h-5 w-5" />
+                Services and venue items
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="rounded-2xl border border-[#dce9e4] bg-[#eef7f4] px-4 py-3 text-sm text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
-                Choose one or more services. When you select one, it disappears from the available list and moves to the selected-services panel for easier review.
-              </div>
-
               <div className="space-y-2">
-                <Label htmlFor="service_search">Search Service</Label>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    id="service_search"
-                    value={search}
-                    onChange={(e) => { markDraftInteractive(); setSearch(e.currentTarget.value); }}
-                    className={fieldClass(Boolean(errors.service_search), 'pl-10')}
-                    placeholder="Search service or area"
-                  />
-                </div>
+                <Label htmlFor="service_search">Search services</Label>
+                <Input
+                  id="service_search"
+                  value={search}
+                  onChange={(e) => {
+                    markDraftInteractive();
+                    setSearch(e.target.value);
+                  }}
+                  placeholder="Search by service, description, or service type"
+                />
               </div>
 
-              {(capacityError || localErrors.items) && (
-                <div className="rounded-2xl border border-[#f2c8c8] bg-[#fff6f6] px-4 py-3 text-sm text-[#a52a2a] dark:border-[#6e2a2a] dark:bg-[#241414] dark:text-[#ffbcbc]">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{localErrors.items || capacityError}</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+              <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
                 <div className="space-y-4">
-                  {filteredServiceTypes.length > 0 ? (
+                  {filteredServiceTypes.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-black/10 p-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                      No available services matched your current search.
+                    </div>
+                  ) : (
                     filteredServiceTypes.map((type) => (
-                      <div
-                        key={type.id}
-                        className="rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#17181c]"
-                      >
-                        <div className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                          {type.name}
-                        </div>
-
-                        <div className="grid gap-3 md:grid-cols-2">
+                      <div key={type.id} className="space-y-3 rounded-2xl border border-black/5 p-4 dark:border-white/10">
+                        <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{type.name}</div>
+                        <div className="grid gap-3 lg:grid-cols-3">
                           {type.services.map((service) => {
                             const capacityLabel = getCapacityLabel(service);
-
+                            const disabledReason = serviceDisabledReason(service, type.name);
+                            const isDisabled = Boolean(disabledReason);
                             return (
                               <button
                                 key={service.id}
                                 type="button"
                                 onClick={() => addService(service, type.name)}
-                                className="rounded-2xl border border-black/10 bg-[#faf9f6] p-4 text-left transition hover:border-[#0f8b6d] hover:bg-[#f3fbf8] dark:border-white/10 dark:bg-[#121318] dark:hover:border-[#8ea3ff] dark:hover:bg-[#16202d]"
-                              >
-                                <div className="text-base font-semibold text-[#1f1f1c] dark:text-white">
-                                  {service.name}
-                                </div>
-
-                                <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
-                                  {type.name}
-                                </div>
-
-                                <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                                  {service.description}
-                                </p>
-
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  <span className="rounded-full bg-[#eef7f4] px-3 py-1 text-xs font-semibold text-[#174f40] dark:bg-[#16212b] dark:text-[#9dc0ff]">
-                                    ₱ {formatMoney(Number(service.price))}
-                                  </span>
-
-                                  {capacityLabel && (
-                                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-slate-200">
-                                      <Users className="mr-1 inline h-3 w-3" />
-                                      {capacityLabel}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {service.capacity_note && (
-                                  <div className="mt-3 text-xs text-slate-500 dark:text-slate-300">
-                                    {service.capacity_note}
-                                  </div>
+                                disabled={isDisabled}
+                                className={cn(
+                                  'rounded-2xl border border-black/10 bg-white p-4 text-left transition dark:border-white/10 dark:bg-white/5',
+                                  !isDisabled && 'hover:-translate-y-0.5 hover:bg-slate-50 dark:hover:bg-white/10',
+                                  isDisabled && 'cursor-not-allowed opacity-45',
                                 )}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <div className="font-semibold text-slate-900 dark:text-white">{service.name}</div>
+                                      {serviceBehaviorBadges(service, type.name).map((badge) => (
+                                        <span
+                                          key={`${service.id}-${badge}`}
+                                          className={cn(
+                                            'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]',
+                                            badge === 'Popular'
+                                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-100'
+                                              : 'bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200',
+                                          )}
+                                        >
+                                          {badge}
+                                        </span>
+                                      ))}
+                                    </div>
+                                    <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{service.service_type ?? type.name}</div>
+                                  </div>
+                                  <div className="text-sm font-semibold text-slate-900 dark:text-white">₱ {formatMoney(Number(service.price || 0))}</div>
+                                </div>
+                                {service.description ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{service.description}</p> : null}
+                                {capacityLabel ? <div className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-400">{capacityLabel}</div> : null}
+                                {disabledReason && disabledReason !== 'Already selected.' ? <div className="mt-3 text-xs font-medium text-rose-600 dark:text-rose-300">{disabledReason}</div> : null}
                               </button>
                             );
                           })}
                         </div>
                       </div>
                     ))
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">
-                      No services match the current search.
-                    </div>
                   )}
                 </div>
 
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#17181c]">
-                    <div className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                      Selected Services
+                <div className="space-y-4 rounded-2xl border border-black/5 bg-[#f7f5ef] p-4 dark:border-white/10 dark:bg-white/5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Selected items</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">At least one area service is required before booking submission.</div>
                     </div>
+                    <div className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-slate-700 shadow-sm dark:bg-slate-900 dark:text-slate-200">{cart.length}</div>
+                  </div>
 
-                    <div className="max-h-[24rem] space-y-3 overflow-y-auto pr-1 scrollbar-hide">
-                      {cart.length > 0 ? (
-                        cart.map((item) => (
-                          <div
-                            key={item.service_id}
-                            className="rounded-2xl border border-black/10 bg-[#faf9f6] p-4 dark:border-white/10 dark:bg-[#121318]"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="text-sm font-semibold text-[#1f1f1c] dark:text-white">
-                                  {item.name}
+                  {cart.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-black/10 p-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                      No services selected yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {cart.map((item) => (
+                        <div key={item.service_id} className="rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-slate-950/50">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-semibold text-slate-900 dark:text-white">{item.name}</div>
+                              <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{item.area}</div>
+                              {(item.min_guests || item.max_guests) ? (
+                                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                  {item.min_guests && item.max_guests
+                                    ? `${item.min_guests}-${item.max_guests} guests`
+                                    : item.min_guests
+                                      ? `Min ${item.min_guests} guests`
+                                      : `Max ${item.max_guests} guests`}
                                 </div>
-                                <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
-                                  {item.area}
+                              ) : null}
+                              {isAdditionalHourServiceName(item.name) ? (
+                                <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-black/10 px-2 py-1 text-xs dark:border-white/10">
+                                  <button type="button" className="px-2" onClick={() => updateCartQuantity(item.service_id, item.quantity - 1)}>-</button>
+                                  <span className="min-w-[28px] text-center font-semibold">{item.quantity}</span>
+                                  <button type="button" className="px-2" onClick={() => updateCartQuantity(item.service_id, item.quantity + 1)}>+</button>
                                 </div>
-                                <div className="mt-3 text-sm font-semibold text-[#174f40] dark:text-[#9dc0ff]">
-                                  ₱ {formatMoney(Number(item.price))}
-                                </div>
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => removeService(item.service_id)}
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 text-[#a52a2a] transition hover:bg-[#fff6f6] dark:border-white/10 dark:hover:bg-[#241414]"
-                                title="Remove service"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              ) : null}
+                            </div>
+                            <div className="text-right">
+                              <div className="font-semibold text-slate-900 dark:text-white">₱ {formatMoney(Number(item.price || 0) * Math.max(1, Number(item.quantity || 1)))}</div>
+                              {isAdditionalHourServiceName(item.name) ? <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.quantity} hour(s)</div> : null}
+                              <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={() => removeService(item.service_id)}>
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Remove
+                              </Button>
                             </div>
                           </div>
-                        ))
-                      ) : (
-                        <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">
-                          No service selected yet. Choose from the left panel.
                         </div>
-                      )}
-                    </div>
-
-                    <div className="mt-4 rounded-2xl border border-[#dce9e4] bg-[#eef7f4] px-4 py-4 text-sm text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
-                      The selected services shown here are the items that will be sent with the booking after you finalize the form.
-                    </div>
-
-                    <div className="mt-4 rounded-2xl border border-black/5 bg-[#f7f5ef] px-4 py-4 dark:border-white/10 dark:bg-white/5">
-                      <div className="flex items-center justify-between gap-3 text-sm">
-                        <span className="text-slate-500 dark:text-slate-300">Services</span>
-                        <span className="font-semibold">{cart.length}</span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between gap-3 text-sm">
-                        <span className="text-slate-500 dark:text-slate-300">Estimated total</span>
-                        <span className="font-semibold">₱ {formatMoney(totalAmount)}</span>
-                      </div>
-                    </div>
-
-                    <FieldError message={localErrors.items || String((errors.items as any) ?? '')} />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card ref={setSectionRef('survey')}>
-            <CardHeader>
-              <CardTitle>Survey</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-2xl border border-black/5 bg-[#f7f5ef] px-4 py-4 text-sm leading-7 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                Open the survey, then enter the email used and upload the proof image.
-              </div>
-
-              <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
-                <div className="rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#17181c]">
-                  <div className="text-sm font-semibold">Survey QR</div>
-
-                  <div className="mt-4 flex min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-black/10 bg-[#faf9f6] p-4 dark:border-white/10 dark:bg-[#121318]">
-                    {qrSrc ? (
-                      <img
-                        src={qrSrc}
-                        alt="Survey QR"
-                        className="max-h-52 w-auto object-contain"
-                        onError={() => {
-                          if (qrStage === 'remote') setQrStage('fallback');
-                          else if (qrStage === 'fallback') setQrStage('none');
-                        }}
-                      />
-                    ) : (
-                      <div className="text-sm text-slate-500 dark:text-slate-300">QR unavailable</div>
-                    )}
-                  </div>
-
-                  {survey?.url ? (
-                    <a
-                      href={survey.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[#0f8b6d] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
-                    >
-                      Open Survey
-                    </a>
-                  ) : null}
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="survey_email">Survey Email</Label>
-                    <Input
-                      id="survey_email"
-                      type="email"
-                      value={data.survey_email}
-                      onChange={(e) => updateField('survey_email', e.currentTarget.value)}
-                      required
-                      className={fieldClass(Boolean(localErrors.survey_email || errors.survey_email))}
-                    />
-                    <FieldError message={localErrors.survey_email || errors.survey_email} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="survey_proof_image">Survey Proof Image</Label>
-                    <Input
-                      id="survey_proof_image"
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => { updateField('survey_proof_image', e.currentTarget.files?.[0] ?? null); clearLocalError('survey'); }}
-                      required
-                      className={fieldClass(Boolean(localErrors.survey_proof_image || errors.survey_proof_image))}
-                    />
-                    <FieldError message={localErrors.survey_proof_image || errors.survey_proof_image} />
-                  </div>
-
-                  {previewUrl && (
-                    <div className="overflow-hidden rounded-2xl border border-black/10 bg-white p-3 dark:border-white/10 dark:bg-[#17181c]">
-                      <img
-                        src={previewUrl}
-                        alt="Survey proof preview"
-                        className="max-h-72 w-full rounded-xl object-contain"
-                      />
+                      ))}
                     </div>
                   )}
+
+                  {capacityError ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-100">
+                      {capacityError}
+                    </div>
+                  ) : null}
+
+                  <FieldError message={localErrors.items || (errors.items as string | undefined)} />
+
+                  <div className="rounded-2xl border border-black/5 bg-white px-4 py-4 dark:border-white/10 dark:bg-slate-950/50">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">Estimated total</div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">₱ {formatMoney(totalAmount)}</div>
+                    <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">Computed as selected item total × {daySpanFromSelections(bookingDate, extraDates)} scheduled day(s).</div>
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <div className="rounded-2xl border border-[#dce9e4] bg-[#eef7f4] px-4 py-4 text-sm text-[#174f40] dark:border-[#263541] dark:bg-[#16212b] dark:text-[#9dc0ff]">
-            After this booking is saved, the next screen should be used for payment options, proof upload, and reference number submission.
-          </div>
+          <Card ref={setSectionRef('survey')} className="border-black/5 dark:border-white/10">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <CheckCircle2 className="h-5 w-5" />
+                Survey email and proof
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-6 lg:grid-cols-[1fr_320px]">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="survey_email">Survey email</Label>
+                  <Input id="survey_email" type="email" value={data.survey_email} onChange={(e) => updateField('survey_email', e.target.value)} className={fieldClass(Boolean(localErrors.survey_email || errors.survey_email))} />
+                  <FieldError message={localErrors.survey_email || errors.survey_email} />
+                </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <Link href="/bookings">
-              <Button type="button" variant="outline">
-                Cancel
+                <div className="space-y-2">
+                  <Label htmlFor="survey_proof_image">Survey proof image</Label>
+                  <Input
+                    id="survey_proof_image"
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      updateField('survey_proof_image', file);
+                    }}
+                    className={fieldClass(Boolean(localErrors.survey_proof_image || errors.survey_proof_image))}
+                  />
+                  <FieldError message={localErrors.survey_proof_image || errors.survey_proof_image} />
+                </div>
+
+                {previewUrl ? (
+                  <div className="overflow-hidden rounded-2xl border border-black/5 bg-white dark:border-white/10 dark:bg-slate-950/50">
+                    <img src={previewUrl} alt="Survey proof preview" className="h-auto max-h-[360px] w-full object-contain" />
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="space-y-4 rounded-2xl border border-black/5 bg-[#f7f5ef] p-4 dark:border-white/10 dark:bg-white/5">
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">Google Form QR</div>
+                {qrSrc ? (
+                  <div className="overflow-hidden rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-slate-950/50">
+                    <img
+                      src={qrSrc}
+                      alt="Survey QR"
+                      className="mx-auto aspect-square w-full max-w-[240px] object-contain"
+                      onError={() => {
+                        if (qrStage === 'remote') {
+                          setQrStage('fallback');
+                        } else {
+                          setQrStage('none');
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-black/10 p-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                    QR image is not available right now.
+                  </div>
+                )}
+
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-100">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                      Use the same email from the Google Form, then upload the proof image here before submitting the booking.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-slate-500 dark:text-slate-400">
+              Review all sections before submitting. The form stores a local draft automatically while you work.
+            </div>
+            <div className="flex gap-3">
+              <Button type="button" variant="outline" onClick={clearDraftStorage}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Clear draft
               </Button>
-            </Link>
-
-            <Button type="submit" disabled={processing || !!capacityError}>
-              {processing ? 'Submitting...' : 'Save Booking and Continue to Payment'}
-            </Button>
+              <Button type="submit" disabled={processing}>
+                <Save className="mr-2 h-4 w-4" />
+                {processing ? 'Submitting...' : 'Submit booking'}
+              </Button>
+            </div>
           </div>
         </form>
       </div>

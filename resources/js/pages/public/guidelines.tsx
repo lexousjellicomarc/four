@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react';
-import { BookOpenText, ClipboardList, ShieldCheck } from 'lucide-react';
+import { BookOpenText, ClipboardList, ShieldCheck, WalletCards } from 'lucide-react';
 import PageHero from '@/components/public/page-hero';
 import PublicLayout from '@/layouts/public-layout';
 
@@ -8,27 +8,40 @@ const sections = [
     title: 'Booking Preparation',
     icon: ClipboardList,
     points: [
-      'Review the preferred space and target schedule first.',
-      'Prepare your event type and estimated attendance.',
-      'Clarify special setup requirements early.',
+      'Check the preferred venue, schedule, and guest count before opening the formal booking form.',
+      'Prepare event details, organization details, and the contact person information in advance.',
+      'Review whether the request is private or intended for possible public posting before submission.',
+      'Use the availability checker and public calendar first so you can avoid blocked or occupied dates.',
     ],
   },
   {
-    title: 'Venue Conduct',
+    title: 'Payment and Pencil Booking Reminder',
+    icon: WalletCards,
+    points: [
+      'A booking request may still undergo staff review, validation, and payment compliance before it becomes fully settled.',
+      'Clients should keep their reference numbers, proof images, and official payment details accurate and complete.',
+      'Down payment and remaining balance requirements follow the configured booking rules and office validation steps.',
+      'Pending payment uploads do not automatically mean final confirmation until the office completes review.',
+    ],
+  },
+  {
+    title: 'Venue Conduct and Responsibilities',
     icon: ShieldCheck,
     points: [
-      'Observe proper use of the venue and shared areas.',
-      'Follow approved operational limits and staff directions.',
-      'Keep the facility clean, safe, and orderly.',
+      'Observe proper use of the venue, follow approved staff directions, and keep shared areas safe and orderly.',
+      'Ingress, setup, service coordination, and venue use must follow the approved arrangement and current house rules.',
+      'Clients are expected to protect equipment, observe cleanliness, and avoid unauthorized use of restricted areas.',
+      'Any activity that affects safety, facility order, or public operations may be subject to additional office review.',
     ],
   },
   {
-    title: 'Operational Notes',
+    title: 'Terms, Conditions, and Public Notes',
     icon: BookOpenText,
     points: [
-      'Availability is subject to schedule validation and approval.',
-      'Documentary and payment requirements may apply.',
-      'Final arrangements follow the official booking workflow.',
+      'Availability shown on the public side is informative and may still be subject to final operational confirmation.',
+      'Public events may be displayed to other users, while private bookings remain hidden from public details.',
+      'Cancellation, payment compliance, and operational approval remain governed by the current office workflow and applicable policies.',
+      'When in doubt, use the contact and enquiry page so the office can clarify booking, payment, and venue-use requirements.',
     ],
   },
 ];
@@ -40,8 +53,8 @@ export default function GuidelinesPage() {
 
       <PageHero
         eyebrow="Guidelines"
-        title="Booking reminders, venue-use guidance, and public-facing notes."
-        description="A cleaner policy-ready page for booking preparation, venue conduct, and basic operational reminders."
+        title="Booking reminders, terms, conditions, and venue-use guidance."
+        description="A more detailed public page for booking preparation, payment reminders, venue conduct, and public-facing terms and conditions."
         backgroundImages={['/marketing/images/branding/sunrise.jpg', '/marketing/images/hero/night.png']}
         actions={[
           { label: 'Proceed to Booking', href: '/bookings/create' },
@@ -70,7 +83,7 @@ export default function GuidelinesPage() {
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {section.points.map((point) => (
                   <div
                     key={point}

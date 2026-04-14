@@ -10,9 +10,12 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use App\Models\CalendarBlock;
 use App\Models\PublicEvent;
 use App\Models\BookingLifecycleEvent;
+use App\Models\Service;
+
 
 class BookingService implements BookingServiceInterface
 {
@@ -310,6 +313,14 @@ protected function normalizeLifecycleMeta(array $meta): array
             $data['survey_email'] = strtolower(trim((string) $data['survey_email']));
         }
 
+        $areaServiceIds = $this->selectedAreaServiceIdsFromItems($items);
+
+        if (empty($areaServiceIds)) {
+            throw ValidationException::withMessages([
+                'items' => 'Please select at least one venue/area service before scheduling the booking.',
+            ]);
+        }
+
         if (isset($data['booking_date_from'], $data['booking_date_to'])) {
             [$from, $to] = $this->normalizeRangeToPreferred(
                 (string) $data['booking_date_from'],
@@ -319,7 +330,7 @@ protected function normalizeLifecycleMeta(array $meta): array
             $data['booking_date_from'] = $from;
             $data['booking_date_to'] = $to;
 
-            $this->assertTimeSlotAvailable($from, $to, null);
+            $this->assertTimeSlotAvailable($from, $to, $areaServiceIds, null);
         }
 
         $user = auth()->user();
@@ -332,10 +343,8 @@ protected function normalizeLifecycleMeta(array $meta): array
             $data['client_email'] = strtolower(trim((string) $user->email));
             $data['booking_status'] = 'pending';
             $data['payment_status'] = 'unpaid';
-        } else {
-            if (! isset($data['payment_status'])) {
-                $data['payment_status'] = 'unpaid';
-            }
+        } elseif (! isset($data['payment_status'])) {
+            $data['payment_status'] = 'unpaid';
         }
 
         $this->assertGuestCapacityForItems($guestCount, $items);
@@ -343,18 +352,6 @@ protected function normalizeLifecycleMeta(array $meta): array
         $data['service_id'] = $items[0]['service_id'] ?? null;
 
         $booking = Booking::create($data);
-        
-        $this->recordLifecycleEvent(
-    $booking,
-    'booking_created',
-    'Booking submitted',
-    reason: 'The booking record was created and is now being tracked by the lifecycle system.',
-    toStatus: (string) ($booking->booking_status ?? ''),
-    toPaymentStatus: (string) ($booking->payment_status ?? ''),
-    meta: [
-        'source' => 'booking_service.create',
-    ],
-);
 
         if (! empty($items)) {
             $this->syncItems($booking, $items);
@@ -363,25 +360,24 @@ protected function normalizeLifecycleMeta(array $meta): array
         $this->recalculatePaymentStatus($booking);
         $this->createExtraSchedules($booking, $extraSchedules);
 
-        return $booking->refresh()->loadMissing(['createdBy']);
-        if (! empty($data)) {
-    $this->recordLifecycleEvent(
-        $booking,
-        'booking_updated',
-        'Booking details updated',
-        reason: 'One or more booking details were modified.',
-        toStatus: (string) ($booking->booking_status ?? ''),
-        toPaymentStatus: (string) ($booking->payment_status ?? ''),
-        meta: [
-            'changed_fields' => array_values(array_keys($data)),
-            'source' => 'booking_service.update',
-        ],
-    );
-}
+        $booking = $booking->refresh()->loadMissing(['createdBy']);
 
+        $this->recordLifecycleEvent(
+            $booking,
+            'booking_created',
+            'Booking submitted',
+            reason: 'The booking record was created and is now being tracked by the lifecycle system.',
+            toStatus: (string) ($booking->booking_status ?? ''),
+            toPaymentStatus: (string) ($booking->payment_status ?? ''),
+            meta: [
+                'source' => 'booking_service.create',
+                'area_service_ids' => $areaServiceIds,
+            ],
+        );
+
+        return $booking;
     });
 }
-
 
 
     public function update(Booking $booking, array $data): Booking
@@ -424,11 +420,22 @@ protected function normalizeLifecycleMeta(array $meta): array
             ];
 
             $data = array_intersect_key($data, array_flip($allowed));
-
             $data['client_email'] = strtolower(trim((string) $user->email));
 
             $items = null;
             $itemsWasSubmitted = false;
+        }
+
+        $itemsForConflict = $itemsWasSubmitted
+            ? ($items ?? [])
+            : $this->existingItemsForCapacity($booking);
+
+        $areaServiceIds = $this->selectedAreaServiceIdsFromItems($itemsForConflict);
+
+        if (empty($areaServiceIds)) {
+            throw ValidationException::withMessages([
+                'items' => 'A booking must include at least one venue/area service.',
+            ]);
         }
 
         if (isset($data['booking_date_from'], $data['booking_date_to'])) {
@@ -437,7 +444,7 @@ protected function normalizeLifecycleMeta(array $meta): array
                 (string) $data['booking_date_to']
             );
 
-            $this->assertTimeSlotAvailable($from, $to, $booking->id);
+            $this->assertTimeSlotAvailable($from, $to, $areaServiceIds, $booking->id);
 
             $data['booking_date_from'] = $from;
             $data['booking_date_to'] = $to;
@@ -447,15 +454,15 @@ protected function normalizeLifecycleMeta(array $meta): array
             ? (int) $data['number_of_guests']
             : (int) $booking->number_of_guests;
 
-        $itemsForCapacity = $itemsWasSubmitted
-            ? ($items ?? [])
-            : $this->existingItemsForCapacity($booking);
-
-        $this->assertGuestCapacityForItems($guestCount, $itemsForCapacity);
+        $this->assertGuestCapacityForItems($guestCount, $itemsForConflict);
 
         if ($itemsWasSubmitted) {
             $data['service_id'] = $items[0]['service_id'] ?? null;
         }
+
+        $originalStatus = (string) ($booking->booking_status ?? '');
+        $originalPaymentStatus = (string) ($booking->payment_status ?? '');
+        $changedFields = $this->extractChangedFields($booking, $data, $itemsWasSubmitted ? ($items ?? []) : null);
 
         $booking->update($data);
 
@@ -464,17 +471,73 @@ protected function normalizeLifecycleMeta(array $meta): array
         }
 
         $this->recalculatePaymentStatus($booking);
+        $booking = $booking->refresh();
 
-        return $booking->refresh();
+        if (! empty($extraSchedules)) {
+            $this->createExtraSchedules($booking, $extraSchedules);
+            $changedFields[] = 'extra_schedules';
+        }
+
+        $changedFields = array_values(array_unique(array_filter($changedFields)));
+
+        if (! empty($changedFields)) {
+            $this->recordLifecycleEvent(
+                $booking,
+                'booking_updated',
+                'Booking details updated',
+                reason: 'One or more booking details were modified.',
+                fromStatus: $originalStatus,
+                toStatus: (string) ($booking->booking_status ?? ''),
+                fromPaymentStatus: $originalPaymentStatus,
+                toPaymentStatus: (string) ($booking->payment_status ?? ''),
+                meta: [
+                    'changed_fields' => $changedFields,
+                    'source' => 'booking_service.update',
+                ],
+            );
+        }
+
+        return $booking;
     });
 }
 
 
 
     public function delete(Booking $booking): void
-    {
+{
+    DB::transaction(function () use ($booking) {
+        $booking->loadMissing(['payments', 'bookingServices', 'views', 'lifecycleEvents']);
+
+        $this->recordLifecycleEvent(
+            $booking,
+            'booking_deleted',
+            'Booking deleted',
+            reason: 'The booking record and its related operational data were manually removed.',
+            fromStatus: (string) ($booking->booking_status ?? ''),
+            toStatus: 'deleted',
+            toPaymentStatus: (string) ($booking->payment_status ?? ''),
+            meta: [
+                'source' => 'booking_service.delete',
+            ],
+        );
+
+        $this->deleteBookingStoredFiles($booking);
+
+        $booking->payments()->delete();
+        $booking->bookingServices()->delete();
+
+        if (method_exists($booking, 'views')) {
+            $booking->views()->delete();
+        }
+
+        if (method_exists($booking, 'lifecycleEvents')) {
+            $booking->lifecycleEvents()->delete();
+        }
+
         $booking->delete();
-    }
+    });
+}
+
 
     public function getStatusCounts(array $filters = []): array
 {
@@ -533,7 +596,7 @@ protected function normalizeLifecycleMeta(array $meta): array
                 $q->whereDate('booking_date_to', '<=', $filters['date_to']);
             });
     }
-    
+   
     protected function normalizeItemsForBooking(array $items): array
 {
     $normalized = [];
@@ -555,9 +618,11 @@ protected function normalizeLifecycleMeta(array $meta): array
 
         $seen[$serviceId] = true;
 
+        $quantity = max(1, (int) ($row['quantity'] ?? 1));
+
         $normalized[] = [
             'service_id' => $serviceId,
-            'quantity' => 1,
+            'quantity' => $quantity,
         ];
     }
 
@@ -567,10 +632,10 @@ protected function normalizeLifecycleMeta(array $meta): array
 protected function existingItemsForCapacity(Booking $booking): array
 {
     return $booking->bookingServices()
-        ->get(['service_id'])
+        ->get(['service_id', 'quantity'])
         ->map(fn ($row) => [
             'service_id' => (int) $row->service_id,
-            'quantity' => 1,
+            'quantity' => max(1, (int) ($row->quantity ?? 1)),
         ])
         ->all();
 }
@@ -651,7 +716,7 @@ protected function existingItemsForCapacity(Booking $booking): array
     foreach ($this->normalizeItemsForBooking($items) as $item) {
         $lines[] = [
             'service_id' => (int) $item['service_id'],
-            'quantity' => 1,
+            'quantity' => max(1, (int) ($item['quantity'] ?? 1)),
         ];
     }
 
@@ -665,23 +730,18 @@ protected function existingItemsForCapacity(Booking $booking): array
 {
     $booking->loadMissing(['bookingServices.service', 'payments']);
 
-    $itemsTotal = $booking->bookingServices->reduce(function ($carry, $item) {
-        $price = (float) ($item->service->price ?? 0);
-        return $carry + $price;
-    }, 0.0);
-
-    $completedPaid = $booking->payments
-        ->where('status', 'confirmed')
-        ->reduce(fn ($sum, $payment) => $sum + (float) $payment->amount, 0.0);
+    $itemsTotal = $this->roundMoney($this->bookingItemsTotal($booking));
+    $confirmedPaid = $this->roundMoney($this->confirmedPaymentTotal($booking));
+    $submittedPaid = $this->roundMoney($this->submittedPaymentTotal($booking));
 
     $newPaymentStatus = 'unpaid';
 
     if ($itemsTotal <= 0) {
-        $newPaymentStatus = $completedPaid > 0 ? 'paid' : 'unpaid';
+        $newPaymentStatus = $confirmedPaid > 0 ? 'paid' : 'unpaid';
     } else {
-        if ($completedPaid <= 0) {
-            $newPaymentStatus = 'unpaid';
-        } elseif ($completedPaid + 0.00001 >= $itemsTotal) {
+        if ($confirmedPaid <= 0.0) {
+            $newPaymentStatus = $submittedPaid > 0.0 ? 'partial' : 'unpaid';
+        } elseif ($confirmedPaid + 0.00001 >= $itemsTotal) {
             $newPaymentStatus = 'paid';
         } else {
             $newPaymentStatus = 'partial';
@@ -704,7 +764,8 @@ protected function existingItemsForCapacity(Booking $booking): array
             toPaymentStatus: $newPaymentStatus,
             meta: [
                 'items_total' => $itemsTotal,
-                'confirmed_payments_total' => $completedPaid,
+                'submitted_payments_total' => $submittedPaid,
+                'confirmed_payments_total' => $confirmedPaid,
                 'source' => 'booking_service.recalculate_payment_status',
             ],
         );
@@ -714,7 +775,8 @@ protected function existingItemsForCapacity(Booking $booking): array
 
     $this->syncLifecycleStatus($booking);
 }
-    
+
+   
 public function syncLifecycleStatuses(): int
 {
     return (int) ($this->runAutomatedLifecycleMaintenance()['changed_count'] ?? 0);
@@ -809,6 +871,7 @@ protected function cleanupAutoDeletedBookings(): array
     $cutoff = now()->subHours($this->automatedDeletionWindowHours());
 
     $targets = Booking::query()
+        ->with(['payments', 'bookingServices', 'views', 'lifecycleEvents'])
         ->whereIn('booking_status', ['declined', 'cancelled'])
         ->where('updated_at', '<=', $cutoff)
         ->orderBy('id')
@@ -838,11 +901,24 @@ protected function cleanupAutoDeletedBookings(): array
             ],
         );
 
+        $this->deleteBookingStoredFiles($booking);
+        $booking->payments()->delete();
+        $booking->bookingServices()->delete();
+
+        if (method_exists($booking, 'views')) {
+            $booking->views()->delete();
+        }
+
+        if (method_exists($booking, 'lifecycleEvents')) {
+            $booking->lifecycleEvents()->delete();
+        }
+
         $booking->delete();
     }
 
     return $deleted;
 }
+
 
 
 protected function determineAutomaticBookingDecision(Booking $booking): array
@@ -863,16 +939,11 @@ protected function determineAutomaticBookingDecision(Booking $booking): array
         ? $booking->booking_date_to->copy()
         : ($booking->booking_date_to ? Carbon::parse($booking->booking_date_to) : null);
 
-    $itemsTotal = $booking->bookingServices->reduce(function ($carry, $item) {
-        $price = (float) ($item->service->price ?? 0);
-        return $carry + $price;
-    }, 0.0);
+    $itemsTotal = $this->roundMoney($this->bookingItemsTotal($booking));
+    $confirmedTotal = $this->roundMoney($this->confirmedPaymentTotal($booking));
+    $submittedTotal = $this->roundMoney($this->submittedPaymentTotal($booking));
 
-    $submittedTotal = $booking->payments
-        ->whereIn('status', ['pending', 'confirmed'])
-        ->reduce(fn ($sum, $payment) => $sum + (float) $payment->amount, 0.0);
-
-    $downPaymentRequired = $itemsTotal > 0 ? round($itemsTotal * 0.5, 2) : 0.0;
+    $downPaymentRequired = $itemsTotal > 0 ? $this->roundMoney($itemsTotal * 0.5) : 0.0;
     $downPaymentDeadline = $createdAt->copy()->addHours(24);
     $fullPaymentDeadline = $createdAt->copy()->addHours(48);
 
@@ -885,21 +956,43 @@ protected function determineAutomaticBookingDecision(Booking $booking): array
         }
 
         if ($endsAt->lte($now)) {
-            return ['status' => 'completed', 'reason' => 'The scheduled end time has passed.'];
+            return [
+                'status' => 'completed',
+                'reason' => 'The scheduled end time has passed.',
+            ];
         }
 
         if ($startsAt->lte($now) && $endsAt->gt($now)) {
-            return ['status' => 'active', 'reason' => 'The booking schedule is currently in progress.'];
+            return [
+                'status' => 'active',
+                'reason' => 'The booking schedule is currently in progress.',
+            ];
         }
 
-        return ['status' => 'confirmed', 'reason' => 'The booking is fully scheduled and no payment gate is blocking it.'];
+        return [
+            'status' => 'confirmed',
+            'reason' => 'The booking is fully scheduled and no payment gate is blocking it.',
+        ];
     }
 
-    if ($submittedTotal + 0.00001 < $downPaymentRequired) {
+    /**
+     * Security correction:
+     * Only CONFIRMED payments satisfy automated payment compliance.
+     * Pending uploads/screenshots are informative, but they must not
+     * stop the lifecycle engine from enforcing the policy.
+     */
+    if ($confirmedTotal + 0.00001 < $downPaymentRequired) {
         if ($downPaymentDeadline->lte($now)) {
+            if ($submittedTotal > 0.0) {
+                return [
+                    'status' => 'pending',
+                    'reason' => 'A payment was submitted but is still awaiting confirmation. Staff review is required before the booking can move forward.',
+                ];
+            }
+
             return [
                 'status' => 'declined',
-                'reason' => 'The required 50% down payment was not submitted within the first 24 hours.',
+                'reason' => 'The required 50% down payment was not confirmed within the first 24 hours.',
             ];
         }
 
@@ -909,10 +1002,17 @@ protected function determineAutomaticBookingDecision(Booking $booking): array
         ];
     }
 
-    if ($submittedTotal + 0.00001 < $itemsTotal && $fullPaymentDeadline->lte($now)) {
+    if ($confirmedTotal + 0.00001 < $itemsTotal && $fullPaymentDeadline->lte($now)) {
+        if ($submittedTotal > $confirmedTotal) {
+            return [
+                'status' => 'pending',
+                'reason' => 'A remaining payment was submitted but is still awaiting confirmation. Staff review is required before the booking can move forward.',
+            ];
+        }
+
         return [
             'status' => 'declined',
-            'reason' => 'The remaining balance was not completed within 48 hours from booking creation.',
+            'reason' => 'The remaining balance was not confirmed within 48 hours from booking creation.',
         ];
     }
 
@@ -943,6 +1043,7 @@ protected function determineAutomaticBookingDecision(Booking $booking): array
     ];
 }
 
+
 protected function determineAutomaticBookingStatus(Booking $booking): string
 {
     return (string) ($this->determineAutomaticBookingDecision($booking)['status'] ?? 'pending');
@@ -971,16 +1072,19 @@ protected function paymentPolicySnapshot(Booking $booking): array
         'down_required' => $downRequired,
         'down_deadline_at' => $createdAt->copy()->addHours(24),
         'final_deadline_at' => $createdAt->copy()->addHours(48),
-        'has_met_down_payment' => $itemsTotal <= 0 ? true : ($submittedTotal + 0.00001 >= $downRequired),
-        'has_met_full_payment' => $itemsTotal <= 0 ? true : ($submittedTotal + 0.00001 >= $itemsTotal),
+        'has_met_down_payment' => $itemsTotal <= 0 ? true : ($confirmedTotal + 0.00001 >= $downRequired),
+        'has_met_full_payment' => $itemsTotal <= 0 ? true : ($confirmedTotal + 0.00001 >= $itemsTotal),
+        'has_pending_review_payment' => $submittedTotal > $confirmedTotal,
     ];
 }
+
 
 protected function bookingItemsTotal(Booking $booking): float
 {
     return (float) $booking->bookingServices->reduce(function ($carry, $item) {
         $price = (float) ($item->service->price ?? 0);
-        return $carry + $price;
+        $quantity = max(1, (int) ($item->quantity ?? 1));
+        return $carry + ($price * $quantity);
     }, 0.0);
 }
 
@@ -998,6 +1102,103 @@ protected function submittedPaymentTotal(Booking $booking): float
         ->reduce(fn ($sum, $payment) => $sum + (float) $payment->amount, 0.0);
 }
 
+protected function extractChangedFields(Booking $booking, array $incomingData, ?array $newItems = null): array
+{
+    $changed = [];
+
+    foreach ($incomingData as $field => $newValue) {
+        if (in_array($field, ['updated_at'], true)) {
+            continue;
+        }
+
+        $oldValue = $booking->getAttribute($field);
+
+        if ($oldValue instanceof Carbon) {
+            $oldValue = $oldValue->toIso8601String();
+        }
+
+        if ($newValue instanceof Carbon) {
+            $newValue = $newValue->toIso8601String();
+        }
+
+        if (is_bool($oldValue) || is_bool($newValue)) {
+            if ((bool) $oldValue !== (bool) $newValue) {
+                $changed[] = $field;
+            }
+            continue;
+        }
+
+        if ((string) $oldValue !== (string) $newValue) {
+            $changed[] = $field;
+        }
+    }
+
+    if (is_array($newItems)) {
+        $existingServiceIds = $booking->bookingServices()
+            ->pluck('service_id')
+            ->map(fn ($id) => (int) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        $incomingServiceIds = collect($newItems)
+            ->pluck('service_id')
+            ->map(fn ($id) => (int) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        if ($existingServiceIds !== $incomingServiceIds) {
+            $changed[] = 'items';
+        }
+    }
+
+    return array_values(array_unique($changed));
+}
+
+protected function deleteBookingStoredFiles(Booking $booking): void
+{
+    $paths = [];
+
+    if (! empty($booking->survey_proof_image_path)) {
+        $paths[] = (string) $booking->survey_proof_image_path;
+    }
+
+    foreach ($booking->payments as $payment) {
+        if (! empty($payment->proof_image_path)) {
+            $paths[] = (string) $payment->proof_image_path;
+        }
+    }
+
+    $paths = array_values(array_unique(array_filter($paths)));
+
+    foreach ($paths as $path) {
+        $this->deleteStoredPath($path);
+    }
+}
+
+protected function deleteStoredPath(?string $path): void
+{
+    if (! $path) {
+        return;
+    }
+
+    $candidates = array_values(array_unique(array_filter([
+        ltrim((string) $path, '/'),
+        ltrim((string) preg_replace('#^/?storage/#', '', (string) $path), '/'),
+    ])));
+
+    foreach (['local', 'public'] as $disk) {
+        foreach ($candidates as $candidate) {
+            if ($candidate !== '' && Storage::disk($disk)->exists($candidate)) {
+                Storage::disk($disk)->delete($candidate);
+                return;
+            }
+        }
+    }
+}
+
+
 protected function roundMoney(float $value): float
 {
     return round($value, 2);
@@ -1005,42 +1206,69 @@ protected function roundMoney(float $value): float
 
     protected function createExtraSchedules(Booking $baseBooking, array $extraSchedules): void
     {
-        if (empty($extraSchedules)) return;
+        if (empty($extraSchedules)) {
+            return;
+        }
 
-        $baseBooking->loadMissing('bookingServices');
+        $baseBooking->loadMissing(['bookingServices']);
+
+        $areaServiceIds = $this->bookingAreaServiceIds($baseBooking);
+
+        if (empty($areaServiceIds)) {
+            return;
+        }
 
         foreach ($extraSchedules as $slot) {
             $fromRaw = $slot['from'] ?? null;
-            $toRaw   = $slot['to'] ?? null;
+            $toRaw = $slot['to'] ?? null;
 
-            if (empty($fromRaw) || empty($toRaw)) continue;
+            if (empty($fromRaw) || empty($toRaw)) {
+                continue;
+            }
 
             try {
-                [$from, $to] = $this->normalizeRangeToPreferred((string)$fromRaw, (string)$toRaw);
+                [$from, $to] = $this->normalizeRangeToPreferred((string) $fromRaw, (string) $toRaw);
             } catch (\Throwable $e) {
                 continue;
             }
 
-            if ($to->lessThanOrEqualTo($from)) continue;
+            if ($to->lessThanOrEqualTo($from)) {
+                continue;
+            }
 
-            $this->assertTimeSlotAvailable($from, $to, null);
+            $this->assertTimeSlotAvailable($from, $to, $areaServiceIds, null);
 
             $clone = $baseBooking->replicate();
             $clone->booking_date_from = $from;
-            $clone->booking_date_to   = $to;
-            $clone->payment_status    = 'unpaid';
+            $clone->booking_date_to = $to;
+            $clone->payment_status = 'unpaid';
             $clone->save();
 
             foreach ($baseBooking->bookingServices as $item) {
                 $clone->bookingServices()->create([
                     'service_id' => $item->service_id,
-                    'quantity'   => $item->quantity,
+                    'quantity' => $item->quantity,
                 ]);
             }
 
             $this->recalculatePaymentStatus($clone);
+
+            $this->recordLifecycleEvent(
+                $clone,
+                'booking_created',
+                'Booking submitted',
+                reason: 'An additional schedule was created from the same booking request.',
+                toStatus: (string) ($clone->booking_status ?? ''),
+                toPaymentStatus: (string) ($clone->payment_status ?? ''),
+                meta: [
+                    'source' => 'booking_service.create_extra_schedules',
+                    'parent_booking_id' => $baseBooking->id,
+                    'area_service_ids' => $areaServiceIds,
+                ],
+            );
         }
     }
+
 
     private function overlaps(Carbon $aStart, Carbon $aEnd, Carbon $bStart, Carbon $bEnd): bool
     {
@@ -1282,7 +1510,7 @@ protected function roundMoney(float $value): float
         'is_fully_booked' => $isFullyBooked,
     ];
 }
-    
+   
     public function getDashboardDayStatus(string $date): array
 {
     $availability = $this->getDailyAvailability($date);
@@ -1355,7 +1583,22 @@ protected function roundMoney(float $value): float
             }
 
             return $this->areasOverlap((string) ($event->venue ?? ''), $area);
+        })
+        ->values();
 
+    $publicVisibleBookings = Booking::query()
+        ->with(['bookingServices.service.serviceType'])
+        ->whereIn('booking_status', ['active', 'confirmed'])
+        ->where('is_public_calendar_visible', true)
+        ->where('booking_date_from', '<', Carbon::parse($date)->addDay()->startOfDay())
+        ->where('booking_date_to', '>', Carbon::parse($date)->startOfDay())
+        ->get()
+        ->filter(function (Booking $booking) use ($area) {
+            if (! $area) {
+                return true;
+            }
+
+            return $this->bookingMatchesArea($booking, $area);
         })
         ->values();
 
@@ -1396,7 +1639,7 @@ protected function roundMoney(float $value): float
 
     if ($hasRedBlock) {
         $status = 'blocked';
-    } elseif ($hasBlueBlock || $events->isNotEmpty()) {
+    } elseif ($hasBlueBlock || $events->isNotEmpty() || $publicVisibleBookings->isNotEmpty()) {
         $status = 'public_booked';
     } elseif ($hasGoldBlock || (bool) ($availability['is_fully_booked'] ?? false)) {
         $status = 'private_booked';
@@ -1468,7 +1711,9 @@ protected function roundMoney(float $value): float
         'busy' => array_values($availability['busy'] ?? []),
         'free' => array_values($availability['free'] ?? []),
         'is_fully_booked' => (bool) ($availability['is_fully_booked'] ?? false),
-        'event_titles' => $events->pluck('title')->values()->all(),
+        'event_titles' => $events->pluck('title')->merge($publicVisibleBookings->map(function (Booking $booking) {
+            return trim((string) ($booking->public_calendar_title ?: $booking->type_of_event ?: $booking->company_name ?: 'Public booking'));
+        }))->filter()->values()->all(),
         'calendar_blocks' => $calendarBlocks->map(fn (CalendarBlock $block) => [
             'title' => $this->publicCalendarBlockTitle($block),
             'area' => $this->publicCalendarBlockArea($block),
@@ -1889,34 +2134,149 @@ private function bookingMatchesArea(Booking $booking, string $area): bool
 
         return $unavailable;
     }
+    protected function selectedAreaServiceIdsFromItems(array $items): array
+{
+    $serviceIds = collect($items)
+        ->pluck('service_id')
+        ->filter()
+        ->map(fn ($id) => (int) $id)
+        ->unique()
+        ->values()
+        ->all();
 
-    protected function assertTimeSlotAvailable(Carbon $from, Carbon $to, ?int $ignoreBookingId = null): void
-    {
-        if ($to->lte($from)) {
-            throw ValidationException::withMessages([
-                'booking_date_to' => 'End date & time must be after start date & time.',
-            ]);
-        }
+    if (empty($serviceIds)) {
+        return [];
+    }
 
-        $toCalc = $this->normalizeEndForCalc($to);
+    return Service::query()
+        ->with('serviceType')
+        ->whereIn('id', $serviceIds)
+        ->get()
+        ->filter(function (Service $service) {
+            $type = strtolower(trim((string) ($service->serviceType?->name ?? '')));
 
-        $query = Booking::query()
-            ->whereIn('booking_status', ['active', 'confirmed'])
-            ->where(function ($q) use ($from, $toCalc) {
-                $q->where('booking_date_from', '<', $toCalc)
-                    ->where('booking_date_to', '>', $from);
-            });
+            return $type === 'area'
+                || in_array($this->canonicalAreaKey($service->name), array_keys($this->areaOverlapMatrix()), true);
+        })
+        ->pluck('id')
+        ->map(fn ($id) => (int) $id)
+        ->values()
+        ->all();
+}
 
-        if ($ignoreBookingId) {
-            $query->where('id', '!=', $ignoreBookingId);
-        }
 
-        if ($query->exists()) {
-            throw ValidationException::withMessages([
-                'booking_date_from' => 'The selected schedule overlaps an existing CONFIRMED/ACTIVE booking. Please choose another block/date.',
-            ]);
+protected function bookingAreaServiceIds(Booking $booking): array
+{
+    $booking->loadMissing(['bookingServices']);
+
+    return $booking->bookingServices
+        ->pluck('service_id')
+        ->filter()
+        ->map(fn ($id) => (int) $id)
+        ->unique()
+        ->values()
+        ->all();
+}
+
+
+protected function resolveAreaLabelsFromServiceIds(array $serviceIds): array
+{
+    if (empty($serviceIds)) {
+        return [];
+    }
+
+    return Service::query()
+        ->with('serviceType')
+        ->whereIn('id', $serviceIds)
+        ->get()
+        ->filter(function (Service $service) {
+            $type = strtolower(trim((string) ($service->serviceType?->name ?? '')));
+
+            return $type === 'area'
+                || in_array($this->canonicalAreaKey($service->name), array_keys($this->areaOverlapMatrix()), true);
+        })
+        ->map(fn (Service $service) => (string) $service->name)
+        ->filter()
+        ->unique()
+        ->values()
+        ->all();
+}
+
+protected function extractAreaLabelsFromBooking(Booking $booking): array
+{
+    $booking->loadMissing(['bookingServices.service.serviceType']);
+
+    return $booking->bookingServices
+        ->map(fn ($row) => $row->service)
+        ->filter(fn ($service) => $service instanceof Service)
+        ->filter(function (Service $service) {
+            $type = strtolower(trim((string) ($service->serviceType?->name ?? '')));
+
+            return $type === 'area'
+                || in_array($this->canonicalAreaKey($service->name), array_keys($this->areaOverlapMatrix()), true);
+        })
+        ->map(fn (Service $service) => (string) $service->name)
+        ->filter()
+        ->unique()
+        ->values()
+        ->all();
+}
+
+protected function bookingOverlapsRequestedAreas(Booking $booking, array $requestedAreaLabels): bool
+{
+    $existingLabels = $this->extractAreaLabelsFromBooking($booking);
+
+    foreach ($existingLabels as $existing) {
+        foreach ($requestedAreaLabels as $requested) {
+            if ($this->areasOverlap($existing, $requested)) {
+                return true;
+            }
         }
     }
+
+    return false;
+}
+
+    protected function assertTimeSlotAvailable(Carbon $from, Carbon $to, array $requestedAreaServiceIds = [], ?int $ignoreBookingId = null): void
+{
+    if ($to->lte($from)) {
+        throw ValidationException::withMessages([
+            'booking_date_to' => 'End date & time must be after start date & time.',
+        ]);
+    }
+
+    $requestedAreaLabels = $this->resolveAreaLabelsFromServiceIds($requestedAreaServiceIds);
+
+    if (empty($requestedAreaLabels)) {
+        throw ValidationException::withMessages([
+            'items' => 'Please select at least one venue/area service before scheduling the booking.',
+        ]);
+    }
+
+    $toCalc = $this->normalizeEndForCalc($to);
+
+    $overlapping = Booking::query()
+        ->with(['bookingServices.service.serviceType'])
+        ->whereIn('booking_status', ['active', 'confirmed'])
+        ->when($ignoreBookingId, fn ($query) => $query->where('id', '!=', $ignoreBookingId))
+        ->where(function ($query) use ($from, $toCalc) {
+            $query->where('booking_date_from', '<', $toCalc)
+                ->where('booking_date_to', '>', $from);
+        })
+        ->orderBy('booking_date_from')
+        ->get();
+
+    $conflict = $overlapping->first(function (Booking $booking) use ($requestedAreaLabels) {
+        return $this->bookingOverlapsRequestedAreas($booking, $requestedAreaLabels);
+    });
+
+    if ($conflict) {
+        throw ValidationException::withMessages([
+            'booking_date_from' => 'The selected schedule overlaps an existing CONFIRMED/ACTIVE booking for the same area or an overlapping venue scope.',
+        ]);
+    }
+}
+
 
     private function normalizeRangeToPreferred(string $fromRaw, string $toRaw): array
     {

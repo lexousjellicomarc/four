@@ -6,15 +6,14 @@ export default function LocationAssistance() {
   const page = usePage<{ siteSettings?: SiteSettings }>();
   const siteSettings = page.props.siteSettings;
 
-  const address =
-    siteSettings?.address ?? 'CH3X+RRW, Baguio, Benguet, Philippines';
-  const phone = siteSettings?.phone ?? '(074) 446 2009';
-  const email = siteSettings?.email ?? 'info@bccc-ease.com';
+  const address = siteSettings?.address || 'CH3X+RRW, Baguio, Benguet, Philippines';
+  const phone = siteSettings?.phone || '(074) 446 2009';
+  const email = siteSettings?.email || 'info@bccc-ease.com';
   const openMapUrl =
-    siteSettings?.openMapUrl ??
+    siteSettings?.openMapUrl ||
     'https://www.google.com/maps/search/?api=1&query=CH3X%2BRRW%2C%20Baguio%2C%20Benguet%2C%20Philippines';
   const mapEmbedUrl =
-    siteSettings?.mapEmbedUrl ??
+    siteSettings?.mapEmbedUrl ||
     'https://www.google.com/maps?q=CH3X%2BRRW%2C%20Baguio%2C%20Benguet%2C%20Philippines&z=16&output=embed';
 
   return (
@@ -30,8 +29,7 @@ export default function LocationAssistance() {
                 View the convention center on the map
               </h2>
               <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
-                Open the full map for route guidance, or use the contact details
-                below for direct assistance.
+                Open the full map for route guidance, or use the contact details below for direct assistance.
               </p>
             </div>
           </div>
@@ -40,7 +38,7 @@ export default function LocationAssistance() {
             <a
               href={openMapUrl}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="flex items-start gap-3 rounded-2xl border border-black/5 bg-slate-50 px-4 py-4 transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-white/10 dark:bg-white/5 dark:hover:border-emerald-400/30 dark:hover:bg-emerald-500/10"
             >
               <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
@@ -68,7 +66,7 @@ export default function LocationAssistance() {
             <a
               href={openMapUrl}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="inline-flex items-center rounded-full bg-[#174f40] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-[#2d47ff]"
             >
               Open Map

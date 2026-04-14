@@ -21,69 +21,58 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Support\Arr;
 
 class BookingController extends Controller
 {
     public function __construct(
         private readonly BookingServiceInterface $bookings,
         private readonly NotificationService $notifications,
-        
     ) {
     }
+
     private function normalizePaymentPayload(Request $request, array $data, bool $canManage): array
-{
-    $data['amount'] = round((float) ($data['amount'] ?? 0), 2);
+    {
+        $data['amount'] = round((float) ($data['amount'] ?? 0), 2);
 
-    $gateway = strtolower((string) ($data['payment_gateway'] ?? ''));
-    $paymentType = strtolower((string) ($data['payment_type'] ?? ''));
+        $gateway = strtolower((string) ($data['payment_gateway'] ?? ''));
+        $paymentType = strtolower((string) ($data['payment_type'] ?? ''));
 
-    if ($request->hasFile('proof_image')) {
-        $stored = $request->file('proof_image')?->store('booking-payment-proofs', 'public');
-        if ($stored) {
-            $data['proof_image_path'] = $stored;
+        if ($request->hasFile('proof_image')) {
+            $stored = $request->file('proof_image')?->store('booking-payment-proofs', 'local');
+            if ($stored) {
+                $data['proof_image_path'] = $stored;
+            }
         }
-    }
 
-    $cardNumber = preg_replace('/\D+/', '', (string) $request->input('card_number', ''));
-    $cardLastFour = $cardNumber !== '' ? substr($cardNumber, -4) : null;
+        $cardNumber = preg_replace('/\D+/', '', (string) $request->input('card_number', ''));
+        $cardLastFour = $cardNumber !== '' ? substr($cardNumber, -4) : null;
 
-    $data['payer_name'] = trim((string) ($data['payer_name'] ?? '')) ?: null;
-    $data['card_holder_name'] = trim((string) ($data['card_holder_name'] ?? '')) ?: null;
-    $data['card_last_four'] = $cardLastFour;
-    $data['card_expiration'] = trim((string) ($data['card_expiration'] ?? '')) ?: null;
-    $data['marketing_consent'] = (bool) ($data['marketing_consent'] ?? false);
-    $data['payment_type'] = $paymentType !== '' ? $paymentType : null;
-    $data['payment_gateway'] = $gateway !== '' ? $gateway : null;
-    $data['paid_at'] = now();
+        $data['payer_name'] = trim((string) ($data['payer_name'] ?? '')) ?: null;
+        $data['card_holder_name'] = trim((string) ($data['card_holder_name'] ?? '')) ?: null;
+        $data['card_last_four'] = $cardLastFour;
+        $data['card_expiration'] = trim((string) ($data['card_expiration'] ?? '')) ?: null;
+        $data['marketing_consent'] = (bool) ($data['marketing_consent'] ?? false);
+        $data['payment_type'] = $paymentType !== '' ? $paymentType : null;
+        $data['payment_gateway'] = $gateway !== '' ? $gateway : null;
+        $data['paid_at'] = now();
 
-    $data['payment_meta'] = array_filter([
-        'gateway' => $gateway !== '' ? $gateway : null,
-        'payment_type' => $paymentType !== '' ? $paymentType : null,
-        'card_holder_name' => trim((string) $request->input('card_holder_name', '')) ?: null,
-        'card_expiration' => trim((string) $request->input('card_expiration', '')) ?: null,
-        'marketing_consent' => (bool) $request->boolean('marketing_consent'),
-    ], static fn ($value) => $value !== null && $value !== '');
+        $data['payment_meta'] = array_filter([
+            'gateway' => $gateway !== '' ? $gateway : null,
+            'payment_type' => $paymentType !== '' ? $paymentType : null,
+            'card_holder_name' => trim((string) $request->input('card_holder_name', '')) ?: null,
+            'card_expiration' => trim((string) $request->input('card_expiration', '')) ?: null,
+            'marketing_consent' => (bool) $request->boolean('marketing_consent'),
+        ], static fn ($value) => $value !== null && $value !== '');
 
-    if ($canManage) {
-        $data['status'] = strtolower((string) ($data['status'] ?? 'pending'));
+        if ($canManage) {
+            $data['status'] = strtolower((string) ($data['status'] ?? 'pending'));
+            return $data;
+        }
+
+        $data['status'] = 'pending';
+
         return $data;
     }
-
-    $hasProof = !empty($data['proof_image_path']);
-    $hasReference = !empty($data['transaction_reference']);
-    $isTrialOnline = in_array($gateway, ['card', 'paypal', 'gcash'], true);
-
-    // Important fix:
-    // the old code always forced client payments to "pending".
-    // that kept payment_status = unpaid and lifecycle status = pending.
-    // for trial online flows with sufficient evidence, mark it confirmed immediately.
-    $data['status'] = ($isTrialOnline && ($gateway === 'card' || ($hasProof && $hasReference)))
-        ? 'confirmed'
-        : 'pending';
-
-    return $data;
-}
 
     public function index(Request $request): Response
     {
@@ -116,7 +105,6 @@ class BookingController extends Controller
             'bookings' => BookingResource::collection($paginated)
                 ->response()
                 ->getData(true),
-
             'services' => $services,
             'filters' => $filters,
             'statusCounts' => $statusCounts,
@@ -132,18 +120,15 @@ class BookingController extends Controller
         $serviceTypesWithServices = \App\Http\Resources\ServiceTypeResource::collection($types)
             ->resolve($request);
 
-        $initialSchedule = [
-            'date'       => $request->query('date'),
-            'start_time' => $request->query('start'),
-            'end_time'   => $request->query('end'),
-        ];
-
-        $unavailableDates = $this->bookings->getUnavailableDates();
+        $initialSchedule = $this->extractInitialSchedule($request);
 
         return Inertia::render('bookings/create', [
-            'serviceTypes'     => $serviceTypesWithServices,
-            'unavailableDates' => $unavailableDates,
-            'initialSchedule'  => $initialSchedule,
+            'serviceTypes' => $serviceTypesWithServices,
+            'unavailableDates' => [],
+            'initialSchedule' => $initialSchedule,
+            'initialVenue' => trim((string) $request->query('venue', '')) ?: null,
+            'initialEventType' => trim((string) $request->query('event_type', '')) ?: null,
+            'initialGuests' => $request->filled('guests') ? (int) $request->query('guests') : null,
         ]);
     }
 
@@ -152,15 +137,14 @@ class BookingController extends Controller
         $data = $request->validated();
 
         $proofFile = $request->file('survey_proof_image');
-        if (!$proofFile instanceof UploadedFile) {
+        if (! $proofFile instanceof UploadedFile) {
             return redirect()->back()->withErrors([
                 'survey_proof_image' => 'Proof image is required.',
             ]);
         }
 
-        // ✅ DISK ONLY: store the uploaded proof on disk and save ONLY the path in DB.
-        $storedDiskPath = $proofFile->store('booking-survey-proofs', 'public');
-        if (!$storedDiskPath) {
+        $storedDiskPath = $proofFile->store('booking-survey-proofs', 'local');
+        if (! $storedDiskPath) {
             return redirect()->back()->withErrors([
                 'survey_proof_image' => 'Unable to upload proof image. Please try again.',
             ]);
@@ -168,13 +152,13 @@ class BookingController extends Controller
 
         unset($data['survey_proof_image']);
         $data['survey_proof_image_path'] = $storedDiskPath;
+        $data['survey_proof_image_name'] = $proofFile->getClientOriginalName();
+        $data['survey_proof_image_mime'] = $proofFile->getClientMimeType() ?: $proofFile->getMimeType();
 
         try {
             $booking = $this->bookings->create($data);
         } catch (\Throwable $e) {
-            if ($storedDiskPath) {
-                Storage::disk('public')->delete($storedDiskPath);
-            }
+            $this->deleteStoredFile($storedDiskPath);
             throw $e;
         }
 
@@ -185,19 +169,17 @@ class BookingController extends Controller
 
     public function show(Request $request, Booking $booking): Response
     {
-    $this->ensureBookingAccess($request, $booking);
-    $this->markAsViewed($request, $booking);
+        $this->ensureBookingAccess($request, $booking);
+        $this->markAsViewed($request, $booking);
 
-    $this->bookings->syncLifecycleStatus($booking);
-    $booking->refresh()->loadMissing([
-    'service',
-    'bookingServices.service',
-    'payments',
-    'createdBy',
-    'lifecycleEvents.actor',
-]);
-
-
+        $this->bookings->syncLifecycleStatus($booking);
+        $booking->refresh()->loadMissing([
+            'service',
+            'bookingServices.service',
+            'payments',
+            'createdBy',
+            'lifecycleEvents.actor',
+        ]);
 
         $services = ServiceResource::collection(Service::orderBy('name')->get())
             ->resolve($request);
@@ -205,8 +187,8 @@ class BookingController extends Controller
         $unavailableDates = $this->bookings->getUnavailableDates($booking->id);
 
         return Inertia::render('bookings/show', [
-            'booking'          => (new BookingResource($booking))->resolve($request),
-            'services'         => $services,
+            'booking' => (new BookingResource($booking))->resolve($request),
+            'services' => $services,
             'unavailableDates' => $unavailableDates,
         ]);
     }
@@ -215,72 +197,78 @@ class BookingController extends Controller
     {
         $this->ensureBookingAccess($request, $booking);
 
-        $path = $booking->survey_proof_image_path;
-        if (!$path || !Storage::disk('public')->exists($path)) {
+        $file = $this->locateStoredFile($booking->survey_proof_image_path);
+        if (! $file) {
             abort(404);
         }
 
-        $ext = pathinfo($path, PATHINFO_EXTENSION);
+        $ext = pathinfo($file['path'], PATHINFO_EXTENSION);
         $filename = 'survey-proof-' . $booking->id . ($ext ? ('.' . $ext) : '');
         $filename = preg_replace('/[^A-Za-z0-9._-]+/', '_', $filename) ?: 'survey-proof';
 
-        $headers = [
-            'Content-Disposition' => 'inline; filename="' . $filename . '"',
-            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
-            'Pragma' => 'no-cache',
-            'Expires' => '0',
-        ];
+        return $this->streamStoredFile($file['disk'], $file['path'], $filename);
+    }
 
-        $mime = Storage::disk('public')->mimeType($path) ?: 'application/octet-stream';
-        $headers['Content-Type'] = $mime;
+    public function paymentProofImage(Request $request, Booking $booking, BookingPayment $payment)
+    {
+        $this->ensureBookingAccess($request, $booking);
 
-        return Storage::disk('public')->response($path, $filename, $headers);
+        if ((int) $payment->booking_id !== (int) $booking->id) {
+            abort(404);
+        }
+
+        $file = $this->locateStoredFile($payment->proof_image_path);
+        if (! $file) {
+            abort(404);
+        }
+
+        $ext = pathinfo($file['path'], PATHINFO_EXTENSION);
+        $filename = 'payment-proof-' . $booking->id . '-' . $payment->id . ($ext ? ('.' . $ext) : '');
+        $filename = preg_replace('/[^A-Za-z0-9._-]+/', '_', $filename) ?: 'payment-proof';
+
+        return $this->streamStoredFile($file['disk'], $file['path'], $filename);
     }
 
     public function edit(Request $request, Booking $booking): Response
-{
-    $this->ensureBookingAccess($request, $booking);
-    $this->markAsViewed($request, $booking);
-    $this->bookings->syncLifecycleStatus($booking);
+    {
+        $this->ensureBookingAccess($request, $booking);
+        $this->markAsViewed($request, $booking);
+        $this->bookings->syncLifecycleStatus($booking);
 
-    $booking->refresh()->loadMissing([
-    'service',
-    'bookingServices.service',
-    'payments',
-    'createdBy',
-    'lifecycleEvents.actor',
-]);
+        $booking->refresh()->loadMissing([
+            'service',
+            'bookingServices.service',
+            'payments',
+            'createdBy',
+            'lifecycleEvents.actor',
+        ]);
 
+        $unavailableDates = $this->bookings->getUnavailableDates($booking->id);
 
-    $unavailableDates = $this->bookings->getUnavailableDates($booking->id);
-
-    return Inertia::render('bookings/edit', [
-        'booking' => (new BookingResource($booking))->resolve($request),
-        'unavailableDates' => $unavailableDates,
-    ]);
-}
-
+        return Inertia::render('bookings/edit', [
+            'booking' => (new BookingResource($booking))->resolve($request),
+            'unavailableDates' => $unavailableDates,
+        ]);
+    }
 
     public function update(UpdateBookingRequest $request, Booking $booking): RedirectResponse
     {
         $this->ensureBookingAccess($request, $booking);
 
         $data = $request->validated();
-
         $oldProofPath = $booking->survey_proof_image_path;
 
         if ($request->hasFile('survey_proof_image')) {
             $file = $request->file('survey_proof_image');
 
-            if (!$file instanceof UploadedFile) {
+            if (! $file instanceof UploadedFile) {
                 return redirect()->back()->withErrors([
                     'survey_proof_image' => 'Unable to read the uploaded file. Please try again.',
                 ]);
             }
 
-            // ✅ DISK ONLY: store the new proof on disk and save ONLY the path in DB.
-            $newDiskPath = $file->store('booking-survey-proofs', 'public');
-            if (!$newDiskPath) {
+            $newDiskPath = $file->store('booking-survey-proofs', 'local');
+            if (! $newDiskPath) {
                 return redirect()->back()->withErrors([
                     'survey_proof_image' => 'Unable to upload proof image. Please try again.',
                 ]);
@@ -288,18 +276,18 @@ class BookingController extends Controller
 
             unset($data['survey_proof_image']);
             $data['survey_proof_image_path'] = $newDiskPath;
+            $data['survey_proof_image_name'] = $file->getClientOriginalName();
+            $data['survey_proof_image_mime'] = $file->getClientMimeType() ?: $file->getMimeType();
 
             try {
                 $booking = $this->bookings->update($booking, $data);
             } catch (\Throwable $e) {
-                if ($newDiskPath) {
-                    Storage::disk('public')->delete($newDiskPath);
-                }
+                $this->deleteStoredFile($newDiskPath);
                 throw $e;
             }
 
-            if (!empty($oldProofPath) && $oldProofPath !== $booking->survey_proof_image_path) {
-                Storage::disk('public')->delete($oldProofPath);
+            if (! empty($oldProofPath) && $oldProofPath !== $booking->survey_proof_image_path) {
+                $this->deleteStoredFile($oldProofPath);
             }
 
             return redirect()
@@ -308,7 +296,6 @@ class BookingController extends Controller
         }
 
         unset($data['survey_proof_image']);
-
         $booking = $this->bookings->update($booking, $data);
 
         return redirect()
@@ -328,111 +315,132 @@ class BookingController extends Controller
     }
 
     public function storePayment(StoreBookingPaymentRequest $request, Booking $booking): RedirectResponse
-{
-    $this->ensureBookingAccess($request, $booking);
+    {
+        $this->ensureBookingAccess($request, $booking);
 
-    $data = $request->validated();
-    $actor = $request->user();
-    $canManage = $actor ? $actor->can('payments.manage') : false;
+        $data = $request->validated();
+        $actor = $request->user();
+        $canManage = $actor ? $actor->can('payments.manage') : false;
 
-    $data = $this->normalizePaymentPayload($request, $data, $canManage);
+        $data = $this->normalizePaymentPayload($request, $data, $canManage);
 
-    /** @var BookingPayment $payment */
-    $payment = $booking->payments()->create($data);
-    unset($payment);
+        /** @var BookingPayment $payment */
+        $payment = $booking->payments()->create($data);
+        unset($payment);
 
-    $this->bookings->recalculatePaymentStatus($booking->refresh());
+        $this->bookings->recalculatePaymentStatus($booking->refresh());
 
-    return redirect()
-        ->back()
-        ->with('success', 'Payment recorded.');
-}
+        return redirect()
+            ->back()
+            ->with('success', 'Payment recorded.');
+    }
 
     public function updatePayment(UpdateBookingPaymentRequest $request, Booking $booking, BookingPayment $payment): RedirectResponse
-{
-    $this->ensureBookingAccess($request, $booking);
+    {
+        $this->ensureBookingAccess($request, $booking);
 
-    if ($payment->booking_id !== $booking->id) {
-        abort(404);
+        if ((int) $payment->booking_id !== (int) $booking->id) {
+            abort(404);
+        }
+
+        $data = $request->validated();
+        $oldProofPath = $payment->proof_image_path;
+
+        $data = $this->normalizePaymentPayload($request, $data, true);
+
+        if (! array_key_exists('proof_image_path', $data)) {
+            $data['proof_image_path'] = $oldProofPath;
+        }
+
+        $newProofPath = $data['proof_image_path'] ?? null;
+
+        try {
+            $payment->update($data);
+        } catch (\Throwable $e) {
+            if ($newProofPath && $newProofPath !== $oldProofPath) {
+                $this->deleteStoredFile($newProofPath);
+            }
+            throw $e;
+        }
+
+        if ($newProofPath && $newProofPath !== $oldProofPath) {
+            $this->deleteStoredFile($oldProofPath);
+        }
+
+        $this->bookings->recalculatePaymentStatus($booking->refresh());
+
+        return redirect()
+            ->back()
+            ->with('success', 'Payment updated.');
     }
-
-    $data = $request->validated();
-    $data = $this->normalizePaymentPayload($request, $data, true);
-
-    if ($request->hasFile('proof_image') && !empty($payment->proof_image_path)) {
-        Storage::disk('public')->delete($payment->proof_image_path);
-    } else {
-        $data['proof_image_path'] = $payment->proof_image_path;
-    }
-    $payment->update($data);
-
-    $this->bookings->recalculatePaymentStatus($booking->refresh());
-
-    return redirect()
-        ->back()
-        ->with('success', 'Payment updated.');
-}
 
     public function availability(Request $request): JsonResponse
-{
-    $date = trim((string) $request->query('date', ''));
+    {
+        $date = trim((string) $request->query('date', ''));
 
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-        return response()->json([
-            'message' => 'Invalid date. Use YYYY-MM-DD format.',
-        ], 422);
-    }
-
-    $excludeIdRaw = $request->query('exclude_booking_id');
-    $excludeId = is_numeric($excludeIdRaw) ? (int) $excludeIdRaw : null;
-
-    $availability = $this->bookings->getDailyAvailability($date, $excludeId);
-
-    if (!isset($availability['busy']) || !is_array($availability['busy'])) {
-        $availability['busy'] = [];
-    }
-
-    if (!isset($availability['free']) || !is_array($availability['free'])) {
-        $availability['free'] = [];
-    }
-
-    if (!isset($availability['blocks']) || !is_array($availability['blocks'])) {
-        $availability['blocks'] = [];
-    }
-
-    if (!isset($availability['is_fully_booked'])) {
-        $availability['is_fully_booked'] = false;
-    }
-
-    $user = $request->user();
-
-    if ($user && $user->hasRole('user')) {
-        $isStaffLike = method_exists($user, 'hasAnyRole')
-            && $user->hasAnyRole(['admin', 'manager', 'staff']);
-
-        if (! $isStaffLike) {
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
             return response()->json([
-                'date' => $availability['date'] ?? $date,
-                'blocks' => $availability['blocks'] ?? [],
-                'is_fully_booked' => (bool) ($availability['is_fully_booked'] ?? false),
-            ]);
+                'message' => 'Invalid date. Use YYYY-MM-DD format.',
+            ], 422);
         }
+
+        $excludeIdRaw = $request->query('exclude_booking_id');
+        $excludeId = is_numeric($excludeIdRaw) ? (int) $excludeIdRaw : null;
+
+        $area = trim((string) $request->query('venue', $request->query('area', '')));
+        $availability = $this->bookings->getDailyAvailability($date, $excludeId, $area !== '' ? $area : null);
+
+        if (! isset($availability['busy']) || ! is_array($availability['busy'])) {
+            $availability['busy'] = [];
+        }
+
+        if (! isset($availability['free']) || ! is_array($availability['free'])) {
+            $availability['free'] = [];
+        }
+
+        if (! isset($availability['blocks']) || ! is_array($availability['blocks'])) {
+            $availability['blocks'] = [];
+        }
+
+        if (! isset($availability['is_fully_booked'])) {
+            $availability['is_fully_booked'] = false;
+        }
+
+        $availability['venue'] = $area !== '' ? $area : null;
+
+        $user = $request->user();
+
+        if ($user && method_exists($user, 'hasRole') && $user->hasRole('user')) {
+            $isStaffLike = method_exists($user, 'hasAnyRole')
+                && $user->hasAnyRole(['admin', 'manager', 'staff']);
+
+            if (! $isStaffLike) {
+                return response()->json([
+                    'date' => $availability['date'] ?? $date,
+                    'venue' => $availability['venue'] ?? null,
+                    'blocks' => $availability['blocks'] ?? [],
+                    'is_fully_booked' => (bool) ($availability['is_fully_booked'] ?? false),
+                ]);
+            }
+        }
+
+        return response()->json($availability);
     }
-
-    return response()->json($availability);
-}
-
 
     private function ensureBookingAccess(Request $request, Booking $booking): void
     {
         $user = $request->user();
-        if (!$user) abort(403);
+        if (! $user) {
+            abort(403);
+        }
 
         if (method_exists($user, 'hasRole') && $user->hasRole('user')) {
             $isStaffLike = method_exists($user, 'hasAnyRole')
                 && $user->hasAnyRole(['admin', 'manager', 'staff']);
 
-            if ($isStaffLike) return;
+            if ($isStaffLike) {
+                return;
+            }
 
             $bookingEmail = strtolower((string) ($booking->client_email ?? ''));
             $userEmail = strtolower((string) ($user->email ?? ''));
@@ -451,11 +459,99 @@ class BookingController extends Controller
     private function markAsViewed(Request $request, Booking $booking): void
     {
         $user = $request->user();
-        if (!$user) return;
+        if (! $user) {
+            return;
+        }
 
         $booking->views()->updateOrCreate(
             ['user_id' => $user->id],
             ['viewed_at' => now()]
         );
+    }
+
+    private function extractInitialSchedule(Request $request): array
+    {
+        $date = trim((string) $request->query('date', ''));
+        $start = trim((string) $request->query('start', ''));
+        $end = trim((string) $request->query('end', ''));
+
+        if (
+            preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)
+            && preg_match('/^\d{2}:\d{2}$/', $start)
+            && preg_match('/^\d{2}:\d{2}$/', $end)
+        ) {
+            return [
+                'date' => $date,
+                'start_time' => $start,
+                'end_time' => $end,
+            ];
+        }
+
+        $from = trim((string) $request->query('date_from', ''));
+        $to = trim((string) $request->query('date_to', ''));
+
+        if (
+            preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $from)
+            && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $to)
+        ) {
+            return [
+                'date' => substr($from, 0, 10),
+                'start_time' => substr($from, 11, 5),
+                'end_time' => substr($to, 11, 5),
+            ];
+        }
+
+        return [
+            'date' => null,
+            'start_time' => null,
+            'end_time' => null,
+        ];
+    }
+
+    private function locateStoredFile(?string $path): ?array
+    {
+        if (! $path) {
+            return null;
+        }
+
+        $candidates = array_values(array_unique(array_filter([
+            ltrim((string) $path, '/'),
+            ltrim((string) preg_replace('#^/?storage/#', '', (string) $path), '/'),
+        ])));
+
+        foreach (['local', 'public'] as $disk) {
+            foreach ($candidates as $candidate) {
+                if ($candidate !== '' && Storage::disk($disk)->exists($candidate)) {
+                    return [
+                        'disk' => $disk,
+                        'path' => $candidate,
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function deleteStoredFile(?string $path): void
+    {
+        $file = $this->locateStoredFile($path);
+
+        if ($file) {
+            Storage::disk($file['disk'])->delete($file['path']);
+        }
+    }
+
+    private function streamStoredFile(string $disk, string $path, string $filename)
+    {
+        $headers = [
+            'Content-Disposition' => 'inline; filename="' . $filename . '"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+            'Content-Type' => Storage::disk($disk)->mimeType($path) ?: 'application/octet-stream',
+        ];
+
+        return Storage::disk($disk)->response($path, $filename, $headers);
     }
 }

@@ -41,6 +41,11 @@ class AuthenticatedSessionController extends Controller
         }
 
         Auth::login($user, $request->boolean('remember'));
+
+        $user->forceFill([
+            'last_login_at' => now(),
+        ])->saveQuietly();
+
         $request->session()->regenerate();
 
         $adminTarget = $this->resolveAdminTarget($request, $user);
