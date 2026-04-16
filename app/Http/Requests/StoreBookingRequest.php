@@ -134,8 +134,8 @@ class StoreBookingRequest extends FormRequest
             'client_name' => ['required', 'string', 'max:255'],
             'client_contact_number' => ['required', 'regex:/^09\d{9}$/'],
             'client_email' => ['required', 'string', 'email', 'max:255'],
-            'survey_email' => ['required', 'string', 'email', 'max:255'],
-            'survey_proof_image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'survey_email' => ['nullable', 'string', 'email', 'max:255'],
+            'survey_proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
 
             'client_address' => ['required', 'string', 'max:255'],
             'head_of_organization' => ['nullable', 'string', 'max:255'],

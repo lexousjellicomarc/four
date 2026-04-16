@@ -21,6 +21,10 @@ export default function SpacesGrid({ items = [] }: Props) {
 
   return (
     <section className="mt-14 w-full px-4 sm:px-4 lg:px-6">
+      <style>{`
+        @keyframes spaceRowLeft { from { opacity: 0; transform: translateX(48px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes spaceRowRight { from { opacity: 0; transform: translateX(-48px); } to { opacity: 1; transform: translateX(0); } }
+      `}</style>
       <div className="mx-auto w-full max-w-[1600px]">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
@@ -28,12 +32,12 @@ export default function SpacesGrid({ items = [] }: Props) {
               Our Spaces
             </div>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl dark:text-white">
-              Venue spaces with a more premium hotel-style presentation.
+              Venue spaces with stronger entrance motion and cleaner hover polish.
             </h2>
           </div>
 
           <p className="max-w-2xl text-sm leading-7 text-slate-500 dark:text-slate-300">
-            Each card keeps the title visible first, then smoothly reveals more details on hover while maintaining a stronger premium look for the homepage.
+            The first row now enters from the right, the second row from the left, while each card keeps the sheen hover effect for a more premium public look.
           </p>
         </div>
 
@@ -45,12 +49,10 @@ export default function SpacesGrid({ items = [] }: Props) {
           <div className="mt-8 space-y-5">
             {rows.map((row, rowIndex) => {
               const leftPointing = rowIndex % 2 === 0;
+              const rowAnimation = rowIndex % 2 === 0 ? 'spaceRowLeft 0.8s ease-out both' : 'spaceRowRight 0.8s ease-out both';
 
               return (
-                <div
-                  key={`row-${rowIndex}`}
-                  className={`flex flex-wrap ${leftPointing ? 'justify-start' : 'justify-end'}`}
-                >
+                <div key={`row-${rowIndex}`} className={`flex flex-wrap ${leftPointing ? 'justify-start' : 'justify-end'}`} style={{ animation: rowAnimation }}>
                   {row.map((item) => (
                     <Link
                       key={String(item.id)}
@@ -62,16 +64,8 @@ export default function SpacesGrid({ items = [] }: Props) {
                           : 'polygon(8% 0, 100% 0, 92% 100%, 0 100%)',
                       }}
                     >
-                      <img
-                        src={item.lightImage || item.image}
-                        alt={item.title}
-                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105 dark:hidden"
-                      />
-                      <img
-                        src={item.darkImage || item.image}
-                        alt={item.title}
-                        className="hidden h-full w-full object-cover transition duration-500 group-hover:scale-105 dark:block"
-                      />
+                      <img src={item.lightImage || item.image} alt={item.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105 dark:hidden" />
+                      <img src={item.darkImage || item.image} alt={item.title} className="hidden h-full w-full object-cover transition duration-500 group-hover:scale-105 dark:block" />
 
                       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.08)_0%,rgba(15,23,42,0.20)_36%,rgba(15,23,42,0.88)_100%)]" />
 
@@ -84,9 +78,7 @@ export default function SpacesGrid({ items = [] }: Props) {
                             <Users className="h-4 w-4" />
                             {item.capacity}
                           </div>
-                          <p className="mt-3 line-clamp-4 text-sm leading-7 text-white/82">
-                            {item.summary || item.shortDescription}
-                          </p>
+                          <p className="mt-3 line-clamp-4 text-sm leading-7 text-white/82">{item.summary || item.shortDescription}</p>
                           <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-white">
                             {item.ctaLabel || 'View Space'}
                             <ArrowUpRight className="h-4 w-4" />

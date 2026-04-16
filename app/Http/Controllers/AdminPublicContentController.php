@@ -7,6 +7,7 @@ use App\Models\HomepageStat;
 use App\Models\PublicEvent;
 use App\Models\SiteSetting;
 use App\Models\VenueSpace;
+use App\Models\Service;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -31,6 +32,7 @@ class AdminPublicContentController extends Controller
             'initialStats' => $this->statsPayload()->all(),
             'initialTourismMembers' => $this->membersPayload()->all(),
             'initialSiteConfig' => $this->siteSettingsPayload(),
+            'initialVenueAreas' => $this->venueAreaOptions()->all(),
         ]);
     }
 
@@ -43,7 +45,8 @@ class AdminPublicContentController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'venue' => ['required', 'string', 'max:255'],
             'event_date' => ['required', 'date'],
-            'event_time' => ['nullable', 'string', 'max:20'],
+            'event_date_to' => ['nullable', 'date', 'after_or_equal:event_date'],
+            'event_time' => ['nullable', 'string', 'max:50'],
             'description' => ['required', 'string'],
             'note' => ['nullable', 'string'],
             'is_highlighted' => ['nullable', 'boolean'],
@@ -56,6 +59,7 @@ class AdminPublicContentController extends Controller
             'title' => $data['title'],
             'venue' => $data['venue'],
             'event_date' => $data['event_date'],
+            'event_date_to' => $data['event_date_to'] ?? $data['event_date'],
             'event_time' => $data['event_time'] ?? null,
             'description' => $data['description'],
             'note' => $data['note'] ?? null,
@@ -82,7 +86,8 @@ class AdminPublicContentController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'venue' => ['required', 'string', 'max:255'],
             'event_date' => ['required', 'date'],
-            'event_time' => ['nullable', 'string', 'max:20'],
+            'event_date_to' => ['nullable', 'date', 'after_or_equal:event_date'],
+            'event_time' => ['nullable', 'string', 'max:50'],
             'description' => ['required', 'string'],
             'note' => ['nullable', 'string'],
             'is_highlighted' => ['nullable', 'boolean'],
@@ -97,6 +102,7 @@ class AdminPublicContentController extends Controller
             'title' => $data['title'],
             'venue' => $data['venue'],
             'event_date' => $data['event_date'],
+            'event_date_to' => $data['event_date_to'] ?? $data['event_date'],
             'event_time' => $data['event_time'] ?? null,
             'description' => $data['description'],
             'note' => $data['note'] ?? null,
@@ -350,7 +356,11 @@ class AdminPublicContentController extends Controller
     $data = $request->validate([
         'full_name' => ['required', 'string', 'max:255'],
         'designation' => ['required', 'string', 'max:255'],
+        'office_section' => ['nullable', 'string', 'max:255'],
         'unit_name' => ['nullable', 'string', 'max:255'],
+        'team_label' => ['nullable', 'string', 'max:255'],
+        'reports_to_name' => ['nullable', 'string', 'max:255'],
+        'tree_level' => ['nullable', 'integer', 'min:1', 'max:6'],
         'email' => ['nullable', 'email', 'max:255'],
         'phone' => ['nullable', 'string', 'max:255'],
         'short_bio' => ['nullable', 'string'],
@@ -363,7 +373,11 @@ class AdminPublicContentController extends Controller
     $member = TourismMember::query()->create([
         'full_name' => $data['full_name'],
         'designation' => $data['designation'],
+        'office_section' => $data['office_section'] ?? null,
         'unit_name' => $data['unit_name'] ?? null,
+        'team_label' => $data['team_label'] ?? null,
+        'reports_to_name' => $data['reports_to_name'] ?? null,
+        'tree_level' => array_key_exists('tree_level', $data) ? (int) $data['tree_level'] : 1,
         'email' => $data['email'] ?? null,
         'phone' => $data['phone'] ?? null,
         'short_bio' => $data['short_bio'] ?? null,
@@ -387,7 +401,11 @@ public function updateTourismMember(Request $request, TourismMember $tourismMemb
     $data = $request->validate([
         'full_name' => ['required', 'string', 'max:255'],
         'designation' => ['required', 'string', 'max:255'],
+        'office_section' => ['nullable', 'string', 'max:255'],
         'unit_name' => ['nullable', 'string', 'max:255'],
+        'team_label' => ['nullable', 'string', 'max:255'],
+        'reports_to_name' => ['nullable', 'string', 'max:255'],
+        'tree_level' => ['nullable', 'integer', 'min:1', 'max:6'],
         'email' => ['nullable', 'email', 'max:255'],
         'phone' => ['nullable', 'string', 'max:255'],
         'short_bio' => ['nullable', 'string'],
@@ -400,7 +418,11 @@ public function updateTourismMember(Request $request, TourismMember $tourismMemb
     $tourismMember->update([
         'full_name' => $data['full_name'],
         'designation' => $data['designation'],
+        'office_section' => $data['office_section'] ?? null,
         'unit_name' => $data['unit_name'] ?? null,
+        'team_label' => $data['team_label'] ?? null,
+        'reports_to_name' => $data['reports_to_name'] ?? null,
+        'tree_level' => array_key_exists('tree_level', $data) ? (int) $data['tree_level'] : 1,
         'email' => $data['email'] ?? null,
         'phone' => $data['phone'] ?? null,
         'short_bio' => $data['short_bio'] ?? null,
@@ -467,6 +489,43 @@ public function destroyTourismMember(Request $request, TourismMember $tourismMem
             'item' => $this->siteSettingsPayload(),
         ]);
     }
+
+protected function venueAreaOptions(): Collection
+{
+    $preferred = collect([
+        'Full Hall',
+        'Main Hall',
+        'Foyer & Lobby Area',
+        'VIP Lounge',
+        'Board Room',
+        'Basement',
+        'Gallery2600',
+    ]);
+
+    $fromSpaces = VenueSpace::query()
+        ->orderBy('sort_order')
+        ->pluck('title')
+        ->map(fn ($value) => trim((string) $value))
+        ->filter();
+
+    $fromServices = Service::query()
+        ->orderBy('name')
+        ->pluck('name')
+        ->map(function ($value) {
+            $label = trim((string) $value);
+            $label = preg_replace('/\s*\((AM|PM|EVE|DAY|WHOLE DAY|HALF DAY).*$/i', '', $label) ?: $label;
+            $label = preg_replace('/\s+-\s+(AM|PM|EVE|DAY|WHOLE DAY|HALF DAY).*$/i', '', $label) ?: $label;
+            return trim($label);
+        })
+        ->filter();
+
+    return $preferred
+        ->merge($fromSpaces)
+        ->merge($fromServices)
+        ->unique(fn ($value) => strtolower((string) $value))
+        ->sort()
+        ->values();
+}
 
     protected function eventsPayload(string $scope): Collection
     {
@@ -574,11 +633,17 @@ protected function normalizeAdminCalendarEndDate(mixed $fromValue, mixed $toValu
 
     protected function eventRow(PublicEvent $event): array
 {
+    $start = $event->event_date?->copy();
+    $end = $event->event_date_to?->copy() ?: $start?->copy();
+    $durationDays = ($start && $end) ? $start->diffInDays($end) + 1 : 1;
+
     return [
         'id' => $event->id,
         'title' => $event->title,
         'venue' => $event->venue,
-        'date' => $event->event_date?->format('Y-m-d') ?? '',
+        'date' => $start?->format('Y-m-d') ?? '',
+        'dateEnd' => $end?->format('Y-m-d') ?? ($start?->format('Y-m-d') ?? ''),
+        'durationDays' => $durationDays,
         'time' => $event->event_time,
         'description' => $event->description,
         'note' => $event->note ?? '',
@@ -644,7 +709,11 @@ protected function memberRow(TourismMember $member): array
         'id' => $member->id,
         'fullName' => $member->full_name,
         'designation' => $member->designation,
+        'officeSection' => $member->office_section ?? '',
         'unitName' => $member->unit_name ?? '',
+        'teamLabel' => $member->team_label ?? '',
+        'reportsToName' => $member->reports_to_name ?? '',
+        'treeLevel' => (int) ($member->tree_level ?? 1),
         'email' => $member->email ?? '',
         'phone' => $member->phone ?? '',
         'shortBio' => $member->short_bio ?? '',

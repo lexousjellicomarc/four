@@ -1085,13 +1085,6 @@ export default function CreateBooking({
       nextErrors.booking_date = 'Additional dates must be unique.';
     }
 
-    if (!data.survey_email.trim()) {
-      nextErrors.survey_email = 'Please enter the survey email used in the Google Form.';
-    }
-
-    if (!data.survey_proof_image) {
-      nextErrors.survey_proof_image = 'Please upload the survey proof image.';
-    }
 
     setLocalErrors(nextErrors);
 
@@ -1204,7 +1197,7 @@ export default function CreateBooking({
               <div>
                 <h1 className="text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">Book your schedule</h1>
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300">
-                  Choose your client details, booking date, time blocks, venue, services, and survey proof. This version keeps the booking-form availability aligned with the selected venue reference.
+                  Choose your client details, booking date, time blocks, venue, and services first. After saving the booking details, the survey email and proof image will be completed on the next page.
                 </p>
               </div>
 
@@ -1714,67 +1707,32 @@ export default function CreateBooking({
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <CheckCircle2 className="h-5 w-5" />
-                Survey email and proof
+                Survey reference on the next page
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-6 lg:grid-cols-[1fr_320px]">
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="survey_email">Survey email</Label>
-                  <Input id="survey_email" type="email" value={data.survey_email} onChange={(e) => updateField('survey_email', e.target.value)} className={fieldClass(Boolean(localErrors.survey_email || errors.survey_email))} />
-                  <FieldError message={localErrors.survey_email || errors.survey_email} />
+                <div className="rounded-2xl border border-black/5 bg-[#f7f5ef] px-4 py-4 text-sm leading-7 text-slate-600 dark:border-white/10 dark:bg-slate-950/50 dark:text-slate-300">
+                  This booking page now saves the booking details first. After the booking record is created, the system will open a separate survey page for the survey email and proof image upload.
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="survey_proof_image">Survey proof image</Label>
-                  <Input
-                    id="survey_proof_image"
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.webp"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] ?? null;
-                      updateField('survey_proof_image', file);
-                    }}
-                    className={fieldClass(Boolean(localErrors.survey_proof_image || errors.survey_proof_image))}
-                  />
-                  <FieldError message={localErrors.survey_proof_image || errors.survey_proof_image} />
+                <div className="rounded-2xl border border-black/5 bg-white px-4 py-4 dark:border-white/10 dark:bg-slate-950/50">
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white">What happens next</div>
+                  <ul className="mt-3 space-y-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                    <li>• Step 1 saves the booking details, date, time blocks, and selected services.</li>
+                    <li>• Step 2 opens the survey reference page.</li>
+                    <li>• The survey email and proof image will be attached to the saved booking record.</li>
+                  </ul>
                 </div>
-
-                {previewUrl ? (
-                  <div className="overflow-hidden rounded-2xl border border-black/5 bg-white dark:border-white/10 dark:bg-slate-950/50">
-                    <img src={previewUrl} alt="Survey proof preview" className="h-auto max-h-[360px] w-full object-contain" />
-                  </div>
-                ) : null}
               </div>
 
               <div className="space-y-4 rounded-2xl border border-black/5 bg-[#f7f5ef] p-4 dark:border-white/10 dark:bg-white/5">
-                <div className="text-sm font-semibold text-slate-900 dark:text-white">Google Form QR</div>
-                {qrSrc ? (
-                  <div className="overflow-hidden rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-slate-950/50">
-                    <img
-                      src={qrSrc}
-                      alt="Survey QR"
-                      className="mx-auto aspect-square w-full max-w-[240px] object-contain"
-                      onError={() => {
-                        if (qrStage === 'remote') {
-                          setQrStage('fallback');
-                        } else {
-                          setQrStage('none');
-                        }
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-black/10 p-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
-                    QR image is not available right now.
-                  </div>
-                )}
-
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">Google Form reference</div>
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-100">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <div>
-                      Use the same email from the Google Form, then upload the proof image here before submitting the booking.
+                      The survey QR and proof upload are now handled after the booking is saved, so this first step stays focused on the booking details only.
                     </div>
                   </div>
                 </div>
@@ -1784,7 +1742,7 @@ export default function CreateBooking({
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-slate-500 dark:text-slate-400">
-              Review all sections before submitting. The form stores a local draft automatically while you work.
+              Review the booking details, schedule, and selected services before saving. The form still stores a local draft automatically while you work.
             </div>
             <div className="flex gap-3">
               <Button type="button" variant="outline" onClick={clearDraftStorage}>
@@ -1793,7 +1751,7 @@ export default function CreateBooking({
               </Button>
               <Button type="submit" disabled={processing}>
                 <Save className="mr-2 h-4 w-4" />
-                {processing ? 'Submitting...' : 'Submit booking'}
+                {processing ? 'Saving booking...' : 'Save booking and continue'}
               </Button>
             </div>
           </div>

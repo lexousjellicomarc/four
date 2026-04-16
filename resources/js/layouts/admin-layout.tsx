@@ -35,6 +35,7 @@ const sectionTabs = [
 const mainLinks = [
   { label: 'Dashboard', href: '/admin/dashboard' },
   { label: 'Configure', href: '/admin/home?tab=home' },
+  { label: 'MICE Survey & Registry', href: '/reports/mice-registry' },
   { label: 'Inquiries', href: '/admin/inquiries' },
   { label: 'Frontend', href: '/' },
   { label: 'Booking', href: '/dashboard' },

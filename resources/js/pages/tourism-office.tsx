@@ -8,7 +8,11 @@ type TourismMember = {
   id: number;
   fullName: string;
   designation: string;
+  officeSection?: string | null;
   unitName?: string | null;
+  teamLabel?: string | null;
+  reportsToName?: string | null;
+  treeLevel?: number | null;
   email?: string | null;
   phone?: string | null;
   shortBio?: string;
@@ -30,6 +34,11 @@ export default function TourismOfficePage({
 }: Props) {
   const page = usePage<{ siteSettings?: SiteSettings }>();
   const settings = page.props.siteSettings;
+  const groupedMembers = members.reduce<Record<string, TourismMember[]>>((carry, member) => {
+    const key = member.officeSection?.trim() || member.unitName?.trim() || 'Tourism Office Proper';
+    carry[key] = carry[key] ? [...carry[key], member] : [member];
+    return carry;
+  }, {});
 
   return (
     <PublicLayout>
@@ -95,8 +104,31 @@ export default function TourismOfficePage({
         </div>
 
         {members.length > 0 ? (
-          <div className="space-y-4">
-            <h3 className="text-3xl font-semibold text-slate-900 dark:text-white">Office Team</h3>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-3xl font-semibold text-slate-900 dark:text-white">Office Team</h3>
+              <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">The public team section now supports a simple position-tree style view by grouping members according to office section, unit, and reporting structure.</p>
+            </div>
+
+            <div className="rounded-[1.9rem] border border-black/5 bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/5">
+              <div className="grid gap-4 lg:grid-cols-3">
+                {Object.entries(groupedMembers).map(([unit, unitMembers]) => (
+                  <div key={unit} className="rounded-[1.5rem] border border-black/5 bg-[#f8f4ea] p-4 dark:border-white/10 dark:bg-slate-900/60">
+                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">{unit}</div>
+                    <div className="mt-4 space-y-3">
+                      {[...unitMembers].sort((a, b) => (a.treeLevel ?? 1) - (b.treeLevel ?? 1)).map((member) => (
+                        <div key={`tree-${member.id}`} className="rounded-[1.2rem] bg-white px-4 py-3 dark:bg-white/5" style={{ marginLeft: `${Math.max((member.treeLevel ?? 1) - 1, 0) * 12}px` }}>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{member.fullName}</div>
+                          <div className="mt-1 text-xs uppercase tracking-[0.16em] text-[#0f8b6d] dark:text-[#b6c6ff]">{member.designation}</div>
+                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-300">{[member.unitName, member.teamLabel].filter(Boolean).join(' • ')}</div>
+                          {member.reportsToName ? <div className="mt-1 text-xs text-slate-500 dark:text-slate-300">Reports to: {member.reportsToName}</div> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {members.map((member) => (
                 <article
@@ -113,9 +145,9 @@ export default function TourismOfficePage({
                     )}
                   </div>
                   <div className="p-5">
-                    {member.unitName ? (
+                    {[member.officeSection, member.unitName, member.teamLabel].filter(Boolean).length ? (
                       <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
-                        {member.unitName}
+                        {[member.officeSection, member.unitName, member.teamLabel].filter(Boolean).join(' • ')}
                       </div>
                     ) : null}
                     <h4 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{member.fullName}</h4>
@@ -123,6 +155,8 @@ export default function TourismOfficePage({
                     <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
                       {member.shortBio || 'Public profile details may be maintained from the admin content area.'}
                     </p>
+                    {member.reportsToName ? <div className="mt-2 text-xs text-slate-500 dark:text-slate-300">Reports to: {member.reportsToName}</div> : null}
+                    {member.details?.length ? <div className="mt-3 flex flex-wrap gap-2">{member.details.slice(0, 3).map((detail, index) => <span key={`${member.id}-${index}`} className="rounded-full bg-[#f8f4ea] px-3 py-1 text-xs text-slate-600 dark:bg-slate-900/70 dark:text-slate-300">{detail}</span>)}</div> : null}
                   </div>
                 </article>
               ))}

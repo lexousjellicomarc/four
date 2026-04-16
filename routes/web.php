@@ -30,6 +30,7 @@ use App\Http\Requests\BulkCalendarBlockRequest;
 use App\Http\Controllers\PaymentReviewController;
 use App\Http\Controllers\BookingOperationsController;
 use App\Http\Controllers\AdminGuidelinesContactController;
+use App\Http\Controllers\MiceRegistryController;
 
 /*
 |--------------------------------------------------------------------------
@@ -150,6 +151,40 @@ Route::post('/admin/guidelines-contacts', [AdminGuidelinesContactController::cla
         ->middleware('permission:bookings.view')
         ->name('bookings.analytics.print');
 
+
+    Route::get('/reports/mice-registry', [MiceRegistryController::class, 'index'])
+        ->middleware('permission:bookings.view')
+        ->name('reports.mice-registry');
+
+    Route::get('/reports/mice-registry/create', [MiceRegistryController::class, 'create'])
+        ->middleware('role:admin|manager')
+        ->name('reports.mice-registry.create');
+
+    Route::post('/reports/mice-registry', [MiceRegistryController::class, 'store'])
+        ->middleware('role:admin|manager')
+        ->name('reports.mice-registry.store');
+
+    Route::get('/reports/mice-registry/print', [MiceRegistryController::class, 'print'])
+        ->middleware('permission:bookings.view')
+        ->name('reports.mice-registry.print');
+
+    Route::get('/reports/mice-registry/export', [MiceRegistryController::class, 'export'])
+        ->middleware('permission:bookings.view')
+        ->name('reports.mice-registry.export');
+
+    Route::get('/reports/mice-registry/{miceRecord}/edit', [MiceRegistryController::class, 'edit'])
+        ->middleware('role:admin|manager')
+        ->name('reports.mice-registry.edit');
+
+    Route::put('/reports/mice-registry/{miceRecord}', [MiceRegistryController::class, 'update'])
+        ->middleware('role:admin|manager')
+        ->name('reports.mice-registry.update');
+
+    Route::delete('/reports/mice-registry/{miceRecord}', [MiceRegistryController::class, 'destroy'])
+        ->middleware('role:admin|manager')
+        ->name('reports.mice-registry.destroy');
+
+
         Route::get('/bookings/operations', [BookingOperationsController::class, 'index'])
     ->middleware('permission:bookings.view')
     ->name('bookings.operations');
@@ -165,7 +200,7 @@ Route::post('/bookings/operations/payments/{payment}/decline', [BookingOperation
 Route::post('/bookings/operations/payments/{payment}/fail', [BookingOperationsController::class, 'failPayment'])
     ->middleware('permission:payments.manage')
     ->name('bookings.operations.payments.fail');
-    
+
     Route::get('/calendar/manage', [CalendarManagementController::class, 'index'])
         ->middleware('role:admin|manager')
         ->name('calendar.manage');
@@ -517,6 +552,16 @@ Route::post('/bookings/operations/payments/{payment}/fail', [BookingOperationsCo
     Route::post('/bookings', [BookingController::class, 'store'])
         ->middleware('permission:bookings.create')
         ->name('bookings.store');
+
+
+    Route::get('/bookings/{booking}/survey', [BookingController::class, 'survey'])
+        ->middleware('permission:bookings.create')
+        ->name('bookings.survey');
+
+    Route::post('/bookings/{booking}/survey', [BookingController::class, 'storeSurvey'])
+        ->middleware('permission:bookings.create')
+        ->name('bookings.survey.store');
+
 
     Route::get('/bookings/{booking}', [BookingController::class, 'show'])
         ->middleware('permission:bookings.view')

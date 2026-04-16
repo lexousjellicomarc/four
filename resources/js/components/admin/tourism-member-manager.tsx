@@ -5,7 +5,11 @@ export type TourismMemberRow = {
   id: number | string;
   fullName: string;
   designation: string;
+  officeSection: string;
   unitName: string;
+  teamLabel: string;
+  reportsToName: string;
+  treeLevel: number;
   email: string;
   phone: string;
   shortBio: string;
@@ -18,7 +22,11 @@ export type TourismMemberRow = {
 type FormState = {
   fullName: string;
   designation: string;
+  officeSection: string;
   unitName: string;
+  teamLabel: string;
+  reportsToName: string;
+  treeLevel: string;
   email: string;
   phone: string;
   shortBio: string;
@@ -35,7 +43,11 @@ type NoticeState = { type: 'success' | 'error'; text: string } | null;
 const emptyForm: FormState = {
   fullName: '',
   designation: '',
+  officeSection: '',
   unitName: '',
+  teamLabel: '',
+  reportsToName: '',
+  treeLevel: '1',
   email: '',
   phone: '',
   shortBio: '',
@@ -166,7 +178,7 @@ export default function TourismMemberManager({ initialMembers = [] }: { initialM
   const filteredMembers = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return members;
-    return members.filter((row) => [row.fullName, row.designation, row.unitName, row.email, row.phone].join(' ').toLowerCase().includes(needle));
+    return members.filter((row) => [row.fullName, row.designation, row.officeSection, row.unitName, row.teamLabel, row.reportsToName, row.email, row.phone].join(' ').toLowerCase().includes(needle));
   }, [members, query]);
 
   const resetForm = () => {
@@ -189,7 +201,11 @@ export default function TourismMemberManager({ initialMembers = [] }: { initialM
     const formData = new FormData();
     formData.append('full_name', form.fullName);
     formData.append('designation', form.designation);
+    formData.append('office_section', form.officeSection);
     formData.append('unit_name', form.unitName);
+    formData.append('team_label', form.teamLabel);
+    formData.append('reports_to_name', form.reportsToName);
+    formData.append('tree_level', form.treeLevel || '1');
     formData.append('email', form.email);
     formData.append('phone', form.phone);
     formData.append('short_bio', form.shortBio);
@@ -208,7 +224,7 @@ export default function TourismMemberManager({ initialMembers = [] }: { initialM
       resetForm();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
-      setErrors(validationErrors(error, { full_name: 'fullName', unit_name: 'unitName', short_bio: 'shortBio', details_text: 'detailsText', photo: 'photoFile', is_active: 'active', is_featured: 'featured' }));
+      setErrors(validationErrors(error, { full_name: 'fullName', office_section: 'officeSection', unit_name: 'unitName', team_label: 'teamLabel', reports_to_name: 'reportsToName', tree_level: 'treeLevel', short_bio: 'shortBio', details_text: 'detailsText', photo: 'photoFile', is_active: 'active', is_featured: 'featured' }));
       setNotice({ type: 'error', text: normalizeErrorMessage(error) });
     }
   };
@@ -220,7 +236,11 @@ export default function TourismMemberManager({ initialMembers = [] }: { initialM
     setForm({
       fullName: row.fullName,
       designation: row.designation,
+      officeSection: row.officeSection,
       unitName: row.unitName,
+      teamLabel: row.teamLabel,
+      reportsToName: row.reportsToName,
+      treeLevel: String(row.treeLevel || 1),
       email: row.email,
       phone: row.phone,
       shortBio: row.shortBio,
@@ -274,10 +294,40 @@ export default function TourismMemberManager({ initialMembers = [] }: { initialM
               <FieldError error={errors.designation} />
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-semibold">Office / unit</label>
-              <input value={form.unitName} onChange={(e) => setForm((prev) => ({ ...prev, unitName: e.target.value }))} className={inputClass(!!errors.unitName)} />
-              <FieldError error={errors.unitName} />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-semibold">Office section</label>
+                <input value={form.officeSection} onChange={(e) => setForm((prev) => ({ ...prev, officeSection: e.target.value }))} placeholder="Example: City Tourism, Culture and the Arts Office" className={inputClass(!!errors.officeSection)} />
+                <FieldError error={errors.officeSection} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold">Office / unit</label>
+                <input value={form.unitName} onChange={(e) => setForm((prev) => ({ ...prev, unitName: e.target.value }))} placeholder="Example: Tourism Office Proper" className={inputClass(!!errors.unitName)} />
+                <FieldError error={errors.unitName} />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-sm font-semibold">Team / branch</label>
+                <input value={form.teamLabel} onChange={(e) => setForm((prev) => ({ ...prev, teamLabel: e.target.value }))} placeholder="Example: Events and Promotions" className={inputClass(!!errors.teamLabel)} />
+                <FieldError error={errors.teamLabel} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold">Reports to</label>
+                <input value={form.reportsToName} onChange={(e) => setForm((prev) => ({ ...prev, reportsToName: e.target.value }))} placeholder="Example: Supervising Tourism Operations Officer" className={inputClass(!!errors.reportsToName)} />
+                <FieldError error={errors.reportsToName} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold">Tree level</label>
+                <select value={form.treeLevel} onChange={(e) => setForm((prev) => ({ ...prev, treeLevel: e.target.value }))} className={inputClass(!!errors.treeLevel)}>
+                  <option value="1">Level 1 — head / office lead</option>
+                  <option value="2">Level 2 — section chief / senior officer</option>
+                  <option value="3">Level 3 — unit staff / coordinator</option>
+                  <option value="4">Level 4 — support / assistant</option>
+                </select>
+                <FieldError error={errors.treeLevel} />
+              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -345,6 +395,9 @@ export default function TourismMemberManager({ initialMembers = [] }: { initialM
                   <div className="min-w-0 flex-1">
                     <div className="text-lg font-semibold">{row.fullName}</div>
                     <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{row.designation}{row.unitName ? ` • ${row.unitName}` : ''}</div>
+                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-300">{[row.officeSection, row.teamLabel].filter(Boolean).join(' • ')}</div>
+                    {row.reportsToName ? <div className="mt-1 text-xs text-slate-500 dark:text-slate-300">Reports to: {row.reportsToName}</div> : null}
+                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-300">Tree level: {row.treeLevel || 1}</div>
                     <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-600 dark:text-slate-300">
                       {row.email ? <span className="inline-flex items-center gap-2"><Mail className="h-4 w-4" />{row.email}</span> : null}
                       {row.phone ? <span className="inline-flex items-center gap-2"><Phone className="h-4 w-4" />{row.phone}</span> : null}

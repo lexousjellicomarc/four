@@ -18,12 +18,7 @@ type VenueOption = {
   capacity?: string | null;
 };
 
-type AvailabilityStatus =
-  | 'available'
-  | 'limited'
-  | 'public_booked'
-  | 'private_booked'
-  | 'blocked';
+type AvailabilityStatus = 'available' | 'limited' | 'public_booked' | 'private_booked' | 'blocked';
 
 type AvailabilityBlock = {
   key: 'AM' | 'PM' | 'EVE' | string;
@@ -31,6 +26,14 @@ type AvailabilityBlock = {
   from: string;
   to: string;
   is_available: boolean;
+};
+
+type CalendarBlock = {
+  title?: string;
+  area?: string;
+  notes?: string;
+  block?: string;
+  public_status?: string;
 };
 
 type AvailabilityResult = {
@@ -42,10 +45,11 @@ type AvailabilityResult = {
   note: string;
   blocks?: AvailabilityBlock[];
   event_titles?: string[];
+  calendar_blocks?: CalendarBlock[];
   recommended_action?: string;
   can_proceed?: boolean;
-  venue_capacity_ok?: boolean;
-  venue_capacity_message?: string;
+  venue_capacity_ok?: boolean | null;
+  venue_capacity_message?: string | null;
 };
 
 type RangeSummary = {
@@ -134,15 +138,7 @@ function blockTone(block: AvailabilityBlock) {
     : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/20 dark:bg-rose-500/10 dark:text-rose-200';
 }
 
-function HeroFieldShell({
-  label,
-  icon,
-  children,
-}: {
-  label: string;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
+function HeroFieldShell({ label, icon, children }: { label: string; icon: ReactNode; children: ReactNode }) {
   return (
     <div className="rounded-[1.45rem] border border-black/5 bg-white/95 px-4 py-3 text-slate-800 shadow-[0_10px_30px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-slate-950/78 dark:text-white">
       <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
@@ -264,10 +260,7 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
   const [result, setResult] = useState<RangeSummary | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const selectedVenue = useMemo(
-    () => venueOptions.find((item) => item.value === venue) ?? null,
-    [venue, venueOptions],
-  );
+  const selectedVenue = useMemo(() => venueOptions.find((item) => item.value === venue) ?? null, [venue, venueOptions]);
 
   const closeModal = () => {
     setModalOpen(false);
@@ -343,12 +336,8 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
       <div className="glass-card rounded-[2rem] border-white/20 p-3 shadow-[0_28px_70px_rgba(15,23,42,0.18)] dark:shadow-[0_28px_70px_rgba(2,8,23,0.50)] lg:p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
           <div>
-            <div className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-white/72">
-              Availability Quick Check
-            </div>
-            <div className="mt-1 text-sm text-white/86">
-              Select a single date or a multi-day range before starting the booking request.
-            </div>
+            <div className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-white/72">Availability Quick Check</div>
+            <div className="mt-1 text-sm text-white/86">Select a single date or a multi-day range before starting the booking request.</div>
           </div>
 
           <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white/90 backdrop-blur-md">
@@ -383,11 +372,7 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
           </HeroFieldShell>
 
           <HeroFieldShell label="Event Type" icon={<Sparkles className="h-4 w-4" />}>
-            <select
-              value={eventType}
-              onChange={(e) => setEventType(e.target.value)}
-              className="w-full bg-transparent text-sm font-semibold outline-none"
-            >
+            <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="w-full bg-transparent text-sm font-semibold outline-none">
               <option value="">Select type</option>
               {eventTypeOptions.map((item) => (
                 <option key={item} value={item}>
@@ -398,11 +383,7 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
           </HeroFieldShell>
 
           <HeroFieldShell label="Venue / Area" icon={<Sparkles className="h-4 w-4" />}>
-            <select
-              value={venue}
-              onChange={(e) => setVenue(e.target.value)}
-              className="w-full bg-transparent text-sm font-semibold outline-none"
-            >
+            <select value={venue} onChange={(e) => setVenue(e.target.value)} className="w-full bg-transparent text-sm font-semibold outline-none">
               <option value="">Select area</option>
               {venueOptions.map((item) => (
                 <option key={item.value} value={item.value}>
@@ -455,13 +436,16 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
       </div>
 
       {modalOpen ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeModal();
+          }}
+        >
           <div className="w-full max-w-5xl overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.22)] dark:border-white/10 dark:bg-slate-950">
             <div className="flex items-center justify-between border-b border-black/5 px-5 py-4 dark:border-white/10">
               <div>
-                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
-                  Availability Status
-                </div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Availability Status</div>
                 <div className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
                   {loading ? 'Checking selected schedule' : result?.title || 'Availability result'}
                 </div>
@@ -498,9 +482,7 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
                   <div className={`rounded-[1.6rem] border p-5 ${tone(result.status)}`}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold uppercase tracking-[0.22em] opacity-80">
-                          {result.status.replaceAll('_', ' ')}
-                        </div>
+                        <div className="text-sm font-semibold uppercase tracking-[0.22em] opacity-80">{result.status.replaceAll('_', ' ')}</div>
                         <div className="mt-1 text-2xl font-semibold">{result.title}</div>
                       </div>
                       <div className="rounded-full bg-black/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] dark:bg-white/10">
@@ -515,10 +497,7 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
                   <div className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
                     <div className="space-y-4">
                       {result.results.map((day) => (
-                        <div
-                          key={day.date}
-                          className="rounded-[1.6rem] border border-black/5 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5"
-                        >
+                        <div key={day.date} className="rounded-[1.6rem] border border-black/5 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <div className="text-lg font-semibold text-slate-900 dark:text-white">{day.date}</div>
@@ -548,16 +527,33 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
                             </div>
                           ) : null}
 
+                          {day.calendar_blocks && day.calendar_blocks.length > 0 ? (
+                            <div className="mt-4 rounded-[1.2rem] border border-black/5 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-950/60">
+                              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Calendar Blocks</div>
+                              <ul className="mt-2 space-y-2 text-slate-600 dark:text-slate-300">
+                                {day.calendar_blocks.map((block, index) => (
+                                  <li key={`${day.date}-block-${index}`}>
+                                    • {block.title || 'Calendar block'}{block.area ? ` — ${block.area}` : ''}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+
                           {day.event_titles && day.event_titles.length > 0 ? (
                             <div className="mt-4 rounded-[1.2rem] border border-black/5 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-950/60">
-                              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                                Visible Events on This Date
-                              </div>
+                              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Visible Events on This Date</div>
                               <ul className="mt-2 space-y-2 text-slate-600 dark:text-slate-300">
                                 {day.event_titles.map((title) => (
                                   <li key={`${day.date}-${title}`}>• {title}</li>
                                 ))}
                               </ul>
+                            </div>
+                          ) : null}
+
+                          {day.venue_capacity_message ? (
+                            <div className="mt-4 rounded-[1.2rem] border border-black/5 bg-white px-4 py-3 text-sm text-slate-600 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-300">
+                              {day.venue_capacity_message}
                             </div>
                           ) : null}
                         </div>
@@ -566,9 +562,7 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
 
                     <div className="space-y-4">
                       <div className="rounded-[1.6rem] border border-black/5 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
-                        <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                          Booking Summary
-                        </div>
+                        <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Booking Summary</div>
                         <div className="mt-3 space-y-3 text-sm text-slate-600 dark:text-slate-300">
                           <div><span className="font-semibold text-slate-900 dark:text-white">Range:</span> {formatRangeLabel(result.from, result.to)}</div>
                           <div><span className="font-semibold text-slate-900 dark:text-white">Area:</span> {result.venue}</div>
@@ -592,10 +586,7 @@ export default function HeroAvailabilityBar({ venueOptions }: { venueOptions: Ve
                           >
                             Continue to Booking
                           </Link>
-                          <Link
-                            href="/calendar"
-                            className="inline-flex items-center rounded-full border border-black/10 px-5 py-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-white"
-                          >
+                          <Link href="/calendar" className="inline-flex items-center rounded-full border border-black/10 px-5 py-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-white">
                             Open Full Calendar
                           </Link>
                         </div>

@@ -10,7 +10,9 @@ use App\Models\PublicEvent;
 use App\Models\SiteSetting;
 use App\Models\TourismMember;
 use App\Models\VenueSpace;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -89,7 +91,7 @@ class PublicSiteController extends Controller
             'officeSpace' => $officeSpace,
             'events' => $this->eventsPayload()
                 ->filter(fn (array $item) => $item['isPublic'] === true)
-                ->take(3)
+                ->take(4)
                 ->values()
                 ->all(),
             'members' => $this->membersPayload()->all(),
@@ -160,10 +162,11 @@ class PublicSiteController extends Controller
                 $light = $space->light_image ?: $fallbackLight;
                 $dark = $space->dark_image ?: ($space->light_image ?: $fallbackDark);
                 $homepageVisible = (bool) $space->homepage_visible;
+                $slug = Str::slug($space->title);
 
                 return [
                     'id' => $space->id,
-                    'slug' => Str::slug($space->title),
+                    'slug' => $slug,
                     'title' => $space->title,
                     'shortDescription' => $space->short_description,
                     'summary' => $space->summary ?: $space->short_description,
@@ -174,7 +177,7 @@ class PublicSiteController extends Controller
                     'capacity' => $space->capacity ?: 'Flexible venue capacity',
                     'category' => $space->category ?: 'Venue Space',
                     'ctaLabel' => $this->isTourismOfficeSpace([
-                        'slug' => Str::slug($space->title),
+                        'slug' => $slug,
                         'title' => $space->title,
                         'category' => $space->category,
                     ]) ? 'View Office' : 'View Space',
@@ -187,10 +190,17 @@ class PublicSiteController extends Controller
 
     protected function eventsPayload(): Collection
     {
-        return PublicEvent::query()
+        $query = PublicEvent::query()
             ->where('is_public', true)
-            ->orderByDesc('is_highlighted')
-            ->orderBy('event_date')
+            ->orderByDesc('is_highlighted');
+
+        if (Schema::hasColumn('public_events', 'event_start_date')) {
+            $query->orderByRaw('COALESCE(event_start_date, event_date) asc');
+        } else {
+            $query->orderBy('event_date');
+        }
+
+        return $query
             ->orderBy('sort_order')
             ->get()
             ->map(function (PublicEvent $event) {
@@ -201,12 +211,16 @@ class PublicSiteController extends Controller
                 $image = $images[0];
                 $scope = $event->scope === 'city' ? 'city' : 'bccc';
                 $highlighted = (bool) $event->is_highlighted;
+                $dateText = $this->publicEventDateText($event);
+                $startKey = $this->publicEventStartDateKey($event);
+                $endKey = $this->publicEventEndDateKey($event);
 
                 return [
                     'id' => $event->id,
                     'title' => $event->title,
-                    'date' => $event->event_date?->format('F j, Y') ?? '',
-                    'dateKey' => $event->event_date?->format('Y-m-d'),
+                    'date' => $dateText,
+                    'dateKey' => $startKey,
+                    'endDateKey' => $endKey,
                     'time' => $event->event_time,
                     'summary' => $event->note ?: Str::limit((string) $event->description, 140),
                     'description' => $event->description,
@@ -319,20 +333,37 @@ class PublicSiteController extends Controller
 
     protected function membersPayload(): Collection
     {
-        return TourismMember::query()
-            ->where('is_active', true)
-            ->orderByDesc('is_featured')
+        $query = TourismMember::query()
+            ->where('is_active', true);
+
+        if (Schema::hasColumn('tourism_members', 'tree_level')) {
+            $query->orderByRaw('COALESCE(tree_level, 99) asc');
+        }
+
+        return $query
             ->orderBy('sort_order')
+            ->orderByDesc('is_featured')
             ->get()
-            ->map(fn (TourismMember $member) => [
-                'id' => $member->id,
-                'name' => $member->name,
-                'position' => $member->position,
-                'shortBio' => $member->short_bio,
-                'details' => is_array($member->details) ? $member->details : [],
-                'photo' => $member->photo_path ?: '/marketing/images/branding/breathe-dark.png',
-                'featured' => (bool) $member->is_featured,
-            ])
+            ->map(function (TourismMember $member) {
+                $details = is_array($member->details) ? array_values(array_filter($member->details)) : [];
+
+                return [
+                    'id' => $member->id,
+                    'fullName' => (string) ($member->full_name ?? $member->getAttribute('name') ?? ''),
+                    'designation' => (string) ($member->designation ?? $member->getAttribute('position') ?? ''),
+                    'unitName' => $member->unit_name,
+                    'email' => $member->email,
+                    'phone' => $member->phone,
+                    'shortBio' => $member->short_bio,
+                    'details' => $details,
+                    'photo' => $member->photo_path ?: '/marketing/images/branding/breathe-dark.png',
+                    'featured' => (bool) $member->is_featured,
+                    'officeSection' => $member->getAttribute('office_section'),
+                    'teamName' => $member->getAttribute('team_name'),
+                    'reportsToId' => $member->getAttribute('reports_to_id'),
+                    'treeLevel' => (int) ($member->getAttribute('tree_level') ?? 0),
+                ];
+            })
             ->values();
     }
 
@@ -358,7 +389,7 @@ class PublicSiteController extends Controller
         }
 
         try {
-            return \Carbon\Carbon::parse($value)->format('Y-m-d');
+            return Carbon::parse($value)->format('Y-m-d');
         } catch (\Throwable) {
             return null;
         }
@@ -404,5 +435,51 @@ class PublicSiteController extends Controller
         ];
 
         return in_array($host, $allowedHosts, true) ? $value : null;
+    }
+
+    protected function publicEventStartDateKey(PublicEvent $event): ?string
+    {
+        $start = $event->getAttribute('event_start_date') ?: $event->event_date;
+
+        if (! $start) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($start)->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    protected function publicEventEndDateKey(PublicEvent $event): ?string
+    {
+        $end = $event->getAttribute('event_end_date') ?: $event->getAttribute('event_start_date') ?: $event->event_date;
+
+        if (! $end) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($end)->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    protected function publicEventDateText(PublicEvent $event): string
+    {
+        $startKey = $this->publicEventStartDateKey($event);
+        $endKey = $this->publicEventEndDateKey($event);
+
+        if (! $startKey && ! $endKey) {
+            return '';
+        }
+
+        if (! $startKey || ! $endKey || $startKey === $endKey) {
+            return $startKey ? Carbon::parse($startKey)->format('F j, Y') : '';
+        }
+
+        return Carbon::parse($startKey)->format('F j, Y') . ' to ' . Carbon::parse($endKey)->format('F j, Y');
     }
 }

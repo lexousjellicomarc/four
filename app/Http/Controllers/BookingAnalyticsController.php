@@ -279,19 +279,20 @@ class BookingAnalyticsController extends Controller
 
     private function buildMonthlyTrend(array $filters): array
     {
-        $months = collect(range(11, 0))
-            ->map(function (int $offset) {
-                $date = now()->startOfMonth()->subMonths($offset);
+        $months = [];
 
-                return [
-                    'key' => $date->format('Y-m'),
-                    'label' => $date->format('M Y'),
-                    'bookings' => 0,
-                    'guests' => 0,
-                    'confirmed_revenue' => 0.0,
-                ];
-            })
-            ->keyBy('key');
+        foreach (range(11, 0) as $offset) {
+            $date = now()->startOfMonth()->subMonths($offset);
+            $key = $date->format('Y-m');
+
+            $months[$key] = [
+                'key' => $key,
+                'label' => $date->format('M Y'),
+                'bookings' => 0,
+                'guests' => 0,
+                'confirmed_revenue' => 0.0,
+            ];
+        }
 
         $bookingGroups = $this->filteredBookingsBaseQuery($filters)
             ->whereDate('bookings.booking_date_from', '>=', now()->startOfMonth()->subMonths(11)->toDateString())
@@ -300,10 +301,13 @@ class BookingAnalyticsController extends Controller
             ->get();
 
         foreach ($bookingGroups as $group) {
-            if ($months->has($group->ym)) {
-                $months[$group->ym]['bookings'] = (int) $group->total;
-                $months[$group->ym]['guests'] = (int) $group->guests;
+            $key = (string) $group->ym;
+            if (! array_key_exists($key, $months)) {
+                continue;
             }
+
+            $months[$key]['bookings'] = (int) $group->total;
+            $months[$key]['guests'] = (int) $group->guests;
         }
 
         $revenueGroups = DB::table('booking_payments')
@@ -341,12 +345,15 @@ class BookingAnalyticsController extends Controller
             ->get();
 
         foreach ($revenueGroups as $group) {
-            if ($months->has($group->ym)) {
-                $months[$group->ym]['confirmed_revenue'] = round((float) $group->total, 2);
+            $key = (string) $group->ym;
+            if (! array_key_exists($key, $months)) {
+                continue;
             }
+
+            $months[$key]['confirmed_revenue'] = round((float) $group->total, 2);
         }
 
-        return $months->values()->all();
+        return array_values($months);
     }
 
     private function buildUpcomingWorkload(array $filters): array

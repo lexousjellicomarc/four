@@ -11,6 +11,8 @@ export type PublicEventItem = {
     venue: string;
     date: string;
     dateKey?: string | null;
+    dateEnd?: string | null;
+    durationDays?: number | null;
     time?: string | null;
     description: string;
     summary: string;

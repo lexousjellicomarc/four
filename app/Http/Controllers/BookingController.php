@@ -136,6 +136,40 @@ class BookingController extends Controller
     {
         $data = $request->validated();
 
+        unset($data['survey_proof_image']);
+
+        $booking = $this->bookings->create($data);
+
+        return redirect()
+            ->route('bookings.survey', $booking->id)
+            ->with('success', 'Booking details saved. Continue to the survey reference page.');
+    }
+
+    public function survey(Request $request, Booking $booking): Response
+    {
+        $this->ensureBookingAccess($request, $booking);
+
+        $booking->loadMissing([
+            'service',
+            'bookingServices.service',
+            'payments',
+            'createdBy',
+        ]);
+
+        return Inertia::render('bookings/survey', [
+            'booking' => (new BookingResource($booking))->resolve($request),
+        ]);
+    }
+
+    public function storeSurvey(Request $request, Booking $booking): RedirectResponse
+    {
+        $this->ensureBookingAccess($request, $booking);
+
+        $data = $request->validate([
+            'survey_email' => ['required', 'string', 'email', 'max:255'],
+            'survey_proof_image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        ]);
+
         $proofFile = $request->file('survey_proof_image');
         if (! $proofFile instanceof UploadedFile) {
             return redirect()->back()->withErrors([
@@ -150,21 +184,22 @@ class BookingController extends Controller
             ]);
         }
 
-        unset($data['survey_proof_image']);
-        $data['survey_proof_image_path'] = $storedDiskPath;
-        $data['survey_proof_image_name'] = $proofFile->getClientOriginalName();
-        $data['survey_proof_image_mime'] = $proofFile->getClientMimeType() ?: $proofFile->getMimeType();
+        $oldProofPath = $booking->survey_proof_image_path;
 
-        try {
-            $booking = $this->bookings->create($data);
-        } catch (\Throwable $e) {
-            $this->deleteStoredFile($storedDiskPath);
-            throw $e;
+        $booking->update([
+            'survey_email' => strtolower(trim((string) $data['survey_email'])),
+            'survey_proof_image_path' => $storedDiskPath,
+            'survey_proof_image_name' => $proofFile->getClientOriginalName(),
+            'survey_proof_image_mime' => $proofFile->getClientMimeType() ?: $proofFile->getMimeType(),
+        ]);
+
+        if (! empty($oldProofPath) && $oldProofPath !== $storedDiskPath) {
+            $this->deleteStoredFile($oldProofPath);
         }
 
         return redirect()
             ->route('bookings.show', $booking->id)
-            ->with('success', 'Booking created.');
+            ->with('success', 'Survey reference saved successfully.');
     }
 
     public function show(Request $request, Booking $booking): Response

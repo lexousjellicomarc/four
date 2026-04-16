@@ -13,48 +13,49 @@ const fallbackStats: HomepageStatItem[] = [
 
 export default function StatsBanner({ items = [] }: Props) {
   const source = items.length > 0 ? items : fallbackStats;
+  const looping = [...source, ...source];
 
   return (
-    <section className="mt-10 w-full px-4 sm:px-6 lg:px-8">
+    <section className="mt-6 w-full px-4 sm:px-6 lg:px-8">
+      <style>{`
+        @keyframes statsMarquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
       <div className="relative mx-auto w-full max-w-[1600px] overflow-hidden rounded-[2.2rem] border border-white/10">
-        <img
-          src="/marketing/images/events/lightmain.JPG"
-          alt="BCCC exterior"
-          className="absolute inset-0 h-full w-full object-cover dark:hidden"
-        />
-        <img
-          src="/marketing/images/events/darkmain.JPG"
-          alt="BCCC exterior"
-          className="absolute inset-0 hidden h-full w-full object-cover dark:block"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(8,15,27,0.70),rgba(15,139,109,0.34))] dark:bg-[linear-gradient(135deg,rgba(2,6,23,0.82),rgba(41,76,255,0.24))]" />
+        <img src="/marketing/images/events/lightmain.JPG" alt="BCCC exterior" className="absolute inset-0 h-full w-full object-cover dark:hidden" />
+        <img src="/marketing/images/events/darkmain.JPG" alt="BCCC exterior" className="absolute inset-0 hidden h-full w-full object-cover dark:block" />
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(8,15,27,0.74),rgba(15,139,109,0.34))] dark:bg-[linear-gradient(135deg,rgba(2,6,23,0.84),rgba(41,76,255,0.24))]" />
 
-        <div className="relative px-5 py-8 sm:px-7 sm:py-10 lg:px-9">
-          <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="relative px-5 py-7 sm:px-7 sm:py-8 lg:px-9">
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="text-[11px] font-bold uppercase tracking-[0.26em] text-white/70">Venue at a glance</div>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-                Stronger visual impact, same public information value.
+                A moving snapshot of BCCC’s public-facing venue value.
               </h2>
             </div>
             <p className="max-w-2xl text-sm leading-7 text-white/76">
-              This banner now sits directly below the welcome section and reads better as a quick summary strip before the amenities and spaces section.
+              This strip now moves continuously from right to left so the homepage reads with more motion before the amenities and spaces sections.
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {source.slice(0, 4).map((item) => (
-              <div
-                key={item.id}
-                className="rounded-[1.8rem] border border-white/12 bg-white/10 px-5 py-5 text-white shadow-[0_16px_40px_rgba(0,0,0,0.12)] backdrop-blur-md"
-              >
-                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/66">{item.label}</div>
-                <div className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-                  {item.value}
-                  {item.suffix}
+          <div className="overflow-hidden">
+            <div className="flex min-w-max gap-4" style={{ animation: 'statsMarquee 22s linear infinite' }}>
+              {looping.map((item, index) => (
+                <div
+                  key={`${item.id}-${index}`}
+                  className="w-[250px] shrink-0 rounded-[1.8rem] border border-white/12 bg-white/10 px-5 py-5 text-white shadow-[0_16px_40px_rgba(0,0,0,0.12)] backdrop-blur-md"
+                >
+                  <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/66">{item.label}</div>
+                  <div className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
+                    {item.value}
+                    {item.suffix}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>

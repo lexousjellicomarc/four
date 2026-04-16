@@ -11,6 +11,7 @@ class PublicEvent extends Model
         'title',
         'venue',
         'event_date',
+        'event_date_to',
         'event_time',
         'description',
         'note',
@@ -22,6 +23,7 @@ class PublicEvent extends Model
 
     protected $casts = [
         'event_date' => 'date',
+        'event_date_to' => 'date',
         'is_highlighted' => 'boolean',
         'is_public' => 'boolean',
         'images' => 'array',

@@ -9,7 +9,11 @@ class TourismMember extends Model
     protected $fillable = [
         'full_name',
         'designation',
+        'office_section',
         'unit_name',
+        'team_label',
+        'reports_to_name',
+        'tree_level',
         'email',
         'phone',
         'short_bio',
@@ -22,6 +26,7 @@ class TourismMember extends Model
 
     protected $casts = [
         'details' => 'array',
+        'tree_level' => 'integer',
         'is_active' => 'boolean',
         'is_featured' => 'boolean',
     ];

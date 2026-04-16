@@ -14,6 +14,8 @@ type EventRow = {
   title: string;
   venue: string;
   date: string;
+  dateEnd?: string;
+  durationDays?: number;
   time: string | null;
   description: string;
   note: string;
@@ -82,6 +84,7 @@ type AdminHomePageProps = {
   initialStats?: StatRow[];
   initialSiteConfig?: SiteConfigState;
   initialTourismMembers?: TourismMemberRow[];
+  initialVenueAreas?: string[];
 };
 
 type NoticeState = { type: 'success' | 'error'; text: string } | null;
@@ -92,6 +95,7 @@ type EventFormState = {
   title: string;
   venue: string;
   date: string;
+  dateEnd: string;
   time: string;
   description: string;
   note: string;
@@ -139,6 +143,7 @@ const emptyEventForm: EventFormState = {
   title: '',
   venue: '',
   date: '',
+  dateEnd: '',
   time: '',
   description: '',
   note: '',
@@ -180,6 +185,33 @@ const emptyStatForm: StatFormState = {
   value: '',
   suffix: '',
 };
+
+const EVENT_TIME_OPTIONS = [
+  'Whole Day',
+  'AM (6:00 AM - 12:00 PM)',
+  'PM (12:00 PM - 6:00 PM)',
+  'EVE (6:00 PM - 11:59 PM)',
+  '8:00 AM - 5:00 PM',
+  '9:00 AM - 12:00 PM',
+  '1:00 PM - 5:00 PM',
+  '6:00 PM - 9:00 PM',
+];
+
+const SPACE_CATEGORY_OPTIONS = [
+  'Convention Hall',
+  'Main Hall',
+  'Function Hall',
+  'Reception and Lobby Area',
+  'Meeting Room',
+  'VIP Holding Area',
+  'Board Room',
+  'Exhibit and Gallery Space',
+  'Basement Support Space',
+  'Tourism Office',
+  'Public Office',
+  'Administrative Office',
+  'Other Venue Space',
+];
 
 const fallbackSiteConfig: SiteConfigState = {
   mapEmbedUrl: '',
@@ -285,6 +317,16 @@ function inputClass(hasError: boolean) {
 function FieldError({ error }: { error?: string }) {
   if (!error) return null;
   return <div className="mt-1 text-sm font-medium text-red-600 dark:text-red-300">{error}</div>;
+}
+
+function formatDateRange(start?: string | null, end?: string | null) {
+  if (!start) return 'No date';
+  if (!end || end === start) return start;
+  return `${start} to ${end}`;
+}
+
+function pluralizeDay(value?: number) {
+  return `${value ?? 1} day${value === 1 ? '' : 's'}`;
 }
 
 function normalizeDateInput(value?: string | null) {
@@ -510,6 +552,7 @@ export default function AdminHome({
   initialStats = [],
   initialTourismMembers = [],
   initialSiteConfig = fallbackSiteConfig,
+  initialVenueAreas = [],
 }: AdminHomePageProps) {
   const page = usePage();
   const url = page.url;
@@ -581,6 +624,11 @@ export default function AdminHome({
   const [editingStatId, setEditingStatId] = useState<RowId | null>(null);
 
   const [siteErrors, setSiteErrors] = useState<FieldErrors>({});
+
+  const venueAreaOptions = useMemo(() => {
+    const base = ['Full Hall', 'Main Hall', 'Foyer & Lobby Area', 'VIP Lounge', 'Board Room', 'Basement', 'Gallery2600'];
+    return Array.from(new Set([...base, ...initialVenueAreas].map((item) => String(item || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [initialVenueAreas]);
 
   const filteredPackages = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -804,16 +852,17 @@ export default function AdminHome({
     setEventErrors({});
 
     const formData = new FormData();
-    formData.append('title', trimText(spaceForm.title));
-    formData.append('category', trimText(spaceForm.category));
-    formData.append('capacity', trimText(spaceForm.capacity));
-    formData.append('short_description', trimText(spaceForm.shortDescription));
-    formData.append('summary', trimText(spaceForm.summary));
-    formData.append('details_text', spaceForm.detailsText.trim());
-    formData.append('homepage_visible', spaceForm.homepageVisible ? '1' : '0');
-    if (spaceForm.lightFile) formData.append('light_image', spaceForm.lightFile);
-    if (spaceForm.darkFile) formData.append('dark_image', spaceForm.darkFile);
-
+    formData.append('scope', eventForm.scope);
+    formData.append('title', trimText(eventForm.title));
+    formData.append('venue', trimText(eventForm.venue));
+    formData.append('event_date', trimText(eventForm.date));
+    formData.append('event_date_to', trimText(eventForm.dateEnd || eventForm.date));
+    formData.append('event_time', trimText(eventForm.time));
+    formData.append('description', trimText(eventForm.description));
+    formData.append('note', trimText(eventForm.note));
+    formData.append('is_highlighted', eventForm.highlighted ? '1' : '0');
+    formData.append('is_public', eventForm.isPublic ? '1' : '0');
+    eventForm.files.slice(0, 3).forEach((file) => formData.append('images[]', file));
 
     try {
       const payload = editingEventId
@@ -829,7 +878,7 @@ export default function AdminHome({
       setNotice({ type: 'success', text: payload.message });
       resetEventForm();
     } catch (error) {
-      setEventErrors(validationErrors(error, { event_date: 'date', event_time: 'time', is_highlighted: 'highlighted', is_public: 'isPublic', 'images.0': 'files' }));
+      setEventErrors(validationErrors(error, { event_date: 'date', event_date_to: 'dateEnd', event_time: 'time', is_highlighted: 'highlighted', is_public: 'isPublic', 'images.0': 'files' }));
       setNotice({ type: 'error', text: normalizeErrorMessage(error) });
     }
   };
@@ -989,6 +1038,7 @@ export default function AdminHome({
       title: row.title,
       venue: row.venue,
       date: normalizeDateInput(row.date),
+      dateEnd: normalizeDateInput(row.dateEnd ?? row.date),
       time: row.time ?? '',
       description: row.description,
       note: row.note,
@@ -1319,36 +1369,55 @@ export default function AdminHome({
 >
 
               <form onSubmit={saveEvent} className="space-y-4">
-                <div>
-                  <label className="mb-1 block text-sm font-semibold">Type</label>
-                  <select value={eventForm.scope} onChange={(e) => setEventForm((prev) => ({ ...prev, scope: e.target.value as 'bccc' | 'city' }))} className={inputClass(!!eventErrors.scope)}>
-                    <option value="bccc">BCCC event</option>
-                    <option value="city">Baguio City event</option>
-                  </select>
-                  <FieldError error={eventErrors.scope} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-semibold">Title</label>
-                  <input value={eventForm.title} onChange={(e) => setEventForm((prev) => ({ ...prev, title: e.target.value }))} className={inputClass(!!eventErrors.title)} />
-                  <FieldError error={eventErrors.title} />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-sm font-semibold">Venue</label>
-                    <input value={eventForm.venue} onChange={(e) => setEventForm((prev) => ({ ...prev, venue: e.target.value }))} className={inputClass(!!eventErrors.venue)} />
-                    <FieldError error={eventErrors.venue} />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-semibold">Date</label>
-                    <input type="date" value={eventForm.date} onChange={(e) => setEventForm((prev) => ({ ...prev, date: e.target.value }))} className={inputClass(!!eventErrors.date)} />
-                    <FieldError error={eventErrors.date} />
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-semibold">Time</label>
-                  <input value={eventForm.time} onChange={(e) => setEventForm((prev) => ({ ...prev, time: e.target.value }))} className={inputClass(!!eventErrors.time)} />
-                  <FieldError error={eventErrors.time} />
-                </div>
+  <div>
+    <label className="mb-1 block text-sm font-semibold">Type</label>
+    <select value={eventForm.scope} onChange={(e) => setEventForm((prev) => ({ ...prev, scope: e.target.value as 'bccc' | 'city' }))} className={inputClass(!!eventErrors.scope)}>
+      <option value="bccc">BCCC event</option>
+      <option value="city">Baguio City event</option>
+    </select>
+    <FieldError error={eventErrors.scope} />
+  </div>
+  <div>
+    <label className="mb-1 block text-sm font-semibold">Title</label>
+    <input value={eventForm.title} onChange={(e) => setEventForm((prev) => ({ ...prev, title: e.target.value }))} className={inputClass(!!eventErrors.title)} />
+    <FieldError error={eventErrors.title} />
+  </div>
+  <div>
+    <label className="mb-1 block text-sm font-semibold">Venue / area</label>
+    <select value={eventForm.venue} onChange={(e) => setEventForm((prev) => ({ ...prev, venue: e.target.value }))} className={inputClass(!!eventErrors.venue)}>
+      <option value="">Select venue / area</option>
+      {venueAreaOptions.map((option) => (
+        <option key={option} value={option}>{option}</option>
+      ))}
+    </select>
+    <div className="mt-1 text-xs text-slate-500 dark:text-slate-300">This list now follows the backend venue/service areas so event records and calendar rules stay aligned.</div>
+    <FieldError error={eventErrors.venue} />
+  </div>
+  <div className="grid gap-4 md:grid-cols-2">
+    <div>
+      <label className="mb-1 block text-sm font-semibold">Start date</label>
+      <input type="date" value={eventForm.date} onChange={(e) => setEventForm((prev) => ({ ...prev, date: e.target.value, dateEnd: prev.dateEnd && prev.dateEnd < e.target.value ? e.target.value : (prev.dateEnd || e.target.value) }))} className={inputClass(!!eventErrors.date)} />
+      <FieldError error={eventErrors.date} />
+    </div>
+    <div>
+      <label className="mb-1 block text-sm font-semibold">End date</label>
+      <input type="date" min={eventForm.date || undefined} value={eventForm.dateEnd} onChange={(e) => setEventForm((prev) => ({ ...prev, dateEnd: e.target.value }))} className={inputClass(!!eventErrors.dateEnd)} />
+      <FieldError error={eventErrors.dateEnd} />
+    </div>
+  </div>
+  <div className="rounded-2xl border border-dashed px-4 py-3 text-sm text-slate-600 dark:border-white/10 dark:text-slate-300">
+    Duration: <span className="font-semibold">{pluralizeDay((eventForm.date && (eventForm.dateEnd || eventForm.date)) ? Math.max(1, Math.round((new Date(`${eventForm.dateEnd || eventForm.date}T00:00:00`).getTime() - new Date(`${eventForm.date}T00:00:00`).getTime()) / 86400000) + 1) : 1)}</span>
+  </div>
+  <div>
+    <label className="mb-1 block text-sm font-semibold">Time slot</label>
+    <select value={eventForm.time} onChange={(e) => setEventForm((prev) => ({ ...prev, time: e.target.value }))} className={inputClass(!!eventErrors.time)}>
+      <option value="">Select time option</option>
+      {EVENT_TIME_OPTIONS.map((option) => (
+        <option key={option} value={option}>{option}</option>
+      ))}
+    </select>
+    <FieldError error={eventErrors.time} />
+  </div>
                 <div>
                   <label className="mb-1 block text-sm font-semibold">Description</label>
                   <textarea rows={4} value={eventForm.description} onChange={(e) => setEventForm((prev) => ({ ...prev, description: e.target.value }))} className={inputClass(!!eventErrors.description)} />
@@ -1401,7 +1470,7 @@ export default function AdminHome({
                     <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="text-lg font-semibold">{row.title}</div>
-                        <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{row.venue} • {row.date}{row.time ? ` • ${row.time}` : ''}</div>
+                        <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{row.venue} • {formatDateRange(row.date, row.dateEnd)} • {pluralizeDay(row.durationDays)}{row.time ? ` • ${row.time}` : ''}</div>
                         <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">{row.description}</div>
                         <ItemImageStrip images={row.images} />
                       </div>
@@ -1432,10 +1501,16 @@ export default function AdminHome({
                   <FieldError error={calendarErrors.title} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-semibold">Area</label>
-                  <input value={calendarForm.area} onChange={(e) => setCalendarForm((prev) => ({ ...prev, area: e.target.value }))} className={inputClass(!!calendarErrors.area)} />
-                  <FieldError error={calendarErrors.area} />
-                </div>
+  <label className="mb-1 block text-sm font-semibold">Area</label>
+  <select value={calendarForm.area} onChange={(e) => setCalendarForm((prev) => ({ ...prev, area: e.target.value }))} className={inputClass(!!calendarErrors.area)}>
+    <option value="">All areas</option>
+    {venueAreaOptions.map((option) => (
+      <option key={option} value={option}>{option}</option>
+    ))}
+  </select>
+  <div className="mt-1 text-xs text-slate-500 dark:text-slate-300">This dropdown is now linked to the backend venue/service catalog so blocked dates point to actual areas used by booking.</div>
+  <FieldError error={calendarErrors.area} />
+</div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-sm font-semibold">Block</label>
@@ -1657,7 +1732,12 @@ export default function AdminHome({
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-sm font-semibold">Category</label>
-                    <input value={spaceForm.category} onChange={(e) => setSpaceForm((prev) => ({ ...prev, category: e.target.value }))} className={inputClass(!!spaceErrors.category)} />
+                    <select value={spaceForm.category} onChange={(e) => setSpaceForm((prev) => ({ ...prev, category: e.target.value }))} className={inputClass(!!spaceErrors.category)}>
+                      <option value="">Select category</option>
+                      {SPACE_CATEGORY_OPTIONS.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
                     <FieldError error={spaceErrors.category} />
                   </div>
                   <div>

@@ -596,7 +596,7 @@ protected function normalizeLifecycleMeta(array $meta): array
                 $q->whereDate('booking_date_to', '<=', $filters['date_to']);
             });
     }
-   
+
     protected function normalizeItemsForBooking(array $items): array
 {
     $normalized = [];
@@ -776,7 +776,7 @@ protected function existingItemsForCapacity(Booking $booking): array
     $this->syncLifecycleStatus($booking);
 }
 
-   
+
 public function syncLifecycleStatuses(): int
 {
     return (int) ($this->runAutomatedLifecycleMaintenance()['changed_count'] ?? 0);
@@ -1510,7 +1510,7 @@ protected function roundMoney(float $value): float
         'is_fully_booked' => $isFullyBooked,
     ];
 }
-   
+
     public function getDashboardDayStatus(string $date): array
 {
     $availability = $this->getDailyAvailability($date);
@@ -1602,6 +1602,27 @@ protected function roundMoney(float $value): float
         })
         ->values();
 
+        $publicVisibleBookingsQuery = Booking::query()
+    ->with(['bookingServices.service.serviceType'])
+    ->whereIn('booking_status', ['active', 'confirmed'])
+    ->where('booking_date_from', '<', Carbon::parse($date)->addDay()->startOfDay())
+    ->where('booking_date_to', '>', Carbon::parse($date)->startOfDay());
+
+if (Schema::hasColumn('bookings', 'is_public_calendar_visible')) {
+    $publicVisibleBookingsQuery->where('is_public_calendar_visible', true);
+}
+
+$publicVisibleBookings = $publicVisibleBookingsQuery
+    ->get()
+    ->filter(function (Booking $booking) use ($area) {
+        if (! $area) {
+            return true;
+        }
+
+        return $this->bookingMatchesArea($booking, $area);
+    })
+    ->values();
+    
     $calendarBlocks = CalendarBlock::query()
         ->whereDate('date_from', '<=', $date)
         ->whereDate('date_to', '>=', $date)

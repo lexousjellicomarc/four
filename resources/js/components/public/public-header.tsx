@@ -33,11 +33,11 @@ export default function PublicHeader() {
 
   const isActive = (href: string) => {
     if (href === '/') return currentUrl === '/';
-    return currentUrl === href || currentUrl.startsWith('${href}/');
+    return currentUrl === href || currentUrl.startsWith(`${href}/`);
   };
 
   const navClass = (href: string) =>
-    `rounded-full px-4 py-2.5 text-[13px] lg:text-[14px] font-semibold uppercase tracking-[0.16em] transition ${
+    `rounded-full px-4 py-2.5 text-[13px] font-semibold uppercase tracking-[0.16em] transition lg:text-[14px] ${
       isActive(href)
         ? 'bg-white/18 text-white shadow-[0_8px_22px_rgba(15,23,42,0.15)]'
         : 'text-white/90 hover:bg-white/10 hover:text-white'
@@ -46,8 +46,8 @@ export default function PublicHeader() {
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-[100]">
-        <div className="w-full border-b border-white/10 bg-[linear-gradient(135deg,rgba(14,26,45,0.82),rgba(15,139,109,0.34))] shadow-[0_24px_70px_rgba(15,23,42,0.26)] backdrop-blur-xl dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(2,6,23,0.92),rgba(41,76,255,0.24))] dark:shadow-[0_24px_70px_rgba(2,8,23,0.48)]">
-          <div className="relative flex min-h-[92px] w-full items-center justify-between gap-4 pl-3 pr-[118px] sm:pl-4 lg:min-h-[100px] lg:pl-5 lg:pr-[134px]">
+        <div className="w-full border-b border-white/10 bg-[linear-gradient(135deg,rgba(14,26,45,0.86),rgba(15,139,109,0.36))] shadow-[0_24px_70px_rgba(15,23,42,0.26)] backdrop-blur-xl dark:bg-[linear-gradient(135deg,rgba(2,6,23,0.94),rgba(41,76,255,0.26))] dark:shadow-[0_24px_70px_rgba(2,8,23,0.48)]">
+          <div className="relative flex min-h-[88px] w-full items-center justify-between gap-4 pl-3 pr-[118px] sm:pl-4 lg:min-h-[96px] lg:pl-5 lg:pr-[136px]">
             <div className="flex min-w-0 items-center gap-4 lg:gap-6">
               <Link href="/" className="shrink-0">
                 <img
@@ -71,19 +71,18 @@ export default function PublicHeader() {
               </nav>
             </div>
 
-            <div className="hidden items-center pr-8 gap-2 xl:flex">
+            <div className="hidden items-center gap-2 pr-8 xl:flex">
               {rightNavItems.map((item) => (
                 <Link key={item.href} href={item.href} className={navClass(item.href)}>
                   {item.label}
                 </Link>
               ))}
-
               <ThemeToggle />
             </div>
 
             <Link
               href="/bookings/create"
-              className="absolute right-0 top-0 z-[110] hidden h-[120px] w-[118px] flex-col items-center justify-center gap-2 bg-[#0f8b6d] px-4 text-center text-[12px] font-extrabold uppercase tracking-[0.18em] text-white shadow-[0_22px_55px_rgba(15,139,109,0.36)] transition hover:opacity-95 dark:bg-[#294CFF] dark:shadow-[0_22px_55px_rgba(41,76,255,0.34)] xl:flex lg:h-[126px] lg:w-[134px] lg:text-[12.5px]"
+              className="absolute right-0 top-0 z-[110] hidden h-[116px] w-[118px] flex-col items-center justify-center gap-2 bg-[#0f8b6d] px-4 text-center text-[12px] font-extrabold uppercase tracking-[0.18em] text-white shadow-[0_22px_55px_rgba(15,139,109,0.36)] transition hover:opacity-95 dark:bg-[#294CFF] dark:shadow-[0_22px_55px_rgba(41,76,255,0.34)] xl:flex lg:h-[122px] lg:w-[136px]"
             >
               <CalendarDays className="h-5 w-5" />
               <span className="leading-tight">
@@ -119,25 +118,14 @@ export default function PublicHeader() {
         </div>
       </header>
 
-      {mobileOpen && (
+      {mobileOpen ? (
         <div className="fixed inset-0 z-[120] xl:hidden">
-          <div
-            className="absolute inset-0 bg-slate-950/68 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-          />
+          <div className="absolute inset-0 bg-slate-950/68 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
 
           <div className="absolute right-0 top-0 flex h-full w-full max-w-sm flex-col bg-[#f7f4ec] p-5 dark:bg-[#0b1220]">
             <div className="mb-6 flex items-center justify-between gap-3">
-              <img
-                src="/marketing/images/logo/lightlogo.png"
-                alt="BCCC EASE"
-                className="h-12 w-auto object-contain dark:hidden"
-              />
-              <img
-                src="/marketing/images/logo/darklogo.png"
-                alt="BCCC EASE"
-                className="hidden h-12 w-auto object-contain dark:block"
-              />
+              <img src="/marketing/images/logo/lightlogo.png" alt="BCCC EASE" className="h-12 w-auto object-contain dark:hidden" />
+              <img src="/marketing/images/logo/darklogo.png" alt="BCCC EASE" className="hidden h-12 w-auto object-contain dark:block" />
 
               <button
                 type="button"
@@ -187,7 +175,7 @@ export default function PublicHeader() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </>
   );
 }
