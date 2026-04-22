@@ -2,6 +2,7 @@ import '../css/app.css';
 
 import ActionFeedbackPopup from '@/components/action-feedback-popup';
 import PencilBookedSuccessPopup from '@/components/success-popup';
+import RouteLoadingOverlay from '@/components/ui/route-loading-overlay';
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { Fragment } from 'react';
@@ -25,6 +26,7 @@ createInertiaApp({
             <Fragment>
                 <ActionFeedbackPopup />
                 <PencilBookedSuccessPopup />
+                <RouteLoadingOverlay />
                 <CurrentPage {...props} />
             </Fragment>
         );

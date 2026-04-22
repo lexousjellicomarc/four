@@ -1,7 +1,7 @@
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, Edit3, Image as ImageIcon, Plus, Trash2, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Edit3, FileSpreadsheet, Globe, Image as ImageIcon, MessagesSquare, PanelsTopLeft, Plus, ShieldCheck, TableProperties, Trash2, X } from 'lucide-react';
 import SortOrderBoard from '@/components/admin/sort-order-board';
 import AdminLayout from '@/layouts/admin-layout';
 import TourismMemberManager, { type TourismMemberRow } from '@/components/admin/tourism-member-manager';
@@ -368,6 +368,40 @@ function SectionPanel({
       <h2 className="mb-4 text-xl font-bold">{title}</h2>
       {children}
     </section>
+  );
+}
+
+function WorkspaceShortcut({
+  href,
+  title,
+  description,
+  icon: Icon,
+  tone = 'frontend',
+}: {
+  href: string;
+  title: string;
+  description: string;
+  icon: any;
+  tone?: 'frontend' | 'backend' | 'public';
+}) {
+  const toneClass =
+    tone === 'backend'
+      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+      : tone === 'public'
+        ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200'
+        : 'bg-emerald-100 text-emerald-800 dark:bg-blue-500/15 dark:text-blue-200';
+
+  return (
+    <Link
+      href={href}
+      className="rounded-[1.4rem] border border-black/10 bg-white px-4 py-4 transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-[#11151d]"
+    >
+      <div className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${toneClass}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="mt-4 text-sm font-bold">{title}</div>
+      <div className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-300">{description}</div>
+    </Link>
   );
 }
 
@@ -1169,6 +1203,70 @@ export default function AdminHome({
 
       <div className="space-y-5">
         <NoticeBar notice={notice} />
+
+        <section className="rounded-[2rem] border bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#161b24]">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-800 dark:bg-blue-500/10 dark:text-blue-200">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Unified frontend + backend admin session
+              </div>
+              <h2 className="mt-3 text-2xl font-black tracking-tight">Frontend configuration and backend booking tools now move inside one admin workspace</h2>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300">
+                Use these shortcuts whenever you need to jump from public-page editing into actual backend booking operations. MICE survey & registry, inquiries, booking calendar work, manage calendar center, and backend guidelines now sit inside the same authenticated admin flow.
+              </p>
+            </div>
+
+            <div className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white dark:bg-white dark:text-slate-900">
+              <TableProperties className="h-4 w-4" />
+              No second login required
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <WorkspaceShortcut
+              href="/admin/dashboard"
+              title="Frontend Dashboard"
+              description="Open the admin dashboard for frontend content totals, latest records, and workspace shortcuts."
+              icon={PanelsTopLeft}
+            />
+            <WorkspaceShortcut
+              href="/dashboard"
+              title="Backend Booking Calendar"
+              description="Go straight to the backend booking calendar board with the Google-style month layout and live booking operations."
+              icon={TableProperties}
+              tone="backend"
+            />
+            <WorkspaceShortcut
+              href="/calendar/manage"
+              title="Manage Calendar Center"
+              description="Open block management, quick notes, public events review, and selected-date calendar control tools."
+              icon={CalendarDays}
+              tone="backend"
+            />
+            <WorkspaceShortcut
+              href="/reports/mice-registry"
+              title="MICE Survey & Registry"
+              description="Access the built-in survey and grouped registry report from the same admin session."
+              icon={FileSpreadsheet}
+              tone="backend"
+            />
+            <WorkspaceShortcut
+              href="/admin/inquiries"
+              title="Inquiries"
+              description="Review and manage venue-related inquiry submissions without leaving the admin workspace."
+              icon={MessagesSquare}
+              tone="backend"
+            />
+            <WorkspaceShortcut
+              href="/"
+              title="Public Website"
+              description="Preview the live public pages after saving frontend-admin changes while staying signed in."
+              icon={Globe}
+              tone="public"
+            />
+          </div>
+        </section>
 
         {(currentTab === 'home' || currentTab === 'events' || currentTab === 'calendar' || currentTab === 'facilities') ? (
           <div className="rounded-2xl border bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#161b24]">

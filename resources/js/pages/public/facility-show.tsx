@@ -1,6 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowRight, Users } from 'lucide-react';
 import PageHero from '@/components/public/page-hero';
+import SafeImage from '@/components/ui/safe-image';
 import PublicLayout from '@/layouts/public-layout';
 import type { PublicSpaceItem } from '@/types/public-content';
 
@@ -48,8 +49,8 @@ export default function FacilityShowPage({
       <section className="public-container mt-10 space-y-8 pb-12">
         <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="overflow-hidden rounded-[2rem] border border-black/5 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
-            <img src={facility.lightImage || facility.image} alt={facility.title} className="h-[420px] w-full object-cover dark:hidden" />
-            <img src={facility.darkImage || facility.image} alt={facility.title} className="hidden h-[420px] w-full object-cover dark:block" />
+            <SafeImage src={facility.lightImage || facility.image} fallbackSrc="/marketing/images/branding/noon.jpg" alt={facility.title} className="h-[420px] w-full dark:hidden" imgClassName="h-[420px] w-full object-cover" />
+            <SafeImage src={facility.darkImage || facility.image} fallbackSrc="/marketing/images/hero/night.png" alt={facility.title} className="hidden h-[420px] w-full dark:block" imgClassName="h-[420px] w-full object-cover" />
           </div>
 
           <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
@@ -103,7 +104,7 @@ export default function FacilityShowPage({
                   className="min-w-[280px] max-w-[280px] overflow-hidden rounded-[1.7rem] border border-black/5 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/5"
                 >
                   <div className="h-52 overflow-hidden">
-                    <img src={item.lightImage || item.image} alt={item.title} className="h-full w-full object-cover" />
+                    <SafeImage src={item.lightImage || item.image} fallbackSrc="/marketing/images/branding/noon.jpg" alt={item.title} className="h-full w-full" imgClassName="h-full w-full object-cover" />
                   </div>
                   <div className="p-5">
                     <h4 className="text-xl font-semibold text-slate-900 dark:text-white">{item.title}</h4>

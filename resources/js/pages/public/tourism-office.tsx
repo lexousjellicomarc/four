@@ -2,6 +2,7 @@ import { Head, usePage } from '@inertiajs/react';
 import { CalendarDays, Clock3, Mail, MapPin, Phone, Users2 } from 'lucide-react';
 import { useMemo } from 'react';
 import PageHero from '@/components/public/page-hero';
+import SafeImage from '@/components/ui/safe-image';
 import PublicLayout, { type SiteSettings } from '@/layouts/public-layout';
 import type { PublicEventItem, PublicSpaceItem } from '@/types/public-content';
 
@@ -126,7 +127,7 @@ export default function TourismOfficePage({ officeSpace, events = [], members = 
                       <article key={member.id} className="overflow-hidden rounded-[1.9rem] border border-black/5 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/5">
                         <div className="h-72 overflow-hidden bg-[#eaf4f1] dark:bg-slate-900/60">
                           {member.photo ? (
-                            <img src={member.photo} alt={member.fullName} className="h-full w-full object-cover" />
+                            <SafeImage src={member.photo} fallbackSrc="/marketing/images/branding/noon.jpg" alt={member.fullName} className="h-full w-full" imgClassName="h-full w-full object-cover" />
                           ) : (
                             <div className="flex h-full items-center justify-center text-6xl font-semibold text-[#0f8b6d] dark:text-[#b6c6ff]">
                               {member.fullName?.charAt(0) || '?'}
@@ -174,7 +175,7 @@ export default function TourismOfficePage({ officeSpace, events = [], members = 
               {events.slice(0, 4).map((event) => (
                 <article key={String(event.id)} className="min-w-[300px] overflow-hidden rounded-[1.7rem] border border-black/5 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/5">
                   <div className="h-44 overflow-hidden">
-                    <img src={event.images?.[0] || event.image || '/marketing/images/events/1.JPG'} alt={event.title} className="h-full w-full object-cover" />
+                    <SafeImage src={event.images?.[0] || event.image} fallbackSrc="/marketing/images/events/1.JPG" alt={event.title} className="h-full w-full" imgClassName="h-full w-full object-cover" />
                   </div>
                   <div className="p-5">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">

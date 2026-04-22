@@ -39,9 +39,9 @@ export default function PublicFooter({ siteSettings }: Props) {
 
   return (
     <>
-      <footer className="mt-16 w-full border-t border-black/5 bg-white/70 px-4 pb-8 pt-12 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/60 sm:px-6 lg:px-8">
-        <div className="mx-auto w-full max-w-[1600px]">
-          <div className="grid gap-8 rounded-[2.2rem] border border-black/5 bg-white/80 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/5 lg:grid-cols-[1.15fr_0.85fr_0.85fr_0.9fr] lg:p-8">
+      <footer className="w-full border-t border-black/5 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/60">
+        <div className="mx-auto w-full">
+          <div className="grid gap-8 border border-black/5 bg-white/80 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/5 lg:grid-cols-[1.15fr_0.85fr_0.85fr_0.9fr] lg:p-8">
             <div className="space-y-4">
               <img
                 src="/marketing/images/logo/lightlogo.png"
@@ -137,7 +137,7 @@ export default function PublicFooter({ siteSettings }: Props) {
             </div>
           </div>
 
-          <div className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
+          <div className="text-center text-sm text-slate-500 dark:text-slate-400">
             {siteSettings?.footerCopyright || '© 2026 BCCC EASE • City Government of Baguio • All Rights Reserved'}
           </div>
         </div>

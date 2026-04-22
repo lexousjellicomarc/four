@@ -195,6 +195,36 @@ export default function MiceRegistryPage({
       <Head title="MICE Registry" />
 
       <div className="space-y-6 p-4 md:p-6">
+      <div className="rounded-[2rem] border border-black/10 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#16171b]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <div className="inline-flex rounded-full border border-[#0f8b6d]/20 bg-[#eef7f4] px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#0f8b6d] dark:border-[#7aa6ff]/20 dark:bg-[#16212b] dark:text-[#9dc0ff]">
+              Backend workspace report
+            </div>
+            <h2 className="mt-4 text-2xl font-black tracking-tight">Connected registry, survey, and booking workflow</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+              This report belongs to the backend workspace. Use it together with the booking dashboard, inquiries page,
+              and calendar management pages so staff can keep survey records and operational data in the same session.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Link href="/dashboard" className="rounded-full border px-4 py-2 text-sm font-semibold transition hover:bg-muted">
+              Booking Dashboard
+            </Link>
+            <Link href="/calendar/manage" className="rounded-full border px-4 py-2 text-sm font-semibold transition hover:bg-muted">
+              Manage Calendar
+            </Link>
+            <Link href="/admin/inquiries" className="rounded-full border px-4 py-2 text-sm font-semibold transition hover:bg-muted">
+              Inquiries
+            </Link>
+            <Link href="/admin/guidelines-contacts" className="rounded-full border px-4 py-2 text-sm font-semibold transition hover:bg-muted">
+              Backend Guidelines
+            </Link>
+          </div>
+        </div>
+      </div>
+
         <Card className="shadow-sm">
           <CardContent className="space-y-6 p-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">

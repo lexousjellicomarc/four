@@ -12,9 +12,6 @@ import {
   longDate,
   monthLabel,
   resolveBlockAvailable,
-  scheduleStatusDescription,
-  scheduleStatusLabel,
-  scheduleStatusTone,
 } from '@/lib/unified-schedule';
 import { cn } from '@/lib/utils';
 
@@ -94,6 +91,33 @@ function deriveMonthCellStatus(day: PublicDayStatus | null) {
   if (unavailableCount > 0) return 'limited';
 
   return 'available';
+}
+
+function cellTone(status: string) {
+  switch (status) {
+    case 'blocked':
+      return 'bg-[#ffd9d9] text-[#8b1e1e] dark:bg-[#511f28] dark:text-[#ffd5d5]';
+    case 'public_booked':
+      return 'bg-[#ece7ff] text-[#4b2bb0] dark:bg-[#2d245d] dark:text-[#ddd6ff]';
+    case 'private_booked':
+      return 'bg-[#fbefcd] text-[#6a4f00] dark:bg-[#4a3a16] dark:text-[#f9efc4]';
+    case 'full':
+      return 'bg-[#f8e3b1] text-[#6a4f00] dark:bg-[#56411c] dark:text-[#fff0c7]';
+    case 'limited':
+      return 'bg-[#e8f0ff] text-[#1645ac] dark:bg-[#1c3459] dark:text-[#dbe7ff]';
+    default:
+      return 'bg-white text-slate-700 dark:bg-[#0d1320] dark:text-slate-100';
+  }
+}
+
+function stripeTone(available: boolean, key: 'AM' | 'PM' | 'EVE') {
+  if (!available) {
+    if (key === 'AM') return 'bg-[#d94d4d] dark:bg-[#ff8b8b]';
+    if (key === 'PM') return 'bg-[#c59c27] dark:bg-[#ffd36f]';
+    return 'bg-[#6b61f3] dark:bg-[#a79eff]';
+  }
+
+  return 'bg-[#d8dfeb] dark:bg-white/12';
 }
 
 export default function CalendarPage({
@@ -176,9 +200,7 @@ export default function CalendarPage({
 
   useEffect(() => {
     const prefix = `${monthKey}-`;
-    const isVisible = selectedDateKey.startsWith(prefix);
-
-    if (isVisible) return;
+    if (selectedDateKey.startsWith(prefix)) return;
 
     if (todayKey.startsWith(prefix)) {
       setSelectedDateKey(todayKey);
@@ -220,7 +242,6 @@ export default function CalendarPage({
         }
 
         if (!mounted) return;
-
         setDayStatus(payload);
       } catch (error) {
         if (!mounted) return;
@@ -245,6 +266,7 @@ export default function CalendarPage({
 
   const selectedMonthEntry = monthData[selectedDateKey] ?? null;
   const visibleStatus = deriveMonthCellStatus(dayStatus ?? selectedMonthEntry);
+  const selectedLabel = longDate(selectedDateKey);
 
   const blockEntries = useMemo(
     () =>
@@ -276,59 +298,73 @@ export default function CalendarPage({
       <div className="space-y-10 pb-14">
         <PageHero
           eyebrow="Public Calendar"
-          title="Check availability clearly before you book."
-          description="The month grid now follows the selected venue, so the visible status is based on the same backend availability logic used by the day details."
+          title="A cleaner month view styled closer to a Google Calendar grid."
+          description="Each date is now a tight color-coded cell with no floating gaps, while the selected day details stay on the right for clearer booking decisions."
           imageLight="/marketing/images/events/lightmain.JPG"
           imageDark="/marketing/images/events/darkmain.JPG"
         />
 
         <section className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8">
-          <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-            <div className="rounded-[2rem] border border-black/5 bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5 sm:p-6 lg:p-7">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Month</div>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                    {monthLabel(currentMonth)}
-                  </h2>
+          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="overflow-hidden rounded-[2rem] border border-black/5 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
+              <div className="border-b border-black/5 p-5 dark:border-white/10 sm:p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#174f40] dark:text-[#b6c6ff]">
+                      Google-style availability grid
+                    </div>
+                    <h2 className="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{monthLabel(currentMonth)}</h2>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <select
+                      value={selectedVenue}
+                      onChange={(e) => setSelectedVenue(e.target.value)}
+                      className="min-w-[220px] rounded-full border border-black/10 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    >
+                      {venueOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
+                      className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1))}
+                      className="inline-flex rounded-full border border-black/10 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-white dark:hover:bg-white/10"
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
+                      className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                  <select
-                    value={selectedVenue}
-                    onChange={(e) => setSelectedVenue(e.target.value)}
-                    className="min-w-[220px] rounded-full border border-black/10 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                  >
-                    {venueOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-white text-slate-800 transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-white text-slate-800 transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </button>
-                </div>
+                {errorMessage ? (
+                  <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-300/20 dark:bg-rose-500/10 dark:text-rose-100">
+                    {errorMessage}
+                  </div>
+                ) : null}
               </div>
 
-              <div className="mt-6 grid grid-cols-7 gap-2 pb-3">
+              <div className="grid grid-cols-7 border-t border-black/5 dark:border-white/10">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label) => (
                   <div
                     key={label}
-                    className="rounded-2xl bg-slate-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:bg-white/5 dark:text-slate-300"
+                    className="border-b border-r border-black/5 px-3 py-2 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 last:border-r-0 dark:border-white/10 dark:text-slate-300"
                   >
                     {label}
                   </div>
@@ -337,195 +373,180 @@ export default function CalendarPage({
 
               <div className="relative">
                 {loadingMonth ? (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[1.6rem] bg-white/70 backdrop-blur-sm dark:bg-slate-950/55">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200">
-                      <LoaderCircle className="h-4 w-4 animate-spin" />
-                      Loading month status
-                    </div>
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-sm dark:bg-[#07101c]/70">
+                    <LoaderCircle className="h-6 w-6 animate-spin text-[#174f40] dark:text-[#b6c6ff]" />
                   </div>
                 ) : null}
 
-                <div className="space-y-2">
-                  {weeks.map((week, weekIndex) => (
-                    <div key={`week-${weekIndex}`} className="grid grid-cols-7 gap-2">
-                      {week.map((cell, cellIndex) => {
-                        if (!cell) {
-                          return <div key={`empty-${weekIndex}-${cellIndex}`} className="h-[110px] rounded-[1.4rem] bg-transparent" />;
-                        }
+                {weeks.map((week, weekIndex) => (
+                  <div key={`week-${weekIndex}`} className="grid grid-cols-7">
+                    {week.map((day, dayIndex) => {
+                      const dayKey = day ? dateKey(day) : `blank-${weekIndex}-${dayIndex}`;
+                      const entry = day ? monthData[dayKey] ?? null : null;
+                      const status = deriveMonthCellStatus(entry);
+                      const isSelected = day && dayKey === selectedDateKey;
+                      const isToday = day && dayKey === todayKey;
 
-                        const key = dateKey(cell);
-                        const monthEntry = monthData[key] ?? null;
-                        const cellStatus = deriveMonthCellStatus(monthEntry);
-                        const isSelected = selectedDateKey === key;
-                        const isToday = key === todayKey;
+                      return (
+                        <button
+                          key={dayKey}
+                          type="button"
+                          disabled={!day}
+                          onClick={() => day && setSelectedDateKey(dayKey)}
+                          className={cn(
+                            'group relative h-24 border-b border-r border-black/5 text-left transition sm:h-28 lg:h-32 last:border-r-0',
+                            day ? cellTone(status) : 'bg-[#f5f5f2] dark:bg-[#0b1018]',
+                            isSelected && 'ring-2 ring-inset ring-[#174f40] dark:ring-[#8ea3ff]',
+                          )}
+                        >
+                          {day ? (
+                            <>
+                              <div className="flex h-full flex-col justify-between p-2.5 sm:p-3">
+                                <div className="flex items-start justify-between">
+                                  <span
+                                    className={cn(
+                                      'inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
+                                      isToday && 'bg-white/90 text-slate-900 shadow-sm dark:bg-[#e8eeff] dark:text-slate-900',
+                                    )}
+                                  >
+                                    {day.getDate()}
+                                  </span>
+                                </div>
 
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => setSelectedDateKey(key)}
-                            className={cn(
-                              'relative flex h-[110px] flex-col rounded-[1.4rem] border p-3 text-left transition',
-                              'hover:-translate-y-0.5',
-                              scheduleStatusTone(cellStatus),
-                              isSelected && 'ring-2 ring-slate-900/20 dark:ring-white/25',
-                              !isSelected && 'border-black/5 dark:border-white/10',
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="text-base font-semibold">{cell.getDate()}</div>
-                              {isToday ? (
-                                <span className="rounded-full bg-black/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] dark:bg-white/10">
-                                  Today
-                                </span>
+                                <div className="space-y-1">
+                                  {BLOCK_KEYS.map((blockKey) => {
+                                    const blockAvailable = resolveBlockAvailable(entry?.blocks, blockKey);
+                                    return (
+                                      <div
+                                        key={`${dayKey}-${blockKey}`}
+                                        className={cn('h-1.5 w-full rounded-full', stripeTone(blockAvailable, blockKey))}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {isSelected ? (
+                                <div className="pointer-events-none absolute inset-0 border-2 border-[#174f40] dark:border-[#8ea3ff]" />
                               ) : null}
-                            </div>
-
-                            <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] opacity-80">
-                              {scheduleStatusLabel(cellStatus)}
-                            </div>
-
-                            <div className="mt-2 line-clamp-2 text-xs opacity-80">
-                              {monthEntry?.title || scheduleStatusDescription(cellStatus)}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
+                            </>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-black/5 bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5 sm:p-6 lg:p-7">
-              <div className="flex items-center gap-3">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200">
-                  <CalendarDays className="h-5 w-5" />
+            <div className="space-y-6">
+              <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
+                <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#174f40] dark:text-[#b6c6ff]">
+                  Selected Date
                 </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
-                    Selected Date
+                <h3 className="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{selectedLabel}</h3>
+                <div className="mt-4 inline-flex rounded-full border border-black/10 bg-[#f8f4ea] px-4 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-slate-900/70 dark:text-white">
+                  {selectedVenue || 'Venue'}
+                </div>
+
+                <div className="mt-5 rounded-[1.5rem] border border-black/5 p-4 dark:border-white/10">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
+                    Day status
                   </div>
-                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                    {longDate(selectedDateKey)}
-                  </h2>
+                  <div className={cn('mt-3 inline-flex rounded-full px-4 py-2 text-sm font-semibold', cellTone(visibleStatus))}>
+                    {visibleStatus.replace('_', ' ').toUpperCase()}
+                  </div>
+                  <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                    {dayStatus?.description || selectedMonthEntry?.description || 'Select a date to inspect availability in more detail.'}
+                  </p>
+                  {(dayStatus?.note || selectedMonthEntry?.note) ? (
+                    <p className="mt-3 text-sm leading-7 text-slate-500 dark:text-slate-400">
+                      {dayStatus?.note || selectedMonthEntry?.note}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="mt-6 grid gap-3">
+                  {blockEntries.map(({ key, meta, available }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSelectedBlockKey(key)}
+                      className={cn(
+                        'rounded-[1.35rem] border px-4 py-4 text-left transition',
+                        selectedBlockKey === key
+                          ? 'border-[#174f40] bg-[#eef7f4] shadow-sm dark:border-[#8ea3ff] dark:bg-[#112034]'
+                          : 'border-black/5 bg-[#f8f4ea] hover:bg-[#f3eee1] dark:border-white/10 dark:bg-slate-900/70 dark:hover:bg-slate-900',
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{meta.label}</div>
+                          <div className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-300">{meta.time}</div>
+                        </div>
+                        <div className={cn('h-3.5 w-3.5 rounded-full', stripeTone(available, key))} />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Link
+                    href={bookingHref}
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white transition',
+                      dayStatus?.can_proceed === false
+                        ? 'pointer-events-none bg-slate-400 opacity-70'
+                        : 'bg-[#174f40] hover:opacity-90 dark:bg-[#294CFF]',
+                    )}
+                  >
+                    <Clock3 className="h-4 w-4" />
+                    Continue to Booking
+                  </Link>
+
+                  <Link
+                    href="/contact"
+                    className="inline-flex items-center gap-2 rounded-full border border-black/10 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-white dark:hover:bg-white/10"
+                  >
+                    <MapPin className="h-4 w-4" />
+                    Contact Office
+                  </Link>
                 </div>
               </div>
 
-              <div className="mt-5 rounded-[1.5rem] border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      Venue
-                    </div>
-                    <div className="mt-1 text-sm font-medium text-slate-900 dark:text-white">{selectedVenue || '—'}</div>
-                  </div>
+              <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#174f40] dark:text-[#b6c6ff]">
+                  <CalendarDays className="h-4 w-4" />
+                  Reading the colors
+                </div>
 
-                  <div
-                    className={cn(
-                      'rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]',
-                      scheduleStatusTone(visibleStatus),
-                    )}
-                  >
-                    {scheduleStatusLabel(visibleStatus)}
-                  </div>
+                <div className="mt-5 grid gap-3">
+                  {[
+                    ['Available', cellTone('available')],
+                    ['Limited', cellTone('limited')],
+                    ['Public Event', cellTone('public_booked')],
+                    ['Reserved', cellTone('private_booked')],
+                    ['Blocked', cellTone('blocked')],
+                  ].map(([label, tone]) => (
+                    <div key={label} className="flex items-center justify-between rounded-[1.2rem] border border-black/5 p-3 dark:border-white/10">
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{label}</span>
+                      <span className={cn('inline-flex rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.2em]', tone)}>
+                        {label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 rounded-[1.4rem] border border-black/5 bg-[#f8f4ea] p-4 text-sm leading-7 text-slate-600 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-300">
+                  The cell itself shows the overall day status, while the three short bars at the bottom represent the AM, PM, and EVE time blocks. Filled accent bars mean that block is no longer available.
                 </div>
 
                 {loadingDayStatus ? (
-                  <div className="mt-4 inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <div className="mt-4 inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-300">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Checking selected day
+                    Loading selected date details…
                   </div>
-                ) : errorMessage ? (
-                  <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
-                    {errorMessage}
-                  </div>
-                ) : (
-                  <>
-                    <div className="mt-4 text-xl font-semibold text-slate-900 dark:text-white">
-                      {dayStatus?.title || selectedMonthEntry?.title || 'Availability status'}
-                    </div>
-
-                    <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                      {dayStatus?.description || selectedMonthEntry?.description || scheduleStatusDescription(visibleStatus)}
-                    </p>
-
-                    {dayStatus?.note ? (
-                      <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">{dayStatus.note}</p>
-                    ) : null}
-
-                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                      {blockEntries.map(({ key, meta, available }) => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setSelectedBlockKey(key)}
-                          disabled={!available}
-                          className={cn(
-                            'rounded-[1.25rem] border px-4 py-4 text-left transition',
-                            available
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:-translate-y-0.5 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200'
-                              : 'border-rose-200 bg-rose-50 text-rose-700 opacity-80 dark:border-rose-400/20 dark:bg-rose-500/10 dark:text-rose-200',
-                            selectedBlockKey === key && available && 'ring-2 ring-emerald-500/35',
-                          )}
-                        >
-                          <div className="text-sm font-semibold uppercase tracking-[0.18em]">{meta.label}</div>
-                          <div className="mt-2 text-sm">{meta.time}</div>
-                          <div className="mt-2 text-xs font-semibold uppercase tracking-[0.16em]">
-                            {available ? 'Available' : 'Unavailable'}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-
-                    {dayStatus?.event_titles && dayStatus.event_titles.length > 0 ? (
-                      <div className="mt-5 rounded-[1.4rem] border border-black/5 bg-white px-4 py-4 dark:border-white/10 dark:bg-slate-950/50">
-                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                          Visible Events on This Date
-                        </div>
-                        <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                          {dayStatus.event_titles.map((title) => (
-                            <li key={`${selectedDateKey}-${title}`}>• {title}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-
-                    {dayStatus?.recommended_action ? (
-                      <div className="mt-5 rounded-[1.4rem] border border-black/5 bg-white px-4 py-4 dark:border-white/10 dark:bg-slate-950/50">
-                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                          Recommended Action
-                        </div>
-                        <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                          {dayStatus.recommended_action}
-                        </p>
-                      </div>
-                    ) : null}
-
-                    <div className="mt-6 flex flex-wrap gap-3">
-                      <Link
-                        href={bookingHref}
-                        className={cn(
-                          'inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white transition',
-                          dayStatus?.can_proceed === false
-                            ? 'pointer-events-none bg-slate-400 opacity-70'
-                            : 'bg-[#174f40] hover:opacity-90 dark:bg-[#294CFF]',
-                        )}
-                      >
-                        <Clock3 className="h-4 w-4" />
-                        Continue to Booking
-                      </Link>
-
-                      <a
-                        href="/contact"
-                        className="inline-flex items-center gap-2 rounded-full border border-black/10 px-5 py-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-white"
-                      >
-                        <MapPin className="h-4 w-4" />
-                        Contact Office
-                      </a>
-                    </div>
-                  </>
-                )}
+                ) : null}
               </div>
             </div>
           </div>

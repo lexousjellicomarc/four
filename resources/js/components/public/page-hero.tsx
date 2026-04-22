@@ -1,4 +1,5 @@
 import { Link } from '@inertiajs/react';
+import SafeImage from '@/components/ui/safe-image';
 
 type Action = {
   label: string;
@@ -27,8 +28,8 @@ export default function PageHero({
   return (
     <section className="public-container">
       <div className="hero-shadow relative overflow-hidden rounded-[2.2rem] border border-white/20">
-        <img src={light} alt={title} className="absolute inset-0 h-full w-full object-cover dark:hidden" />
-        <img src={dark} alt={title} className="absolute inset-0 hidden h-full w-full object-cover dark:block" />
+        <SafeImage src={light} fallbackSrc="/marketing/images/branding/noon.jpg" alt={title} className="absolute inset-0 dark:hidden" imgClassName="h-full w-full object-cover" />
+        <SafeImage src={dark} fallbackSrc="/marketing/images/hero/night.png" alt={title} className="absolute inset-0 hidden dark:block" imgClassName="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(11,19,33,0.18)_0%,rgba(11,19,33,0.45)_100%)] dark:bg-[linear-gradient(180deg,rgba(2,6,23,0.25)_0%,rgba(2,6,23,0.72)_100%)]" />
 
         <div className="relative px-6 py-16 text-white sm:px-8 lg:px-10 lg:py-20">

@@ -1,25 +1,26 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { useEffect, useMemo, useState } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
-import { CalendarDays, ChevronLeft, ChevronRight, Eye, Layers3, Plus, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Edit3, Info, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CalendarBlockModal, type BlockKey, type CalendarBlockFormState } from '@/components/calendar/calendar-block-modal';
 import {
   BLOCK_KEYS,
-  BLOCK_META,
   buildMonthWeeks,
   dateKey,
   deriveDayStatus,
+  eventEndsOnDate,
   eventSpansDate,
+  eventStartsOnDate,
   longDate,
   monthLabel,
-  scheduleStatusDescription,
+  monthToDate,
+  normalizeEventRange,
   scheduleStatusLabel,
-  scheduleStatusTone,
   shiftMonth,
 } from '@/lib/unified-schedule';
-
-type BlockKey = 'AM' | 'PM' | 'EVE';
+import { canManageCalendarBlocks, type WorkspaceAuthLike } from '@/lib/workspace';
 
 type DayAvailability = {
   date: string;
@@ -51,6 +52,8 @@ type CalendarEvent = {
   description?: string | null;
   time?: string | null;
   image?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
 };
 
 type HighlightItem = {
@@ -76,80 +79,16 @@ type Props = {
   areaOptions: string[];
 };
 
-type ModalState =
-  | { type: 'none' }
-  | {
-      type: 'single';
-      mode: 'create' | 'edit';
-      payload: {
-        title: string;
-        area: string;
-        notes: string;
-        block: string;
-        public_status: string;
-        date_from: string;
-        date_to: string;
-        block_id?: number;
-      };
-    }
-  | {
-      type: 'bulk';
-      payload: {
-        title: string;
-        area: string;
-        notes: string;
-        block: string;
-        public_status: string;
-        date_from: string;
-        date_to: string;
-        explode_by_day: boolean;
-        exclude_weekends: boolean;
-      };
-    };
-
-const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const blockMeta: Record<BlockKey, { label: string; time: string }> = {
-  AM: { label: 'AM', time: '6:00 AM – 12:00 PM' },
-  PM: { label: 'PM', time: '12:00 PM – 6:00 PM' },
-  EVE: { label: 'EVE', time: '6:00 PM – 11:59 PM' },
+type WeekCell = Date | null;
+type EventLaneSegment = {
+  event: CalendarEvent;
+  startCol: number;
+  endCol: number;
+  isStart: boolean;
+  isEnd: boolean;
 };
 
-function formatDateTime(value: string) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-function chipTone(status?: string | null) {
-  const normalized = String(status ?? '').toLowerCase();
-  if (normalized === 'public_booked') return 'bg-[#ede8ff] text-[#5532c7]';
-  if (['private_booked', 'confirmed', 'active'].includes(normalized)) return 'bg-[#f7ebc1] text-[#6a4f00]';
-  if (normalized === 'blocked') return 'bg-[#ffe3e3] text-[#a52a2a]';
-  if (normalized === 'pending') return 'bg-[#eef4ff] text-[#1645ac]';
-  if (normalized === 'completed') return 'bg-[#eef7f4] text-[#174f40]';
-  return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200';
-}
-
-function statusCardTone(status: string) {
-  switch (status) {
-    case 'blocked':
-      return 'border-[#f1aaaa] bg-[#ffe5e5] text-[#a52a2a]';
-    case 'public_booked':
-      return 'border-[#c9bcff] bg-[#f1ecff] text-[#5532c7]';
-    case 'private_booked':
-      return 'border-[#d7b14b] bg-[#f7ebc1] text-[#6a4f00]';
-    case 'limited':
-      return 'border-[#bfd2ff] bg-[#eef4ff] text-[#1645ac]';
-    default:
-      return 'border-black/10 bg-white text-slate-800 dark:border-white/10 dark:bg-[#17181c] dark:text-white';
-  }
-}
+const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function pageCsrfToken() {
   return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -169,616 +108,583 @@ async function sendJson(url: string, method: 'POST' | 'PUT' | 'DELETE', payload?
 
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(json?.message || 'Request failed.');
+    throw new Error((json as { message?: string })?.message || 'Request failed.');
   }
   return json;
 }
 
-function SimpleModal({
-  title,
-  open,
-  children,
-  onClose,
-}: {
-  title: string;
-  open: boolean;
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-[2rem] border bg-white shadow-[0_40px_120px_rgba(0,0,0,0.28)] dark:border-white/10 dark:bg-[#121318]">
-        <div className="flex items-center justify-between border-b border-black/5 px-6 py-4 dark:border-white/10">
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-black/10 px-3 py-1 text-sm dark:border-white/10"
-          >
-            Close
-          </button>
-        </div>
-        <div className="max-h-[80vh] overflow-y-auto px-6 py-5">{children}</div>
-      </div>
-    </div>
-  );
+function eventDurationDays(event: CalendarEvent) {
+  const { startDate, endDate } = normalizeEventRange(event);
+  if (!startDate || !endDate) return 1;
+
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const diff = Math.round((end.getTime() - start.getTime()) / 86400000);
+  return Math.max(diff + 1, 1);
+}
+
+function eventSortValue(event: CalendarEvent) {
+  const priority: Record<string, number> = {
+    booking: 0,
+    public_event: 1,
+    block: 2,
+  };
+
+  return priority[String(event.kind ?? '')] ?? 9;
+}
+
+function buildWeekLanes(week: WeekCell[], events: CalendarEvent[]) {
+  const weekKeys = week.map((cell) => (cell ? dateKey(cell) : null));
+
+  const visibleEvents = events
+    .filter((event) => weekKeys.some((key) => key && eventSpansDate(event, key)))
+    .sort((a, b) => {
+      const aRange = normalizeEventRange(a);
+      const bRange = normalizeEventRange(b);
+      if (aRange.startDate !== bRange.startDate) return aRange.startDate.localeCompare(bRange.startDate);
+      if (eventDurationDays(a) !== eventDurationDays(b)) return eventDurationDays(b) - eventDurationDays(a);
+      return eventSortValue(a) - eventSortValue(b);
+    });
+
+  const lanes: EventLaneSegment[][] = [];
+
+  visibleEvents.forEach((event) => {
+    let startCol = -1;
+    let endCol = -1;
+
+    weekKeys.forEach((key, idx) => {
+      if (key && eventSpansDate(event, key)) {
+        if (startCol === -1) startCol = idx;
+        endCol = idx;
+      }
+    });
+
+    if (startCol === -1 || endCol === -1) return;
+
+    const segment: EventLaneSegment = {
+      event,
+      startCol,
+      endCol,
+      isStart: Boolean(weekKeys[startCol] && eventStartsOnDate(event, weekKeys[startCol] as string)),
+      isEnd: Boolean(weekKeys[endCol] && eventEndsOnDate(event, weekKeys[endCol] as string)),
+    };
+
+    let placed = false;
+    for (const lane of lanes) {
+      const overlaps = lane.some((existing) => !(segment.endCol < existing.startCol || segment.startCol > existing.endCol));
+      if (!overlaps) {
+        lane.push(segment);
+        placed = true;
+        break;
+      }
+    }
+
+    if (!placed) {
+      lanes.push([segment]);
+    }
+  });
+
+  return lanes;
+}
+
+function eventBarTone(event: CalendarEvent) {
+  const normalized = String(event.status ?? '').toLowerCase();
+
+  if (normalized === 'public_booked') {
+    return 'border-violet-300 bg-violet-100 text-violet-700 dark:border-violet-400/30 dark:bg-violet-500/15 dark:text-violet-200';
+  }
+  if (['private_booked', 'confirmed', 'active'].includes(normalized)) {
+    return 'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200';
+  }
+  if (normalized === 'blocked') {
+    return 'border-red-300 bg-red-100 text-red-700 dark:border-red-400/30 dark:bg-red-500/15 dark:text-red-200';
+  }
+  return 'border-slate-300 bg-slate-100 text-slate-700 dark:border-white/10 dark:bg-white/10 dark:text-white';
+}
+
+function chipTone(status?: string | null) {
+  const normalized = String(status ?? '').toLowerCase();
+  if (normalized === 'public_booked') return 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-200';
+  if (['private_booked', 'confirmed', 'active'].includes(normalized)) return 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200';
+  if (normalized === 'blocked') return 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-200';
+  if (normalized === 'pending') return 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200';
+  return 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200';
+}
+
+function pickInitialDate(month: string, monthAvailability: Props['monthAvailability'], events: CalendarEvent[]) {
+  const today = dateKey(new Date());
+  if (today.startsWith(month) && (monthAvailability[today] || events.some((event) => eventSpansDate(event, today)))) {
+    return today;
+  }
+
+  const first = Object.keys(monthAvailability).sort()[0];
+  if (first) return first;
+
+  const eventDate = events.map((event) => normalizeEventRange(event).startDate).find(Boolean);
+  return eventDate || `${month}-01`;
 }
 
 export default function CalendarManage({ month, monthAvailability, events, highlights, areaOptions }: Props) {
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = dateKey(new Date());
-    if (today.startsWith(month) && monthAvailability[today]) return today;
-    return Object.keys(monthAvailability).sort()[0] || `${month}-01`;
-  });
-  const [activeHighlight, setActiveHighlight] = useState<HighlightItem | null>(highlights.bccc[0] || highlights.city[0] || null);
+  const { props } = usePage<{ auth?: WorkspaceAuthLike }>();
+  const canManageBlocks = canManageCalendarBlocks(props.auth);
+  const [selectedDate, setSelectedDate] = useState(() => pickInitialDate(month, monthAvailability, events));
   const [activeHighlightTab, setActiveHighlightTab] = useState<'bccc' | 'city'>('bccc');
-  const [modalState, setModalState] = useState<ModalState>({ type: 'none' });
+  const [activeHighlightIndex, setActiveHighlightIndex] = useState(0);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create');
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<string>('');
+  const [error, setError] = useState('');
+  const [form, setForm] = useState<CalendarBlockFormState>({
+    title: 'Internal calendar note',
+    area: '',
+    notes: '',
+    block: 'AM',
+    public_status: 'red',
+    date_from: pickInitialDate(month, monthAvailability, events),
+    date_to: pickInitialDate(month, monthAvailability, events),
+  });
+  const holdTimerRef = useRef<number | null>(null);
+  const holdTriggeredRef = useRef(false);
 
   const weeks = useMemo(() => buildMonthWeeks(month), [month]);
-  const selectedAvailability = monthAvailability[selectedDate];
-  const selectedEvents = useMemo(
-    () => events.filter((event) => eventSpansDate(event, selectedDate)),
-    [events, selectedDate],
-  );
-
-  const selectedBookings = selectedEvents.filter((event) => event.kind === 'booking');
+  const selectedEvents = useMemo(() => events.filter((event) => eventSpansDate(event, selectedDate)), [events, selectedDate]);
   const selectedBlocks = selectedEvents.filter((event) => event.kind === 'block');
+  const selectedBookings = selectedEvents.filter((event) => event.kind === 'booking');
   const selectedPublicEvents = selectedEvents.filter((event) => event.kind === 'public_event');
-
-  const selectedDerivedStatus = deriveDayStatus({
-  availability: selectedAvailability,
-  events: selectedEvents,
-  isClient: false,
-});
+  const selectedDerivedStatus = deriveDayStatus({ availability: monthAvailability[selectedDate], events: selectedEvents, isClient: false });
+  const activeHighlights = activeHighlightTab === 'bccc' ? highlights.bccc : highlights.city;
+  const activeHighlight = activeHighlights[activeHighlightIndex] || null;
 
   useEffect(() => {
-    if (activeHighlightTab === 'bccc' && !activeHighlight && highlights.bccc.length > 0) {
-      setActiveHighlight(highlights.bccc[0]);
+    setSelectedDate(pickInitialDate(month, monthAvailability, events));
+  }, [month, monthAvailability, events]);
+
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, date_from: selectedDate, date_to: selectedDate }));
+  }, [selectedDate]);
+
+  useEffect(() => {
+    setActiveHighlightIndex(0);
+  }, [activeHighlightTab]);
+
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) {
+        window.clearTimeout(holdTimerRef.current);
+      }
+    };
+  }, []);
+
+  function openCreate(dateValue: string) {
+    if (!canManageBlocks) return;
+    setEditorMode('create');
+    setError('');
+    setForm({
+      title: 'Internal calendar note',
+      area: '',
+      notes: '',
+      block: 'AM',
+      public_status: 'red',
+      date_from: dateValue,
+      date_to: dateValue,
+    });
+    setEditorOpen(true);
+  }
+
+  function openEdit(event: CalendarEvent) {
+    if (!canManageBlocks) return;
+    setEditorMode('edit');
+    setError('');
+    setForm({
+      title: event.title.replace(/^BLOCK:\s*/i, ''),
+      area: event.area || '',
+      notes: event.note || '',
+      block: (String(event.block || 'AM').toUpperCase() as BlockKey),
+      public_status: (String(event.public_status || 'red').toLowerCase() as CalendarBlockFormState['public_status']),
+      date_from: event.dateFrom || String(event.start).slice(0, 10),
+      date_to: event.dateTo || normalizeEventRange(event).endDate,
+      block_id: event.block_id,
+    });
+    setEditorOpen(true);
+  }
+
+  function startPress(dateValue: string) {
+    if (!canManageBlocks) return;
+    if (holdTimerRef.current) {
+      window.clearTimeout(holdTimerRef.current);
     }
-    if (activeHighlightTab === 'city' && !activeHighlight && highlights.city.length > 0) {
-      setActiveHighlight(highlights.city[0]);
+    holdTriggeredRef.current = false;
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTriggeredRef.current = true;
+      openCreate(dateValue);
+    }, 450);
+  }
+
+  function clearPress() {
+    if (holdTimerRef.current) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
     }
-  }, [activeHighlight, activeHighlightTab, highlights]);
-
-  function openCreateModal() {
-    setModalState({
-      type: 'single',
-      mode: 'create',
-      payload: {
-        title: '',
-        area: '',
-        notes: '',
-        block: 'AM',
-        public_status: 'red',
-        date_from: selectedDate,
-        date_to: selectedDate,
-      },
-    });
+    holdTriggeredRef.current = false;
   }
 
-  function openEditBlock(event: CalendarEvent) {
-    setModalState({
-      type: 'single',
-      mode: 'edit',
-      payload: {
-        title: String(event.title || '').replace(/^BLOCK:\s*/, ''),
-        area: String(event.area || ''),
-        notes: String(event.note || ''),
-        block: String(event.block || 'AM'),
-        public_status: String(event.public_status || 'red'),
-        date_from: String(event.start).slice(0, 10),
-        date_to: String(event.end).slice(0, 10),
-        block_id: Number(event.block_id),
-      },
-    });
+  function endPress(dateValue: string) {
+    const wasLongPress = holdTriggeredRef.current;
+    if (holdTimerRef.current) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (!wasLongPress) {
+      setSelectedDate(dateValue);
+    }
+    window.setTimeout(() => {
+      holdTriggeredRef.current = false;
+    }, 0);
   }
 
-  function openBulkModal() {
-    setModalState({
-      type: 'bulk',
-      payload: {
-        title: '',
-        area: '',
-        notes: '',
-        block: 'AM',
-        public_status: 'red',
-        date_from: selectedDate,
-        date_to: selectedDate,
-        explode_by_day: true,
-        exclude_weekends: false,
-      },
-    });
-  }
+  async function saveForm() {
+    if (!canManageBlocks) return;
+    setBusy(true);
+    setError('');
 
-  async function saveModal() {
     try {
-      setBusy(true);
-      setFeedback('');
-      if (modalState.type === 'single') {
-        const payload = modalState.payload;
-        if (modalState.mode === 'create') {
-          await sendJson('/calendar-blocks', 'POST', payload);
-          setFeedback('Calendar block created successfully.');
-        } else {
-          await sendJson(`/calendar-blocks/${payload.block_id}`, 'PUT', payload);
-          setFeedback('Calendar block updated successfully.');
-        }
+      if (!form.title.trim()) {
+        throw new Error('Please enter a title for the calendar rule.');
       }
 
-      if (modalState.type === 'bulk') {
-        await sendJson('/calendar-blocks/bulk', 'POST', modalState.payload);
-        setFeedback('Bulk calendar action saved successfully.');
+      if (editorMode === 'edit' && form.block_id) {
+        await sendJson(`/calendar-blocks/${form.block_id}`, 'PUT', {
+          ...form,
+          title: form.title.trim(),
+          area: form.area.trim(),
+          notes: form.notes.trim(),
+        });
+      } else {
+        await sendJson('/calendar-blocks', 'POST', {
+          ...form,
+          title: form.title.trim(),
+          area: form.area.trim(),
+          notes: form.notes.trim(),
+        });
       }
 
-      setModalState({ type: 'none' });
-      router.reload({ preserveScroll: true });
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : 'Unable to save calendar changes.');
+      setEditorOpen(false);
+      router.reload({ preserveScroll: true, preserveState: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to save the calendar rule.');
     } finally {
       setBusy(false);
     }
   }
 
   async function deleteBlock(event: CalendarEvent) {
-    if (!event.block_id) return;
+    if (!canManageBlocks || !event.block_id) return;
     if (!window.confirm('Delete this calendar block?')) return;
 
     try {
-      setBusy(true);
-      setFeedback('');
       await sendJson(`/calendar-blocks/${event.block_id}`, 'DELETE');
-      setFeedback('Calendar block deleted successfully.');
-      router.reload({ preserveScroll: true });
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : 'Unable to delete calendar block.');
-    } finally {
-      setBusy(false);
+      router.reload({ preserveScroll: true, preserveState: true });
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Unable to delete the calendar block.');
     }
   }
 
   return (
-    <AppLayout breadcrumbs={[{ title: 'Calendar Management', href: '/calendar/manage' }]}>
-      <Head title="Calendar Management Center" />
+    <AppLayout breadcrumbs={[{ title: 'Calendar Management', href: '/calendar/manage' }]}> 
+      <Head title="Calendar Management" />
+
+      <CalendarBlockModal
+        open={editorOpen}
+        title={editorMode === 'edit' ? 'Edit calendar rule' : 'Create calendar rule'}
+        form={form}
+        areaOptions={areaOptions}
+        busy={busy}
+        error={error}
+        helperText="Quick input on this page writes to the same backend calendar-block API used by the dashboard and admin content screens."
+        onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+        onClose={() => setEditorOpen(false)}
+        onSave={saveForm}
+      />
 
       <div className="space-y-6 p-4 md:p-6">
-        <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div>
+        <section className="overflow-hidden rounded-[2rem] border border-black/5 bg-white shadow-sm dark:border-white/10 dark:bg-[#121318]">
+          <div className="grid gap-0 lg:grid-cols-[1.08fr_0.92fr]">
+            <div className="space-y-4 px-6 py-8 sm:px-8">
               <div className="inline-flex rounded-full border border-[#0f8b6d]/20 bg-[#eef7f4] px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-[#0f8b6d] dark:bg-[#172128] dark:text-[#9dc0ff]">
-                Admin Calendar Management Center
+                Backend calendar center
               </div>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                Faster calendar blocking, selected-date inspection, and event highlight review.
-              </h1>
-              <p className="mt-3 max-w-4xl text-sm leading-7 text-slate-600 dark:text-slate-300">
-                This page is focused on admin workflow: left side calendar interaction, selected-date inspector, current bookings and blocks, plus right-side BCCC and city event detail browsing.
-              </p>
+
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">Google-style calendar management</h1>
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300">
+                  This page has been hardened into a safer no-gap month board so the old black-screen issue is avoided. Hold any date to create a quick backend note or block, or use the selected-date inspector to edit existing calendar rules.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {canManageBlocks ? (
+                  <button type="button" onClick={() => openCreate(selectedDate)} className="inline-flex items-center gap-2 rounded-full bg-[#0f8b6d] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90">
+                    <Plus className="h-4 w-4" />
+                    New calendar rule
+                  </button>
+                ) : null}
+                <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10">
+                  <CalendarDays className="h-4 w-4" />
+                  Back to dashboard
+                </Link>
+                <Link href="/admin/guidelines-contacts" className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10">
+                  <Info className="h-4 w-4" />
+                  Backend Guidelines & Contacts
+                </Link>
+              </div>
             </div>
 
-            <div className={cn('mt-5 rounded-2xl border px-4 py-4 text-sm', scheduleStatusTone(selectedDerivedStatus))}>
-                <div className="font-semibold uppercase tracking-[0.16em]">{scheduleStatusLabel(selectedDerivedStatus)}</div>
-                <div className="mt-2 leading-7">{scheduleStatusDescription(selectedDerivedStatus)}</div>
-            </div>
+            <div className="border-t border-black/5 bg-[#f7f5ef] px-6 py-8 dark:border-white/10 dark:bg-white/5 lg:border-l lg:border-t-0">
+              <div className="rounded-[1.6rem] border border-black/5 bg-white p-5 dark:border-white/10 dark:bg-[#17181c]">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Selected day status</div>
+                <div className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{scheduleStatusLabel(selectedDerivedStatus)}</div>
+                <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">{longDate(selectedDate)}</div>
+              </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Button type="button" variant="outline" onClick={() => router.get('/calendar/manage', { month: shiftMonth(month, -1) }, { preserveScroll: true })}>
-                <ChevronLeft className="mr-2 h-4 w-4" /> Previous Month
-              </Button>
-              <Button type="button" variant="outline" onClick={() => router.get('/calendar/manage', { month: shiftMonth(month, 1) }, { preserveScroll: true })}>
-                Next Month <ChevronRight className="ml-2 h-4 w-4" />
-              </Button>
-              <Button type="button" onClick={openCreateModal}>
-                <Plus className="mr-2 h-4 w-4" /> Add Block
-              </Button>
-              <Button type="button" variant="outline" onClick={openBulkModal}>
-                <Layers3 className="mr-2 h-4 w-4" /> Bulk Action
-              </Button>
+              <div className="mt-4 rounded-[1.6rem] border border-black/5 bg-white p-5 text-sm leading-6 text-slate-600 dark:border-white/10 dark:bg-[#17181c] dark:text-slate-300">
+                {canManageBlocks
+                  ? 'Hold a date cell for about half a second to open the quick input modal. Click normally to inspect bookings, public events, and blocks on that date.'
+                  : 'Click any day cell to inspect bookings, public events, and calendar rules on that date.'}
+              </div>
             </div>
           </div>
+        </section>
 
-          {feedback ? (
-            <div className="mt-5 rounded-2xl border border-[#bfd2ff] bg-[#eef4ff] px-4 py-3 text-sm text-[#1645ac]">
-              {feedback}
+        <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+          <section className="rounded-[2rem] border border-black/5 bg-white px-5 py-6 shadow-sm dark:border-white/10 dark:bg-[#121318] md:px-6">
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Month board</div>
+                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">{monthLabel(monthToDate(month))}</h2>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button type="button" variant="outline" size="icon" onClick={() => router.get('/calendar/manage', { month: shiftMonth(month, -1) }, { preserveState: true, preserveScroll: true })}>
+                  <ChevronLeft className="h-5 w-5" />
+                </Button>
+                <Button type="button" variant="outline" size="icon" onClick={() => router.get('/calendar/manage', { month: shiftMonth(month, 1) }, { preserveState: true, preserveScroll: true })}>
+                  <ChevronRight className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
-          ) : null}
-        </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-6">
-            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
-              <div className="mb-6 flex items-center justify-between gap-4">
+            <div className="overflow-x-auto">
+              <div className="min-w-[860px] overflow-hidden rounded-[1.75rem] border border-slate-200 dark:border-white/10">
+                <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                  {weekdayLabels.map((label) => (
+                    <div key={label} className="border-r border-slate-200 px-2 py-3 last:border-r-0 dark:border-white/10">{label}</div>
+                  ))}
+                </div>
+
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Month</div>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">{monthLabel(month)}</h2>
-                </div>
-                <div className="rounded-full border border-black/10 bg-slate-50 px-4 py-2 text-sm font-medium dark:border-white/10 dark:bg-white/5">
-                  Sunday-first calendar layout
-                </div>
-              </div>
+                  {weeks.map((week, weekIndex) => {
+                    const lanes = buildWeekLanes(week, events);
+                    const maxVisibleLanes = 6;
+                    const visibleLanes = lanes.slice(0, maxVisibleLanes);
+                    const hiddenCount = Math.max(lanes.length - visibleLanes.length, 0);
+                    const cellHeight = 132;
+                    const laneTop = 32;
+                    const laneHeight = 20;
+                    const laneGap = 4;
+                    const footerHeight = hiddenCount > 0 ? 22 : 10;
+                    const weekHeight = cellHeight + Math.max(visibleLanes.length, 1) * (laneHeight + laneGap) + footerHeight;
 
-              <div className="grid grid-cols-7 gap-2 pb-3">
-                {weekdayLabels.map((label) => (
-                  <div key={label} className="text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                    {label}
-                  </div>
-                ))}
-              </div>
+                    return (
+                      <div key={`week-${weekIndex}`} className="relative border-b border-slate-200 last:border-b-0 dark:border-white/10" style={{ height: `${weekHeight}px` }}>
+                        <div className="grid h-[132px] grid-cols-7">
+                          {week.map((cell, index) => {
+                            if (!cell) {
+                              return <div key={`blank-${weekIndex}-${index}`} className="border-r border-slate-200 bg-slate-50/60 last:border-r-0 dark:border-white/10 dark:bg-[#0f1117]" />;
+                            }
 
-              <div className="space-y-3">
-                {weeks.map((week, weekIndex) => (
-                  <div key={`week-${weekIndex}`} className="grid grid-cols-7 gap-2">
-                    {week.map((cell, index) => {
-                      if (!cell) return <div key={`blank-${weekIndex}-${index}`} className="min-h-[90px] rounded-2xl" />;
+                            const key = dateKey(cell);
+                            const rows = events.filter((event) => eventSpansDate(event, key));
+                            const selected = key === selectedDate;
+                            const status = deriveDayStatus({ availability: monthAvailability[key], events: rows, isClient: false });
+                            const availableBlocks = BLOCK_KEYS.filter((block) => monthAvailability[key]?.[block] !== false).length;
 
-                      const key = dateKey(cell);
-                      const day = monthAvailability[key];
-                      const isSelected = key === selectedDate;
-                      const dayEvents = events.filter((event) => eventSpansDate(event, key));
-                      const visibleTitles = dayEvents.slice(0, 2);
-                      const hiddenCount = Math.max(dayEvents.length - visibleTitles.length, 0);
-                      const today = key === dateKey(new Date());
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onPointerDown={() => startPress(key)}
+                                onPointerUp={() => endPress(key)}
+                                onPointerCancel={() => clearPress()}
+                                onPointerLeave={() => clearPress()}
+                                className={cn(
+                                  'relative min-h-[132px] border-r border-b border-slate-200 bg-white px-2.5 py-2 text-left transition-colors dark:border-white/10 dark:bg-[#11151d]',
+                                  selected && 'z-[2] ring-2 ring-inset ring-slate-900 dark:ring-white',
+                                  status === 'blocked' && 'bg-red-50/60 dark:bg-red-500/10',
+                                  status === 'public_booked' && 'bg-violet-50/65 dark:bg-violet-500/10',
+                                  status === 'private_booked' && 'bg-amber-50/65 dark:bg-amber-500/10',
+                                  status === 'limited' && 'bg-sky-50/65 dark:bg-sky-500/10',
+                                  index === 6 && 'border-r-0',
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="text-base font-semibold text-slate-900 dark:text-white">{cell.getDate()}</span>
+                                  <span className={cn('mt-0.5 inline-block h-2.5 w-2.5 rounded-full', status === 'blocked' ? 'bg-red-500 dark:bg-red-300' : status === 'public_booked' ? 'bg-violet-500 dark:bg-violet-300' : status === 'private_booked' ? 'bg-amber-500 dark:bg-amber-300' : status === 'limited' ? 'bg-sky-500 dark:bg-sky-300' : 'bg-slate-300 dark:bg-slate-600')} />
+                                </div>
+                                <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                  <span>{scheduleStatusLabel(status)}</span>
+                                  <span>{availableBlocks}/3</span>
+                                </div>
+                                <div className="mt-2 flex gap-1.5">
+                                  {BLOCK_KEYS.map((block) => {
+                                    const open = monthAvailability[key]?.[block] !== false;
+                                    return <span key={block} className={cn('h-1.5 flex-1 rounded-full', open ? 'bg-emerald-500/75 dark:bg-emerald-300/80' : 'bg-slate-300 dark:bg-slate-700')} />;
+                                  })}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
 
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setSelectedDate(key)}
-                          className={cn(
-                            'min-h-[90px] rounded-2xl border px-3 py-2 text-left transition hover:-translate-y-0.5',
-                            scheduleStatusTone(
-  deriveDayStatus({
-    availability: day,
-    events: dayEvents,
-    isClient: false,
-  }),
-),
-                            isSelected && 'ring-2 ring-slate-900 ring-offset-2 dark:ring-white dark:ring-offset-[#121318]',
-                            today && 'outline outline-2 outline-[#0f8b6d] outline-offset-[-2px]',
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-full">
+                          {visibleLanes.map((lane, laneIndex) =>
+                            lane.map((segment) => {
+                              const left = `${(segment.startCol / 7) * 100}%`;
+                              const width = `${((segment.endCol - segment.startCol + 1) / 7) * 100}%`;
+                              const top = laneTop + laneIndex * (laneHeight + laneGap);
+
+                              return (
+                                <div key={`${String(segment.event.id)}-${segment.startCol}-${segment.endCol}`} className="absolute px-1.5" style={{ left, width, top }}>
+                                  <div className={cn('flex h-5 items-center overflow-hidden border px-2 text-[10px] font-semibold shadow-sm', eventBarTone(segment.event), segment.isStart ? 'rounded-l-full' : 'rounded-l-md', segment.isEnd ? 'rounded-r-full' : 'rounded-r-md')}>
+                                    <span className="truncate">{segment.isStart ? segment.event.title : '…'}</span>
+                                  </div>
+                                </div>
+                              );
+                            }),
                           )}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="text-base font-semibold">{cell.getDate()}</span>
-                            {today ? <span className="rounded-full bg-[#0f8b6d] px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Today</span> : null}
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">
-                            <span>{day?.AM === false ? 'AM busy' : 'AM open'}</span>
-                            <span>{day?.PM === false ? 'PM busy' : 'PM open'}</span>
-                            <span>{day?.EVE === false ? 'EVE busy' : 'EVE open'}</span>
-                          </div>
-                          <div className="mt-2 space-y-1">
-                            {visibleTitles.map((event) => (
-                              <div key={String(event.id)} className={cn('truncate rounded-md px-2 py-1 text-[11px] font-semibold', chipTone(event.status))}>
-                                {event.title}
-                              </div>
-                            ))}
-                            {hiddenCount > 0 ? <div className="text-[11px] font-medium">+{hiddenCount} more</div> : null}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Selected Date Inspector</div>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">{longDate(selectedDate)}</h2>
-<p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
-  Review the selected date using the same shared AM / PM / EVE interpretation now used by the public calendar.
-</p>
-
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Button type="button" onClick={openCreateModal}><Plus className="mr-2 h-4 w-4" /> Add single block</Button>
-                  <Button type="button" variant="outline" onClick={openBulkModal}><Layers3 className="mr-2 h-4 w-4" /> Bulk action</Button>
-                </div>
-              </div>
-
-              <div className="mt-6 grid gap-3 md:grid-cols-3">
-                {BLOCK_KEYS.map((block) => {
-                const available = selectedAvailability?.[block] ?? true;
-                  return (
-                    <div
-                      key={block}
-                      className={cn(
-                        'rounded-2xl border px-4 py-4',
-                        available
-                          ? 'border-black/10 bg-white dark:border-white/10 dark:bg-[#17181c]'
-                          : 'border-[#d7b14b] bg-[#f7ebc1] text-[#6a4f00]',
-                      )}
-                    >
-                      <div className="text-lg font-semibold">{BLOCK_META[block].label}</div>
-                      <div className="mt-1 text-sm opacity-80">{BLOCK_META[block].time}</div>
-                      <div className="mt-3 text-xs font-semibold uppercase tracking-[0.16em]">
-                        {available ? 'Available' : 'Unavailable'}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-6 grid gap-5 xl:grid-cols-[1fr_1fr]">
-                <div className="rounded-[1.5rem] border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-[#17181c]">
-                  <div className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Bookings on selected date</div>
-                  <div className="space-y-3">
-                    {selectedBookings.length > 0 ? selectedBookings.map((event) => (
-                      <div key={String(event.id)} className="rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#121318]">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-base font-semibold text-slate-900 dark:text-white">{event.title}</div>
-                            <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{formatDateTime(event.start)} → {formatDateTime(event.end)}</div>
-                            <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Client: {event.client_name || '—'} • Guests: {event.guest_count || 0}</div>
-                            <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Payment: {event.payment_status || '—'}</div>
-                          </div>
-                          <span className={cn('rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]', chipTone(event.status))}>
-                            {String(event.status || '').replaceAll('_', ' ')}
-                          </span>
                         </div>
-                        <div className="mt-3">
-                          <Link href={`/bookings/${event.id}`} className="inline-flex items-center gap-2 rounded-full border border-black/10 px-3 py-2 text-xs font-semibold dark:border-white/10">
-                            <Eye className="h-3.5 w-3.5" /> Open booking
-                          </Link>
-                        </div>
-                      </div>
-                    )) : <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">No booking registered on this date.</div>}
-                  </div>
-                </div>
 
-                <div className="rounded-[1.5rem] border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-[#17181c]">
-                  <div className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Blocks and public events</div>
-                  <div className="space-y-3">
-                    {[...selectedBlocks, ...selectedPublicEvents].length > 0 ? [...selectedBlocks, ...selectedPublicEvents].map((event) => (
-                      <div key={String(event.id)} className="rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#121318]">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-base font-semibold text-slate-900 dark:text-white">{event.title}</div>
-                            <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{formatDateTime(event.start)} → {formatDateTime(event.end)}</div>
-                            {event.area ? <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Area: {event.area}</div> : null}
-                            {event.block ? <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Block: {event.block}</div> : null}
-                            {event.note ? <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Notes: {event.note}</div> : null}
-                          </div>
-                          <span className={cn('rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]', chipTone(event.status))}>
-                            {String(event.status || '').replaceAll('_', ' ')}
-                          </span>
-                        </div>
-                        {event.kind === 'block' ? (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button type="button" size="sm" variant="outline" onClick={() => openEditBlock(event)}>Edit block</Button>
-                            <Button type="button" size="sm" variant="destructive" onClick={() => deleteBlock(event)} disabled={busy}>
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
-                            </Button>
+                        {hiddenCount > 0 ? (
+                          <div className="absolute bottom-1 left-2 text-[11px] font-semibold text-slate-500 dark:text-slate-300">
+                            +{hiddenCount} more overlapping item{hiddenCount > 1 ? 's' : ''}
                           </div>
                         ) : null}
                       </div>
-                    )) : <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">No block or public event overlaps this date.</div>}
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-6">
-            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
+          <aside className="space-y-6">
+            <section className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#121318]">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Event Highlights Panel</div>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">BCCC and Baguio City events</h2>
+                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Selected date inspector</div>
+                  <h3 className="mt-2 text-2xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">{longDate(selectedDate)}</h3>
                 </div>
-                <div className="inline-flex rounded-full border border-black/10 bg-slate-50 p-1 dark:border-white/10 dark:bg-white/5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveHighlightTab('bccc');
-                      setActiveHighlight(highlights.bccc[0] || null);
-                    }}
-                    className={cn('rounded-full px-4 py-2 text-sm font-semibold', activeHighlightTab === 'bccc' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : '')}
-                  >
-                    BCCC Events
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveHighlightTab('city');
-                      setActiveHighlight(highlights.city[0] || null);
-                    }}
-                    className={cn('rounded-full px-4 py-2 text-sm font-semibold', activeHighlightTab === 'city' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : '')}
-                  >
-                    City Events
-                  </button>
-                </div>
+                <span className={cn('rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]', chipTone(selectedDerivedStatus))}>{scheduleStatusLabel(selectedDerivedStatus)}</span>
               </div>
 
-              <div className="mt-6 space-y-4">
-                {activeHighlight ? (
-                  <div className="overflow-hidden rounded-[1.8rem] border border-black/5 bg-slate-50 dark:border-white/10 dark:bg-[#17181c]">
-                    {activeHighlight.image ? (
-                      <img src={activeHighlight.image} alt={activeHighlight.title} className="h-56 w-full object-cover" />
-                    ) : (
-                      <div className="flex h-56 items-center justify-center bg-gradient-to-r from-slate-200 to-slate-100 text-sm text-slate-500 dark:from-slate-900 dark:to-slate-800 dark:text-slate-300">
-                        No image available
-                      </div>
-                    )}
-                    <div className="p-5">
-                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Selected event</div>
-                      <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{activeHighlight.title}</h3>
-                      <div className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                        <div>Date: {activeHighlight.date}</div>
-                        <div>Time: {activeHighlight.time || '—'}</div>
-                        <div>Venue: {activeHighlight.venue || '—'}</div>
-                      </div>
-                      <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{activeHighlight.summary || activeHighlight.description || 'No event description available.'}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-[1.8rem] border border-dashed border-black/10 px-4 py-8 text-sm text-slate-500 dark:border-white/10 dark:text-slate-300">No event highlight available in this section.</div>
-                )}
-
-                <div className="space-y-3">
-                  {(activeHighlightTab === 'bccc' ? highlights.bccc : highlights.city).map((item) => (
-                    <button
-                      key={`${item.scope}-${item.id}`}
-                      type="button"
-                      onClick={() => setActiveHighlight(item)}
-                      className={cn(
-                        'w-full rounded-[1.5rem] border p-4 text-left transition hover:-translate-y-0.5',
-                        activeHighlight?.id === item.id && activeHighlight?.scope === item.scope
-                          ? 'border-[#174fda]/30 bg-[#eef4ff] dark:border-[#8ea3ff]/30 dark:bg-[#1a2448]'
-                          : 'border-black/5 bg-slate-50 dark:border-white/10 dark:bg-[#17181c]',
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-lg font-semibold text-slate-900 dark:text-white">{item.title}</div>
-                          <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.date} • {item.time || '—'}</div>
-                          <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.venue || '—'}</div>
+              <div className="mt-5 space-y-5">
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Calendar blocks</div>
+                  <div className="space-y-3">
+                    {selectedBlocks.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 px-4 py-4 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No block on this date.</div> : null}
+                    {selectedBlocks.map((event) => (
+                      <div key={String(event.id)} className="rounded-[1.35rem] border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#17181c]">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{event.title}</div>
+                          <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]', chipTone(event.status))}>{String(event.block || 'AM')}</span>
                         </div>
-                        <CalendarDays className="h-5 w-5 text-slate-400" />
+                        <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">{event.area || 'All areas'} • {event.dateFrom || String(event.start).slice(0, 10)} to {event.dateTo || normalizeEventRange(event).endDate}</div>
+                        {event.note ? <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">{event.note}</div> : null}
+                        {canManageBlocks ? (
+                          <div className="mt-3 flex gap-2">
+                            <button type="button" onClick={() => openEdit(event)} className="rounded-xl border border-black/10 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5"><Edit3 className="mr-2 inline h-4 w-4" />Edit</button>
+                            <button type="button" onClick={() => deleteBlock(event)} className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 dark:border-red-400/20 dark:text-red-300 dark:hover:bg-red-500/10"><Trash2 className="mr-2 inline h-4 w-4" />Delete</button>
+                          </div>
+                        ) : null}
                       </div>
-                      <p className="mt-3 line-clamp-2 text-sm leading-7 text-slate-600 dark:text-slate-300">{item.summary || item.description || 'No event description available.'}</p>
-                    </button>
-                  ))}
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Bookings</div>
+                  <div className="space-y-3">
+                    {selectedBookings.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 px-4 py-4 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No booking on this date.</div> : null}
+                    {selectedBookings.map((event) => (
+                      <div key={String(event.id)} className="rounded-[1.35rem] border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#17181c]">
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">{event.title}</div>
+                        <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">{event.client_name || event.company_name || 'Booking record'}</div>
+                        {event.payment_status ? <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">Payment: {event.payment_status}</div> : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Public events</div>
+                  <div className="space-y-3">
+                    {selectedPublicEvents.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 px-4 py-4 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No public event on this date.</div> : null}
+                    {selectedPublicEvents.map((event) => (
+                      <div key={String(event.id)} className="rounded-[1.35rem] border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#17181c]">
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">{event.title}</div>
+                        <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">{event.area || 'Baguio Convention & Cultural Center'} {event.time ? `• ${event.time}` : ''}</div>
+                        {event.summary ? <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">{event.summary}</div> : null}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
-              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Quick links</div>
-              <div className="mt-4 grid gap-3">
-                <Link href="/dashboard" className="rounded-2xl border border-black/10 px-4 py-3 text-sm font-semibold dark:border-white/10">Back to dashboard calendar</Link>
-                <Link href="/calendar/analytics" className="rounded-2xl border border-black/10 px-4 py-3 text-sm font-semibold dark:border-white/10">Open calendar analytics</Link>
-                <Link href="/bookings/analytics" className="rounded-2xl border border-black/10 px-4 py-3 text-sm font-semibold dark:border-white/10">Open booking analytics</Link>
+            <section className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#121318]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Highlight browser</div>
+                  <h3 className="mt-2 text-2xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">BCCC / City events</h3>
+                </div>
+                <div className="inline-flex rounded-full border border-black/10 p-1 dark:border-white/10">
+                  <button type="button" onClick={() => setActiveHighlightTab('bccc')} className={cn('rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em]', activeHighlightTab === 'bccc' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'text-slate-600 dark:text-slate-300')}>BCCC</button>
+                  <button type="button" onClick={() => setActiveHighlightTab('city')} className={cn('rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em]', activeHighlightTab === 'city' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'text-slate-600 dark:text-slate-300')}>Baguio City</button>
+                </div>
               </div>
-            </div>
-          </div>
+
+              <div className="mt-5 grid gap-5 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
+                <div className="space-y-3">
+                  {activeHighlights.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No highlight records available.</div> : null}
+                  {activeHighlights.map((item, index) => {
+                    const active = index === activeHighlightIndex;
+                    return (
+                      <button key={`${item.scope}-${item.id}`} type="button" onClick={() => setActiveHighlightIndex(index)} className={cn('relative w-full overflow-hidden rounded-[1.35rem] border p-4 text-left transition', active ? 'border-slate-900 bg-slate-900 text-white shadow-xl dark:border-white dark:bg-white dark:text-slate-900' : 'border-black/10 bg-white opacity-75 shadow-[0_12px_30px_rgba(15,23,42,0.08)] hover:-translate-y-0.5 hover:opacity-100 dark:border-white/10 dark:bg-[#17181c] dark:text-white') }>
+                        <div className="text-sm font-semibold">{item.title}</div>
+                        <div className={cn('mt-1 text-xs', active ? 'text-white/80 dark:text-slate-700' : 'text-slate-500 dark:text-slate-400')}>{item.venue}</div>
+                        <div className={cn('mt-2 text-[11px] uppercase tracking-[0.16em]', active ? 'text-white/70 dark:text-slate-600' : 'text-slate-500 dark:text-slate-500')}>{item.date}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="min-h-[260px] rounded-[1.6rem] border border-black/10 bg-slate-50/70 p-5 dark:border-white/10 dark:bg-[#17181c]">
+                  {activeHighlight ? (
+                    <>
+                      {activeHighlight.image ? <div className="mb-4 overflow-hidden rounded-[1.35rem]"><img src={activeHighlight.image} alt={activeHighlight.title} className="h-48 w-full object-cover" /></div> : null}
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Details</div>
+                      <h4 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{activeHighlight.title}</h4>
+                      <div className="mt-3 text-sm text-slate-600 dark:text-slate-300">{activeHighlight.venue} • {activeHighlight.date}{activeHighlight.time ? ` • ${activeHighlight.time}` : ''}</div>
+                      <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{activeHighlight.description || activeHighlight.summary}</p>
+                    </>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">Choose a highlight card to review its details.</div>
+                  )}
+                </div>
+              </div>
+            </section>
+          </aside>
         </div>
       </div>
-
-      <SimpleModal
-        title={modalState.type === 'single' ? (modalState.mode === 'create' ? 'Add calendar block' : 'Edit calendar block') : 'Bulk calendar action'}
-        open={modalState.type !== 'none'}
-        onClose={() => setModalState({ type: 'none' })}
-      >
-        {modalState.type === 'single' ? (
-          <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="space-y-2 text-sm font-medium">
-                <span>Title</span>
-                <input value={modalState.payload.title} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, title: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]" />
-              </label>
-              <label className="space-y-2 text-sm font-medium">
-                <span>Area</span>
-                <select value={modalState.payload.area} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, area: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]">
-                  <option value="">Select area</option>
-                  {areaOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </label>
-              <label className="space-y-2 text-sm font-medium">
-                <span>Block</span>
-                <select value={modalState.payload.block} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, block: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]">
-                  <option value="AM">AM</option>
-                  <option value="PM">PM</option>
-                  <option value="EVE">EVE</option>
-                  <option value="DAY">Whole day</option>
-                </select>
-              </label>
-              <label className="space-y-2 text-sm font-medium">
-                <span>Status</span>
-                <select value={modalState.payload.public_status} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, public_status: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]">
-                  <option value="red">Blocked / unavailable</option>
-                  <option value="gold">Private / reserved</option>
-                  <option value="blue">Public / visible event</option>
-                </select>
-              </label>
-              <label className="space-y-2 text-sm font-medium">
-                <span>Date from</span>
-                <input type="date" value={modalState.payload.date_from} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, date_from: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]" />
-              </label>
-              <label className="space-y-2 text-sm font-medium">
-                <span>Date to</span>
-                <input type="date" value={modalState.payload.date_to} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, date_to: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]" />
-              </label>
-            </div>
-            <label className="space-y-2 text-sm font-medium">
-              <span>Notes</span>
-              <textarea value={modalState.payload.notes} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, notes: e.target.value } })} rows={4} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]" />
-            </label>
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => setModalState({ type: 'none' })}>Cancel</Button>
-              <Button type="button" onClick={saveModal} disabled={busy}>{busy ? 'Saving...' : modalState.mode === 'create' ? 'Create block' : 'Save changes'}</Button>
-            </div>
-          </div>
-        ) : null}
-
-        {modalState.type === 'bulk' ? (
-          <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="space-y-2 text-sm font-medium">
-                <span>Title</span>
-                <input value={modalState.payload.title} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, title: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]" />
-              </label>
-              <label className="space-y-2 text-sm font-medium">
-                <span>Area</span>
-                <select value={modalState.payload.area} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, area: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]">
-                  <option value="">Select area</option>
-                  {areaOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </label>
-              <label className="space-y-2 text-sm font-medium">
-                <span>Block</span>
-                <select value={modalState.payload.block} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, block: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]">
-                  <option value="AM">AM</option>
-                  <option value="PM">PM</option>
-                  <option value="EVE">EVE</option>
-                  <option value="DAY">Whole day</option>
-                </select>
-              </label>
-              <label className="space-y-2 text-sm font-medium">
-                <span>Status</span>
-                <select value={modalState.payload.public_status} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, public_status: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]">
-                  <option value="red">Blocked / unavailable</option>
-                  <option value="gold">Private / reserved</option>
-                  <option value="blue">Public / visible event</option>
-                </select>
-              </label>
-              <label className="space-y-2 text-sm font-medium">
-                <span>Date from</span>
-                <input type="date" value={modalState.payload.date_from} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, date_from: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]" />
-              </label>
-              <label className="space-y-2 text-sm font-medium">
-                <span>Date to</span>
-                <input type="date" value={modalState.payload.date_to} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, date_to: e.target.value } })} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]" />
-              </label>
-            </div>
-            <label className="space-y-2 text-sm font-medium">
-              <span>Notes</span>
-              <textarea value={modalState.payload.notes} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, notes: e.target.value } })} rows={4} className="w-full rounded-xl border px-3 py-2 dark:border-white/10 dark:bg-[#17181c]" />
-            </label>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex items-center gap-3 rounded-xl border px-4 py-3 text-sm dark:border-white/10">
-                <input type="checkbox" checked={modalState.payload.explode_by_day} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, explode_by_day: e.target.checked } })} />
-                Create one block per day in the selected range
-              </label>
-              <label className="flex items-center gap-3 rounded-xl border px-4 py-3 text-sm dark:border-white/10">
-                <input type="checkbox" checked={modalState.payload.exclude_weekends} onChange={(e) => setModalState({ ...modalState, payload: { ...modalState.payload, exclude_weekends: e.target.checked } })} />
-                Skip Saturdays and Sundays
-              </label>
-            </div>
-            <div className="rounded-xl border border-black/5 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-white/10 dark:bg-[#17181c] dark:text-slate-300">
-              Use this for fast multi-date blocking, private reservations, or public-visibility placeholders across a range.
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => setModalState({ type: 'none' })}>Cancel</Button>
-              <Button type="button" onClick={saveModal} disabled={busy}>{busy ? 'Saving...' : 'Run bulk action'}</Button>
-            </div>
-          </div>
-        ) : null}
-      </SimpleModal>
     </AppLayout>
   );
 }

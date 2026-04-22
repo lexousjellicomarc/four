@@ -122,11 +122,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('/spaces', [AdminSortController::class, 'spaces'])->name('spaces');
             Route::post('/stats', [AdminSortController::class, 'stats'])->name('stats');
         });
-        Route::get('/admin/guidelines-contacts', [AdminGuidelinesContactController::class, 'index'])
-    ->name('admin.guidelines-contacts');
+    Route::get('/admin/guidelines-contacts', [AdminGuidelinesContactController::class, 'index'])
+        ->middleware('role:admin|manager|staff')
+        ->name('admin.guidelines-contacts');
 
-Route::post('/admin/guidelines-contacts', [AdminGuidelinesContactController::class, 'update'])
-    ->name('admin.guidelines-contacts.update');
+    Route::post('/admin/guidelines-contacts', [AdminGuidelinesContactController::class, 'update'])
+        ->middleware('role:admin|manager|staff')
+        ->name('admin.guidelines-contacts.update');
     Route::get('/calendar/analytics', [CalendarAnalyticsController::class, 'index'])
         ->middleware('role:admin|manager')
         ->name('calendar.analytics');
@@ -516,6 +518,15 @@ Route::post('/bookings/operations/payments/{payment}/fail', [BookingOperationsCo
             'events' => $events,
             'month' => $start->format('Y-m'),
             'monthAvailability' => $monthAvailability,
+            'areaOptions' => [
+                'FULL HALL',
+                'MAIN HALL',
+                'FOYER & LOBBY AREA',
+                'VIP LOUNGE',
+                'BOARD ROOM',
+                'BASEMENT',
+                'GALLERY2600',
+            ],
         ]);
     })->middleware('permission:dashboard.view')->name('dashboard');
 

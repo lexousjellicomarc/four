@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\UserNotificationResource;
 use App\Models\UserNotification;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -131,7 +132,7 @@ class NotificationController extends Controller
         return back();
     }
 
-    protected function applyFilters(Builder $query, array $filters): Builder
+    protected function applyFilters(Builder|Relation $query, array $filters): Builder|Relation
     {
         $q = trim((string) ($filters['q'] ?? ''));
         $status = strtolower((string) ($filters['status'] ?? 'all'));
@@ -222,7 +223,7 @@ class NotificationController extends Controller
         }
     }
 
-    protected function buildStats(Builder $base): array
+    protected function buildStats(Builder|Relation $base): array
     {
         $all = (clone $base)->count();
         $unread = (clone $base)->whereNull('read_at')->count();

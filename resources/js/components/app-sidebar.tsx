@@ -4,6 +4,8 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -17,6 +19,10 @@ import {
   CalendarDays,
   Users,
   Calendar,
+  MessagesSquare,
+  FileSpreadsheet,
+  Monitor,
+  LayoutPanelTop,
 } from 'lucide-react';
 import AppLogo from './app-logo';
 import type { NavItem } from '@/types';
@@ -26,6 +32,12 @@ const mainNavItems: NavItem[] = [
     title: 'Calendar',
     href: '/dashboard',
     icon: Calendar,
+    permission: 'dashboard.view',
+  },
+  {
+    title: 'Manage Calendar Center',
+    href: '/calendar/manage',
+    icon: LayoutPanelTop,
     permission: 'dashboard.view',
   },
   {
@@ -58,6 +70,23 @@ const mainNavItems: NavItem[] = [
     icon: ShieldCheck,
     permission: 'users.manage',
   },
+  {
+    title: 'MICE Registry',
+    href: '/reports/mice-registry',
+    icon: FileSpreadsheet,
+    permission: 'bookings.view',
+  },
+  {
+    title: 'Inquiries',
+    href: '/admin/inquiries',
+    icon: MessagesSquare,
+    permission: 'bookings.view',
+  },
+];
+
+const workspaceItems = [
+  { title: 'Frontend Admin', href: '/admin/home?tab=home', icon: Monitor },
+  { title: 'Public Website', href: '/', icon: LayoutPanelTop },
 ];
 
 export function AppSidebar() {
@@ -77,6 +106,22 @@ export function AppSidebar() {
 
       <SidebarContent>
         <NavMain items={mainNavItems} />
+
+        <SidebarGroup className="px-2 py-0">
+          <SidebarGroupLabel>Frontend / Backend</SidebarGroupLabel>
+          <SidebarMenu>
+            {workspaceItems.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton asChild tooltip={{ children: item.title }}>
+                  <Link href={item.href}>
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter>

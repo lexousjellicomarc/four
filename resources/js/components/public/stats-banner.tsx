@@ -16,14 +16,14 @@ export default function StatsBanner({ items = [] }: Props) {
   const looping = [...source, ...source];
 
   return (
-    <section className="mt-6 w-full px-4 sm:px-6 lg:px-8">
+    <section className="w-full">
       <style>{`
         @keyframes statsMarquee {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
       `}</style>
-      <div className="relative mx-auto w-full max-w-[1600px] overflow-hidden rounded-[2.2rem] border border-white/10">
+      <div className="relative w-full overflow-hidden ">
         <img src="/marketing/images/events/lightmain.JPG" alt="BCCC exterior" className="absolute inset-0 h-full w-full object-cover dark:hidden" />
         <img src="/marketing/images/events/darkmain.JPG" alt="BCCC exterior" className="absolute inset-0 hidden h-full w-full object-cover dark:block" />
         <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(8,15,27,0.74),rgba(15,139,109,0.34))] dark:bg-[linear-gradient(135deg,rgba(2,6,23,0.84),rgba(41,76,255,0.24))]" />

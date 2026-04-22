@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, TableProperties, PanelsTopLeft } from 'lucide-react';
 
 export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -32,12 +32,11 @@ export default function AdminLoginPage() {
             </div>
 
             <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-              Admin access for content, schedules, and frontend display control.
+              One admin login for frontend content, backend booking tools, MICE registry, and inquiries.
             </h1>
 
             <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
-              This admin login entry is dedicated to the frontend management flow.
-              Successful login redirects on the backend side to the admin home/config console.
+              This admin entry now acts as the shared session gate for both workspace sides. After sign-in, the same authenticated session can move between public-page configuration and backend booking operations without requiring a second login.
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
@@ -45,29 +44,29 @@ export default function AdminLoginPage() {
                 <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[#e8f2ee] text-[#174f40] dark:bg-[#18231f] dark:text-[#8ea3ff]">
                   <ShieldCheck className="h-4 w-4" />
                 </div>
-                <div className="mt-4 text-sm font-semibold">Admin Entry</div>
+                <div className="mt-4 text-sm font-semibold">Single Session</div>
                 <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-                  Dedicated login page at /admin
+                  No separate login for frontend and backend admin tools
                 </div>
               </div>
 
               <div className="rounded-3xl border border-black/5 bg-[#f7f5ef] p-5 dark:border-white/10 dark:bg-white/5">
                 <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[#e8f2ee] text-[#174f40] dark:bg-[#18231f] dark:text-[#8ea3ff]">
-                  <LockKeyhole className="h-4 w-4" />
+                  <PanelsTopLeft className="h-4 w-4" />
                 </div>
-                <div className="mt-4 text-sm font-semibold">Admin Home</div>
+                <div className="mt-4 text-sm font-semibold">Frontend Admin</div>
                 <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-                  Config shell at /admin/home
+                  Public-page configuration opens at /admin/home
                 </div>
               </div>
 
               <div className="rounded-3xl border border-black/5 bg-[#f7f5ef] p-5 dark:border-white/10 dark:bg-white/5">
                 <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[#e8f2ee] text-[#174f40] dark:bg-[#18231f] dark:text-[#8ea3ff]">
-                  <ShieldCheck className="h-4 w-4" />
+                  <TableProperties className="h-4 w-4" />
                 </div>
-                <div className="mt-4 text-sm font-semibold">Backend Redirect</div>
+                <div className="mt-4 text-sm font-semibold">Backend Tools</div>
                 <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-                  No client-side redirect workaround needed
+                  Booking calendar, MICE registry, and inquiries use the same login
                 </div>
               </div>
             </div>
@@ -79,7 +78,7 @@ export default function AdminLoginPage() {
             </div>
 
             <h2 className="mt-4 text-3xl font-semibold tracking-tight">
-              Sign in to manage frontend content
+              Sign in to open the unified admin workspace
             </h2>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-5">
@@ -139,7 +138,7 @@ export default function AdminLoginPage() {
                   onChange={(e) => setData('remember', e.target.checked)}
                   className="h-4 w-4 rounded border-black/20"
                 />
-                Keep this admin session signed in
+                Keep this admin session signed in across frontend and backend tools
               </label>
 
               <button
@@ -152,8 +151,7 @@ export default function AdminLoginPage() {
             </form>
 
             <div className="mt-6 text-sm text-slate-500 dark:text-slate-300">
-              This page relies on backend redirect handling to bring the user to{' '}
-              <code>/admin/home</code> after successful authentication.
+              Successful authentication redirects to <code>/admin/home</code>, and the same session can immediately open the backend booking calendar, MICE survey & registry, inquiries, and backend guidelines tools.
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">

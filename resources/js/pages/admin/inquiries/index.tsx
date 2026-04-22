@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import ConfirmActionDialog from '@/components/confirm-action-dialog';
 import AdminLayout from '@/layouts/admin-layout';
@@ -67,6 +67,27 @@ export default function AdminInquiriesIndex({ inquiries }: Props) {
       <Head title="Inquiries" />
 
       <div className="space-y-5">
+        <section className="rounded-[2rem] border border-black/10 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#16171b]">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <div className="inline-flex rounded-full border border-[#0f8b6d]/20 bg-[#eef7f4] px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#0f8b6d] dark:border-[#7aa6ff]/20 dark:bg-[#16212b] dark:text-[#9dc0ff]">
+                Backend workspace inbox
+              </div>
+              <h2 className="mt-4 text-2xl font-black tracking-tight">Public contact messages inside the unified admin session</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300">
+                These inquiries are backend-facing. Review them together with the booking dashboard, MICE registry, and
+                staff reference pages so the public-site and operations teams stay in one workflow.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Link href="/dashboard" className="rounded-full border border-black/10 px-4 py-2 text-sm font-semibold dark:border-white/10">Booking Dashboard</Link>
+              <Link href="/reports/mice-registry" className="rounded-full border border-black/10 px-4 py-2 text-sm font-semibold dark:border-white/10">MICE Registry</Link>
+              <Link href="/admin/guidelines-contacts" className="rounded-full border border-black/10 px-4 py-2 text-sm font-semibold dark:border-white/10">Backend Guidelines</Link>
+            </div>
+          </div>
+        </section>
+
         {inquiries.data.length === 0 ? (
           <div className="rounded-[2rem] border border-black/10 bg-white p-6 text-sm text-slate-600 shadow-sm dark:border-white/10 dark:bg-[#16171b] dark:text-slate-300">
             No inquiries found yet.

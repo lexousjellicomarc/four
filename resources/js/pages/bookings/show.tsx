@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import BookingProgressPanel from '@/components/bookings/booking-progress-panel';
+import { Building2, ClipboardList, FileSpreadsheet, MessageSquareMore } from 'lucide-react';
 
 type BookingItem = {
   service_id?: number | null;
@@ -469,6 +470,49 @@ export default function ShowBooking() {
             </Button>
           </div>
         </div>
+
+        <Card className="overflow-hidden border-black/5 dark:border-white/10">
+          <CardContent className="flex flex-col gap-4 p-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="inline-flex rounded-full border border-[#0f8b6d]/20 bg-[#eef7f4] px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#0f8b6d] dark:border-[#7aa6ff]/20 dark:bg-[#16212b] dark:text-[#9dc0ff]">
+                Backend workflow bridge
+              </div>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight">Booking, survey, registry, and inquiry tools in one session</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+                Use these shortcuts when the booking needs survey completion, a linked MICE registry entry, calendar review, or backend references.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { href: `/bookings/${booking.id}/survey`, label: 'Survey Step', note: 'Attach survey email and proof image.', icon: ClipboardList },
+                { href: `/reports/mice-registry/create?booking_id=${booking.id}`, label: 'New MICE Entry', note: 'Open a registry form already linked to this booking.', icon: FileSpreadsheet },
+                { href: '/admin/inquiries', label: 'Inquiries', note: 'Check related messages and public coordination requests.', icon: MessageSquareMore },
+                { href: '/admin/guidelines-contacts', label: 'Backend Guidelines', note: 'Open the internal policy board, contacts, and rates.', icon: Building2 },
+              ].map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className="rounded-2xl border border-black/10 bg-[#f8f6f0] p-4 transition hover:-translate-y-0.5 hover:shadow-sm dark:border-white/10 dark:bg-white/5"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-2xl bg-white p-2 text-[#174f40] shadow-sm dark:bg-[#10131b] dark:text-[#9dc0ff]">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">{item.label}</div>
+                        <div className="mt-1 text-xs leading-6 text-muted-foreground">{item.note}</div>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
           <div className="space-y-6">

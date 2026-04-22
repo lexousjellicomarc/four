@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type Auth, type BreadcrumbItem } from '@/types';
@@ -11,10 +11,12 @@ import {
   CircleCheck,
   Clock3,
   Lock,
+  Plus,
   Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { CalendarBlockModal, type BlockKey, type CalendarBlockFormState } from '@/components/calendar/calendar-block-modal';
 import {
   BLOCK_KEYS,
   BLOCK_META,
@@ -35,6 +37,7 @@ import {
   scheduleStatusTone,
   shiftMonth,
 } from '@/lib/unified-schedule';
+import { canManageCalendarBlocks, type WorkspaceAuthLike } from '@/lib/workspace';
 
 const breadcrumbs: BreadcrumbItem[] = [
   {
@@ -70,11 +73,9 @@ type DashboardProps = {
   month: string;
   monthAvailability: Record<string, DashboardAvailabilityDay>;
   events: DashboardEvent[];
+  areaOptions?: string[];
 };
 
-type RoleLike = string | { name?: string | null } | null | undefined;
-type AuthLike = { roles?: RoleLike[] | null; user?: { roles?: RoleLike[] | null } | null };
-type BlockKey = 'AM' | 'PM' | 'EVE';
 type CalendarStatus = 'available' | 'partial' | 'public' | 'private' | 'blocked' | 'full' | 'my-booking';
 type WeekCell = Date | null;
 type EventLaneSegment = {
@@ -86,24 +87,37 @@ type EventLaneSegment = {
 };
 
 const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const defaultAreaOptions = [
+  'FULL HALL',
+  'MAIN HALL',
+  'FOYER & LOBBY AREA',
+  'VIP LOUNGE',
+  'BOARD ROOM',
+  'BASEMENT',
+  'GALLERY2600',
+];
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null;
+function pageCsrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 }
 
-function getRoleNames(auth: unknown): string[] {
-  if (!isRecord(auth)) return [];
-  const raw = (auth as AuthLike).roles ?? (auth as AuthLike).user?.roles ?? [];
-  if (!Array.isArray(raw)) return [];
+async function sendJson(url: string, method: 'POST' | 'PUT' | 'DELETE', payload?: Record<string, unknown>) {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-CSRF-TOKEN': pageCsrfToken(),
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: method === 'DELETE' ? undefined : JSON.stringify(payload ?? {}),
+  });
 
-  return raw
-    .map((r) => {
-      if (typeof r === 'string') return r;
-      if (isRecord(r) && typeof r.name === 'string') return r.name;
-      return '';
-    })
-    .filter(Boolean)
-    .map((name) => String(name).toLowerCase());
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error((json as { message?: string })?.message || 'Request failed.');
+  }
+  return json;
 }
 
 function normalizeDashboardStatus(status: string, isClientOwnBooking: boolean): CalendarStatus {
@@ -122,32 +136,6 @@ function normalizeDashboardStatus(status: string, isClientOwnBooking: boolean): 
       return 'full';
     default:
       return 'available';
-  }
-}
-
-function dayStyle(status: CalendarStatus, selected: boolean, today: boolean) {
-  const selectedRing = selected
-    ? 'ring-2 ring-[#111827] ring-offset-2 dark:ring-white dark:ring-offset-[#121318]'
-    : '';
-  const todayRing = today
-    ? 'outline outline-2 outline-[#0f8b6d] outline-offset-[-2px] dark:outline-[#7fd9c0]'
-    : '';
-
-  switch (status) {
-    case 'my-booking':
-      return `border-[#174f40] bg-[#174f40] text-white ${selectedRing} ${todayRing}`;
-    case 'public':
-      return `border-[#b7a8ff] bg-[#f1ecff] text-[#5532c7] ${selectedRing} ${todayRing}`;
-    case 'private':
-      return `border-[#d7b14b] bg-[#f7ebc1] text-[#6a4f00] ${selectedRing} ${todayRing}`;
-    case 'blocked':
-      return `border-[#f1aaaa] bg-[#ffe5e5] text-[#a52a2a] ${selectedRing} ${todayRing}`;
-    case 'full':
-      return `border-[#c9b061] bg-[#f7ebc1] text-[#6a4f00] ${selectedRing} ${todayRing}`;
-    case 'partial':
-      return `border-[#bfd2ff] bg-[#eef4ff] text-[#1645ac] ${selectedRing} ${todayRing}`;
-    default:
-      return `border-black/10 bg-white text-[#22221f] dark:border-white/10 dark:bg-[#17181c] dark:text-white ${selectedRing} ${todayRing}`;
   }
 }
 
@@ -232,7 +220,6 @@ function buildWeekLanes(week: WeekCell[], events: DashboardEvent[]) {
     };
 
     let placed = false;
-
     for (const lane of lanes) {
       const overlaps = lane.some((existing) => !(segment.endCol < existing.startCol || segment.startCol > existing.endCol));
       if (!overlaps) {
@@ -262,11 +249,7 @@ function formatEventRange(event: DashboardEvent) {
   return `${startDate} ${startTime} → ${endDate} ${rawEndTime === '00:00' ? '23:59' : endTime}`;
 }
 
-function pickInitialSelectedDate(
-  month: string,
-  availability: DashboardProps['monthAvailability'],
-  events: DashboardEvent[],
-) {
+function pickInitialSelectedDate(month: string, availability: DashboardProps['monthAvailability'], events: DashboardEvent[]) {
   const today = dateKey(new Date());
 
   if (today.startsWith(`${month}-`) && (availability[today] || events.some((event) => eventSpansDate(event, today)))) {
@@ -285,16 +268,35 @@ function pickInitialSelectedDate(
   return firstAvailabilityDate ?? `${month}-01`;
 }
 
-export default function Dashboard({ counts, events = [], month, monthAvailability = {} }: DashboardProps) {
-  const { props } = usePage<{ auth: Auth }>();
-  const roleNames = useMemo(() => getRoleNames(props.auth), [props.auth]);
+export default function Dashboard({ counts, events = [], month, monthAvailability = {}, areaOptions = defaultAreaOptions }: DashboardProps) {
+  const { props } = usePage<{ auth?: Auth & WorkspaceAuthLike }>();
+  const auth = props.auth;
+  const roleNames = useMemo(() => {
+    const raw = auth?.roles ?? auth?.user?.roles ?? [];
+    if (!Array.isArray(raw)) return [] as string[];
+    return raw.map((value) => String(typeof value === 'string' ? value : value?.name ?? '')).map((value) => value.toLowerCase());
+  }, [auth]);
   const isClient = roleNames.includes('user');
-  const isStaff = !isClient;
-  const todayKey = dateKey(new Date());
+  const isStaffView = !isClient;
+  const canManageBlocks = canManageCalendarBlocks(auth);
 
   const weeks = useMemo(() => buildMonthWeeks(month), [month]);
   const [selectedDate, setSelectedDate] = useState(() => pickInitialSelectedDate(month, monthAvailability, events));
   const [activeBlock, setActiveBlock] = useState<BlockKey>('AM');
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState<CalendarBlockFormState>({
+    title: 'Internal calendar note',
+    area: '',
+    notes: '',
+    block: 'AM',
+    public_status: 'red',
+    date_from: pickInitialSelectedDate(month, monthAvailability, events),
+    date_to: pickInitialSelectedDate(month, monthAvailability, events),
+  });
+  const holdTimerRef = useRef<number | null>(null);
+  const holdTriggeredRef = useRef(false);
 
   useEffect(() => {
     setSelectedDate(pickInitialSelectedDate(month, monthAvailability, events));
@@ -306,21 +308,21 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
     setActiveBlock(nextBlock);
   }, [selectedDate, monthAvailability]);
 
-  const selectedEvents = useMemo(
-    () => events.filter((event) => eventSpansDate(event, selectedDate)),
-    [events, selectedDate],
-  );
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, date_from: selectedDate, date_to: selectedDate }));
+  }, [selectedDate]);
 
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) {
+        window.clearTimeout(holdTimerRef.current);
+      }
+    };
+  }, []);
+
+  const selectedEvents = useMemo(() => events.filter((event) => eventSpansDate(event, selectedDate)), [events, selectedDate]);
   const selectedAvailability = monthAvailability[selectedDate];
-  const derivedStatus = deriveDayStatus({
-    availability: monthAvailability[selectedDate],
-    events: selectedEvents,
-    isClient,
-  });
-
-  const hasOwnBooking = isClient && selectedEvents.some((event) => event.kind === 'booking');
-  const selectedStatus = normalizeDashboardStatus(derivedStatus, hasOwnBooking);
-
+  const derivedStatus = deriveDayStatus({ availability: monthAvailability[selectedDate], events: selectedEvents, isClient });
   const blockEvents = useMemo(
     () => selectedEvents.filter((event) => eventTouchesBlockOnDate(event, selectedDate, activeBlock)),
     [activeBlock, selectedDate, selectedEvents],
@@ -368,9 +370,95 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
     return `/bookings/create?date=${encodeURIComponent(selectedDate)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
   }, [selectedDate, activeBlock]);
 
+  function openCreate(dateValue: string) {
+    if (!canManageBlocks) return;
+    setError('');
+    setForm({
+      title: 'Internal calendar note',
+      area: '',
+      notes: '',
+      block: 'AM',
+      public_status: 'red',
+      date_from: dateValue,
+      date_to: dateValue,
+    });
+    setEditorOpen(true);
+  }
+
+  function startPress(dateValue: string) {
+    if (!canManageBlocks) return;
+    if (holdTimerRef.current) {
+      window.clearTimeout(holdTimerRef.current);
+    }
+    holdTriggeredRef.current = false;
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTriggeredRef.current = true;
+      openCreate(dateValue);
+    }, 450);
+  }
+
+  function clearPress(keepTriggered = false) {
+    if (holdTimerRef.current) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (!keepTriggered) {
+      holdTriggeredRef.current = false;
+    }
+  }
+
+  function endPress(dateValue: string) {
+    const wasLongPress = holdTriggeredRef.current;
+    clearPress(true);
+    if (!wasLongPress) {
+      setSelectedDate(dateValue);
+    }
+    window.setTimeout(() => {
+      holdTriggeredRef.current = false;
+    }, 0);
+  }
+
+  async function saveForm() {
+    if (!canManageBlocks) return;
+    setBusy(true);
+    setError('');
+
+    try {
+      if (!form.title.trim()) {
+        throw new Error('Please enter a title for the calendar rule.');
+      }
+      await sendJson('/calendar-blocks', 'POST', {
+        ...form,
+        title: form.title.trim(),
+        area: form.area.trim(),
+        notes: form.notes.trim(),
+      });
+      setEditorOpen(false);
+      router.reload({ preserveScroll: true, preserveState: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to save the calendar rule.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Dashboard" />
+
+      <CalendarBlockModal
+        open={editorOpen}
+        title="Create dashboard calendar rule"
+        form={form}
+        areaOptions={areaOptions}
+        busy={busy}
+        error={error}
+        helperText="This dashboard quick input uses the same backend calendar-block endpoint as the Manage Calendar Center."
+        saveLabel="Save quick rule"
+        onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+        onClose={() => setEditorOpen(false)}
+        onSave={saveForm}
+      />
 
       <div className="space-y-6 p-4 md:p-6">
         <div className="overflow-hidden rounded-[2rem] border border-black/5 bg-white shadow-sm dark:border-white/10 dark:bg-[#121318]">
@@ -387,7 +475,7 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300">
                   {isClient
                     ? 'This version keeps the calendar simple for clients. Click any date, review AM / PM / EVE availability, and continue to booking.'
-                    : 'This dashboard now follows the same shared schedule rules used by the public calendar and calendar management layer.'}
+                    : 'The month board now uses a tighter no-gap Google-style layout with connected multi-day bars and a reliable long-press quick rule for admin and manager accounts.'}
                 </p>
               </div>
 
@@ -409,18 +497,22 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
                   </Link>
                 ) : (
                   <>
+                    {canManageBlocks ? (
+                      <button
+                        type="button"
+                        onClick={() => openCreate(selectedDate)}
+                        className="inline-flex items-center gap-2 rounded-full bg-[#174f40] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-[#294CFF]"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Quick Calendar Rule
+                      </button>
+                    ) : null}
+
                     <Link
                       href="/calendar/manage"
                       className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
                     >
                       Manage Calendar Center
-                    </Link>
-
-                    <Link
-                      href="/bookings/analytics"
-                      className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-[#1f1f1c] transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-                    >
-                      View Calendar Analytics
                     </Link>
                   </>
                 )}
@@ -442,9 +534,7 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
                           <Icon className="h-4 w-4" />
                         </div>
                         <div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                            {card.label}
-                          </div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">{card.label}</div>
                           <div className="mt-1 text-2xl font-semibold">{card.value}</div>
                         </div>
                       </div>
@@ -454,14 +544,11 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
               </div>
 
               <div className="mt-4 rounded-2xl border border-black/5 bg-white px-4 py-4 text-sm dark:border-white/10 dark:bg-[#17181c]">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Legend</div>
-                <div className="mt-3 grid gap-2">
-                  <div>White — Available</div>
-                  <div>Purple — Public event / public calendar activity</div>
-                  <div>Gold — Private booking / reserved date</div>
-                  <div>Red — Blocked / unavailable</div>
-                  <div>Green outline — Today</div>
-                  <div>Dark outline — Selected date</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Calendar behavior</div>
+                <div className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                  {canManageBlocks
+                    ? 'Press and hold a day cell to create a backend calendar rule without leaving the dashboard. Regular click still opens the date inspector.'
+                    : 'Click a day cell or a connected event bar to inspect bookings, public events, and blocked ranges for that date.'}
                 </div>
               </div>
             </div>
@@ -469,15 +556,11 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.18fr_0.82fr]">
-          <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
-            <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="rounded-[2rem] border border-black/5 bg-white px-5 py-6 shadow-sm dark:border-white/10 dark:bg-[#121318] md:px-6">
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
-                  Month
-                </div>
-                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">
-                  {monthLabel(monthToDate(month))}
-                </h2>
+                <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Month</div>
+                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">{monthLabel(monthToDate(month))}</h2>
               </div>
 
               <div className="flex items-center gap-3">
@@ -485,9 +568,7 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
                   type="button"
                   variant="outline"
                   size="icon"
-                  onClick={() =>
-                    router.get('/dashboard', { month: shiftMonth(month, -1) }, { preserveState: true, preserveScroll: true })
-                  }
+                  onClick={() => router.get('/dashboard', { month: shiftMonth(month, -1) }, { preserveState: true, preserveScroll: true })}
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </Button>
@@ -496,123 +577,171 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
                   type="button"
                   variant="outline"
                   size="icon"
-                  onClick={() =>
-                    router.get('/dashboard', { month: shiftMonth(month, 1) }, { preserveState: true, preserveScroll: true })
-                  }
+                  onClick={() => router.get('/dashboard', { month: shiftMonth(month, 1) }, { preserveState: true, preserveScroll: true })}
                 >
                   <ChevronRight className="h-5 w-5" />
                 </Button>
               </div>
             </div>
 
-            <div className="grid grid-cols-7 gap-2 pb-3">
-              {weekdayLabels.map((label) => (
-                <div
-                  key={label}
-                  className="text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300"
-                >
-                  {label}
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-4">
-              {weeks.map((week, weekIndex) => {
-                const lanes = buildWeekLanes(week, events);
-                const visibleLanes = lanes.slice(0, 3);
-                const hiddenCount = Math.max(lanes.length - visibleLanes.length, 0);
-
-                return (
-                  <div key={`week-${weekIndex}`} className="rounded-3xl border border-black/5 p-3 dark:border-white/10">
-                    <div className="grid grid-cols-7 gap-2">
-                      {week.map((cell, index) => {
-                        if (!cell) {
-                          return <div key={`blank-${weekIndex}-${index}`} className="min-h-[82px] rounded-2xl bg-transparent" />;
-                        }
-
-                        const key = dateKey(cell);
-                        const status = normalizeDashboardStatus(
-                          deriveDayStatus({
-                            availability: monthAvailability[key],
-                            events: events.filter((event) => eventSpansDate(event, key)),
-                            isClient,
-                          }),
-                          isClient && events.some((event) => event.kind === 'booking' && eventSpansDate(event, key)),
-                        );
-                        const selected = key === selectedDate;
-                        const today = key === todayKey;
-                        const availableBlocks = BLOCK_KEYS.filter((block) => monthAvailability[key]?.[block] !== false).length;
-
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => setSelectedDate(key)}
-                            className={cn(
-                              'min-h-[82px] rounded-2xl border px-3 py-2 text-left transition hover:-translate-y-0.5',
-                              dayStyle(status, selected, today),
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <span className="text-base font-semibold">{cell.getDate()}</span>
-                              {today ? (
-                                <span className="rounded-full bg-[#0f8b6d] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white dark:bg-[#5ccfb0] dark:text-[#0d1c18]">
-                                  Today
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="mt-3 text-[11px] font-medium opacity-80">
-                              {availableBlocks}/3 blocks open
-                            </div>
-                          </button>
-                        );
-                      })}
+            <div className="overflow-x-auto">
+              <div className="min-w-[860px] overflow-hidden rounded-[1.75rem] border border-slate-200 dark:border-white/10">
+                <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                  {weekdayLabels.map((label) => (
+                    <div key={label} className="border-r border-slate-200 px-2 py-3 last:border-r-0 dark:border-white/10">
+                      {label}
                     </div>
+                  ))}
+                </div>
 
-                    {visibleLanes.length > 0 ? (
-                      <div className="mt-2 space-y-1">
-                        {visibleLanes.map((lane, laneIndex) => (
-                          <div key={`lane-${weekIndex}-${laneIndex}`} className="grid grid-cols-7 gap-2">
-                            {lane.map((segment) => (
-                              <div
-                                key={`${segment.event.id}-${laneIndex}-${segment.startCol}`}
-                                style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
+                <div>
+                  {weeks.map((week, weekIndex) => {
+                    const lanes = buildWeekLanes(week, events);
+                    const maxVisibleLanes = isClient ? 3 : 5;
+                    const visibleLanes = lanes.slice(0, maxVisibleLanes);
+                    const hiddenCount = Math.max(lanes.length - visibleLanes.length, 0);
+                    const cellHeight = 118;
+                    const laneTop = 34;
+                    const laneHeight = 20;
+                    const laneGap = 4;
+                    const footerHeight = hiddenCount > 0 ? 22 : 8;
+                    const weekHeight = cellHeight + Math.max(visibleLanes.length, 1) * (laneHeight + laneGap) + footerHeight;
+
+                    return (
+                      <div
+                        key={`week-${weekIndex}`}
+                        className="relative border-b border-slate-200 last:border-b-0 dark:border-white/10"
+                        style={{ height: `${weekHeight}px` }}
+                      >
+                        <div className="grid h-[118px] grid-cols-7">
+                          {week.map((cell, index) => {
+                            if (!cell) {
+                              return (
+                                <div
+                                  key={`blank-${weekIndex}-${index}`}
+                                  className="border-r border-slate-200 bg-slate-50/60 last:border-r-0 dark:border-white/10 dark:bg-[#0f1117]"
+                                />
+                              );
+                            }
+
+                            const key = dateKey(cell);
+                            const rows = events.filter((event) => eventSpansDate(event, key));
+                            const selected = key === selectedDate;
+                            const dayStatus = deriveDayStatus({ availability: monthAvailability[key], events: rows, isClient });
+                            const status = normalizeDashboardStatus(
+                              dayStatus,
+                              isClient && events.some((event) => event.kind === 'booking' && eventSpansDate(event, key)),
+                            );
+                            const availableBlocks = BLOCK_KEYS.filter((block) => monthAvailability[key]?.[block] !== false).length;
+
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onPointerDown={() => startPress(key)}
+                                onPointerUp={() => endPress(key)}
+                                onPointerCancel={() => clearPress()}
+                                onPointerLeave={() => clearPress()}
                                 className={cn(
-                                  'min-h-[30px] rounded-md border px-3 py-1 text-xs font-semibold shadow-sm',
-                                  'flex items-center gap-2 overflow-hidden whitespace-nowrap',
-                                  eventBarTone(segment.event),
-                                  !segment.isStart && 'rounded-l-none',
-                                  !segment.isEnd && 'rounded-r-none',
+                                  'relative min-h-[118px] border-r border-b border-slate-200 bg-white px-2.5 py-2 text-left transition-colors dark:border-white/10 dark:bg-[#11151d]',
+                                  selected && 'z-[2] ring-2 ring-inset ring-slate-900 dark:ring-white',
+                                  status === 'blocked' && 'bg-red-50/60 dark:bg-red-500/10',
+                                  status === 'public' && 'bg-violet-50/65 dark:bg-violet-500/10',
+                                  status === 'private' && 'bg-amber-50/65 dark:bg-amber-500/10',
+                                  status === 'partial' && 'bg-sky-50/65 dark:bg-sky-500/10',
+                                  status === 'my-booking' && 'bg-emerald-50/70 dark:bg-emerald-500/10',
+                                  index === 6 && 'border-r-0',
                                 )}
-                                title={`${segment.event.title} • ${formatEventRange(segment.event)}`}
                               >
-                                {segment.isStart ? <span className="truncate">{segment.event.title}</span> : <span className="opacity-70">…</span>}
-                              </div>
-                            ))}
-                          </div>
-                        ))}
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="text-base font-semibold text-slate-900 dark:text-white">{cell.getDate()}</span>
+                                  <span
+                                    className={cn(
+                                      'mt-0.5 inline-block h-2.5 w-2.5 rounded-full',
+                                      status === 'blocked'
+                                        ? 'bg-red-500 dark:bg-red-300'
+                                        : status === 'public'
+                                          ? 'bg-violet-500 dark:bg-violet-300'
+                                          : status === 'private'
+                                            ? 'bg-amber-500 dark:bg-amber-300'
+                                            : status === 'partial'
+                                              ? 'bg-sky-500 dark:bg-sky-300'
+                                              : status === 'my-booking'
+                                                ? 'bg-emerald-500 dark:bg-emerald-300'
+                                                : 'bg-slate-300 dark:bg-slate-600',
+                                    )}
+                                  />
+                                </div>
+                                <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                  <span>{scheduleStatusLabel(dayStatus)}</span>
+                                  <span>{availableBlocks}/3</span>
+                                </div>
+                                <div className="mt-2 flex gap-1.5">
+                                  {BLOCK_KEYS.map((block) => {
+                                    const open = monthAvailability[key]?.[block] !== false;
+                                    return (
+                                      <span
+                                        key={block}
+                                        className={cn(
+                                          'h-1.5 flex-1 rounded-full',
+                                          open ? 'bg-emerald-500/75 dark:bg-emerald-300/80' : 'bg-slate-300 dark:bg-slate-700',
+                                        )}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-full">
+                          {visibleLanes.map((lane, laneIndex) =>
+                            lane.map((segment) => {
+                              const left = `${(segment.startCol / 7) * 100}%`;
+                              const width = `${((segment.endCol - segment.startCol + 1) / 7) * 100}%`;
+                              const top = laneTop + laneIndex * (laneHeight + laneGap);
+
+                              return (
+                                <div
+                                  key={`${String(segment.event.id)}-${segment.startCol}-${segment.endCol}`}
+                                  className="absolute px-1.5"
+                                  style={{ left, width, top }}
+                                >
+                                  <div
+                                    className={cn(
+                                      'flex h-5 items-center overflow-hidden border px-2 text-[10px] font-semibold shadow-sm',
+                                      eventBarTone(segment.event),
+                                      segment.isStart ? 'rounded-l-full' : 'rounded-l-md',
+                                      segment.isEnd ? 'rounded-r-full' : 'rounded-r-md',
+                                    )}
+                                    title={`${segment.event.title} • ${formatEventRange(segment.event)}`}
+                                  >
+                                    <span className="truncate">{segment.isStart ? segment.event.title : '…'}</span>
+                                  </div>
+                                </div>
+                              );
+                            }),
+                          )}
+                        </div>
 
                         {hiddenCount > 0 ? (
-                          <div className="pl-1 text-xs font-medium text-slate-500 dark:text-slate-300">
-                            +{hiddenCount} more item{hiddenCount > 1 ? 's' : ''} this week
+                          <div className="absolute bottom-1 left-2 text-[11px] font-semibold text-slate-500 dark:text-slate-300">
+                            +{hiddenCount} more overlapping item{hiddenCount > 1 ? 's' : ''}
                           </div>
                         ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="space-y-6">
             <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
-              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
-                Selected Date
-              </div>
-              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">
-                {longDate(selectedDate)}
-              </h2>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Selected Date</div>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">{longDate(selectedDate)}</h2>
 
               <div className={cn('mt-4 rounded-2xl border px-4 py-4 text-sm', scheduleStatusTone(derivedStatus))}>
                 <div className="font-semibold uppercase tracking-[0.16em]">{scheduleStatusLabel(derivedStatus)}</div>
@@ -651,9 +780,7 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
               </div>
 
               <div className="mt-5 rounded-2xl border border-black/5 bg-[#f8f8f8] px-4 py-4 dark:border-white/10 dark:bg-white/5">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                  {activeBlock} Time Block
-                </div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">{activeBlock} Time Block</div>
                 <div className="mt-1 text-lg font-semibold text-[#1f1f1c] dark:text-white">{BLOCK_META[activeBlock].time}</div>
                 <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                   {(selectedAvailability?.[activeBlock] ?? true)
@@ -672,12 +799,8 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
                           <div>
                             <div className="text-base font-semibold text-[#1f1f1c] dark:text-white">{event.title}</div>
                             <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{formatEventRange(event)}</div>
-                            {event.area ? (
-                              <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Area: {event.area}</div>
-                            ) : null}
-                            {event.block ? (
-                              <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Block: {event.block}</div>
-                            ) : null}
+                            {event.area ? <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Area: {event.area}</div> : null}
+                            {event.block ? <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Block: {event.block}</div> : null}
                           </div>
 
                           {event.status ? (
@@ -720,12 +843,8 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
             </div>
 
             <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
-              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
-                Events / Bookings
-              </div>
-              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">
-                Items on this date
-              </h2>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Events / Bookings</div>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#1f1f1c] dark:text-white">Items on this date</h2>
 
               <div className="mt-5 space-y-4">
                 {selectedEvents.length > 0 ? (
@@ -738,12 +857,8 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
                         <div>
                           <div className="text-lg font-semibold text-[#1f1f1c] dark:text-white">{event.title}</div>
                           <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{formatEventRange(event)}</div>
-                          {event.area ? (
-                            <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Area: {event.area}</div>
-                          ) : null}
-                          {event.block ? (
-                            <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Block: {event.block}</div>
-                          ) : null}
+                          {event.area ? <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Area: {event.area}</div> : null}
+                          {event.block ? <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">Block: {event.block}</div> : null}
                         </div>
 
                         <div className="flex flex-col items-end gap-2">
@@ -775,21 +890,19 @@ export default function Dashboard({ counts, events = [], month, monthAvailabilit
               </div>
             </div>
 
-            {isStaff ? (
+            {isStaffView ? (
               <div className="rounded-[2rem] border border-black/5 bg-white px-6 py-8 shadow-sm dark:border-white/10 dark:bg-[#121318]">
                 <div className="flex items-start gap-3">
                   <div className="rounded-full bg-[#f7ebc1] p-2 text-[#6a4f00]">
                     <Lock className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
-                      Staff Controls
-                    </div>
-                    <h3 className="mt-2 text-xl font-semibold text-[#1f1f1c] dark:text-white">
-                      Monitor and manage the calendar layer
-                    </h3>
+                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Staff Controls</div>
+                    <h3 className="mt-2 text-xl font-semibold text-[#1f1f1c] dark:text-white">Monitor and manage the calendar layer</h3>
                     <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                      Use the calendar management area to add blocks, review overlaps, and keep the public and booking calendars aligned.
+                      {canManageBlocks
+                        ? 'Use the dashboard quick rule for fast note entry, or open the full calendar management area to edit ranges, overlaps, and multi-day blocks.'
+                        : 'Use the calendar management area to review overlaps and keep the public and booking calendars aligned.'}
                     </p>
 
                     <div className="mt-4 flex flex-wrap gap-3">

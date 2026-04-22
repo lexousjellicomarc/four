@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, FileImage, Save } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Building2, CheckCircle2, ExternalLink, FileImage, FileSpreadsheet, MessageSquareMore, Save } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import qrFallback from '@/components/logo/qr.png';
 
@@ -255,6 +255,44 @@ export default function BookingSurveyPage() {
               </div>
             </div>
           </div>
+        </Card>
+
+        <Card className="border-black/5 dark:border-white/10">
+          <CardContent className="flex flex-col gap-4 p-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="inline-flex rounded-full border border-[#0f8b6d]/20 bg-[#eef7f4] px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#0f8b6d] dark:border-[#7aa6ff]/20 dark:bg-[#16212b] dark:text-[#9dc0ff]">
+                Next backend actions
+              </div>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight">Keep the booking workflow connected after the survey step</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+                After attaching the survey proof, staff can continue to the linked MICE registry form, review public inquiries, or open the internal guideline board without signing in again.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[
+                { href: `/reports/mice-registry/create?booking_id=${booking.id}`, label: 'Create MICE entry', icon: FileSpreadsheet },
+                { href: '/admin/inquiries', label: 'Open inquiries', icon: MessageSquareMore },
+                { href: '/admin/guidelines-contacts', label: 'Open backend guidelines', icon: Building2 },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className="rounded-2xl border border-black/10 bg-[#f8f6f0] p-4 text-sm font-semibold transition hover:-translate-y-0.5 hover:shadow-sm dark:border-white/10 dark:bg-white/5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-2xl bg-white p-2 text-[#174f40] shadow-sm dark:bg-[#10131b] dark:text-[#9dc0ff]">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div>{item.label}</div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </CardContent>
         </Card>
 
         <form onSubmit={submitSurvey} className="grid gap-6 lg:grid-cols-[1fr_360px]">
