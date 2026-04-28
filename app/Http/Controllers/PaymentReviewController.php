@@ -12,6 +12,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Support\WorkspacePage;
 
 class PaymentReviewController extends Controller
 {
@@ -74,7 +75,7 @@ class PaymentReviewController extends Controller
         $dueSoon = $statsPayments->filter(fn (BookingPayment $payment) => $this->deadlineBucket($payment) === 'due_soon')->count();
         $overdue = $statsPayments->filter(fn (BookingPayment $payment) => $this->deadlineBucket($payment) === 'overdue')->count();
 
-        return Inertia::render('payments/review', [
+        return Inertia::render(WorkspacePage::resolve($request, 'payments/review'), [
             'filters' => $filters,
             'payments' => $paginator,
             'stats' => [

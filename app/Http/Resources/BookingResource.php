@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Support\WorkspacePage;
 
 class BookingResource extends JsonResource
 {
@@ -45,7 +46,7 @@ class BookingResource extends JsonResource
                         'payer_name' => $p->payer_name,
                         'card_last_four' => $p->card_last_four,
                         'marketing_consent' => (bool) $p->marketing_consent,
-                        'proof_image_url' => $p->proof_image_url,
+                        'proof_image_url' => $this->paymentProofUrl($request, $p),
                         'paid_at' => optional($p->paid_at)->toIso8601String(),
                         'created_at' => optional($p->created_at)->toIso8601String(),
                     ];
@@ -106,7 +107,8 @@ class BookingResource extends JsonResource
 
         $proofUrl = null;
         if ($hasProof) {
-            $base = route('bookings.survey-proof-image', $this->id, false);
+            $routeName = WorkspacePage::routeName($request, 'bookings.survey-proof-image');
+            $base = route($routeName, $this->id, false);
             $v = $this->updated_at ? $this->updated_at->getTimestamp() : time();
             $proofUrl = $base . '?v=' . $v;
         }
@@ -182,4 +184,28 @@ class BookingResource extends JsonResource
             ],
         ];
     }
+    private function paymentProofUrl(Request $request, $payment): ?string
+{
+    if (empty($payment->proof_image_path) || empty($payment->id) || empty($payment->booking_id)) {
+        return null;
+    }
+
+    $routeName = WorkspacePage::routeName($request, 'bookings.payments.proof');
+
+    if (! route($routeName, [
+        'booking' => $payment->booking_id,
+        'payment' => $payment->id,
+    ], false)) {
+        return null;
+    }
+
+    $base = route($routeName, [
+        'booking' => $payment->booking_id,
+        'payment' => $payment->id,
+    ], false);
+
+    $version = $payment->updated_at?->timestamp ?? $payment->created_at?->timestamp ?? time();
+
+    return $base . '?v=' . $version;
+}
 }

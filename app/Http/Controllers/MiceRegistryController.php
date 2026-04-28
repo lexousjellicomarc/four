@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\MiceRecord;
+use App\Support\WorkspacePage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -16,14 +17,20 @@ class MiceRegistryController extends Controller
 {
     public function index(Request $request): InertiaResponse
     {
-        return Inertia::render('reports/mice-registry', $this->buildPayload($request));
+        return Inertia::render(
+            WorkspacePage::resolve($request, 'reports/mice-registry'),
+            array_merge($this->buildPayload($request), [
+                'workspaceRole' => WorkspacePage::role($request),
+            ])
+        );
     }
 
     public function create(Request $request): InertiaResponse
     {
         $prefillBookingId = $request->integer('booking_id') ?: null;
 
-        return Inertia::render('reports/mice-registry-form', [
+        return Inertia::render(WorkspacePage::resolve($request, 'reports/mice-registry-form'), [
+            'workspaceRole' => WorkspacePage::role($request),
             'mode' => 'create',
             'record' => null,
             'booking_options' => $this->bookingOptions(),
@@ -36,16 +43,17 @@ class MiceRegistryController extends Controller
     {
         $payload = $this->validatedPayload($request);
 
-        $record = MiceRecord::query()->create($payload);
+        MiceRecord::query()->create($payload);
 
         return redirect()
-            ->route('reports.mice-registry')
+            ->route(WorkspacePage::routeName($request, 'reports.mice-registry'))
             ->with('success', 'MICE registry entry created successfully.');
     }
 
-    public function edit(MiceRecord $miceRecord): InertiaResponse
+    public function edit(Request $request, MiceRecord $miceRecord): InertiaResponse
     {
-        return Inertia::render('reports/mice-registry-form', [
+        return Inertia::render(WorkspacePage::resolve($request, 'reports/mice-registry-form'), [
+            'workspaceRole' => WorkspacePage::role($request),
             'mode' => 'edit',
             'record' => $this->serializeRecord($miceRecord->loadMissing('booking')),
             'booking_options' => $this->bookingOptions(),
@@ -61,23 +69,24 @@ class MiceRegistryController extends Controller
         $miceRecord->update($payload);
 
         return redirect()
-            ->route('reports.mice-registry')
+            ->route(WorkspacePage::routeName($request, 'reports.mice-registry'))
             ->with('success', 'MICE registry entry updated successfully.');
     }
 
-    public function destroy(MiceRecord $miceRecord): RedirectResponse
+    public function destroy(Request $request, MiceRecord $miceRecord): RedirectResponse
     {
         $miceRecord->delete();
 
         return redirect()
-            ->route('reports.mice-registry')
+            ->route(WorkspacePage::routeName($request, 'reports.mice-registry'))
             ->with('success', 'MICE registry entry deleted successfully.');
     }
 
     public function print(Request $request): InertiaResponse
     {
-        return Inertia::render('reports/mice-registry-print', [
+        return Inertia::render(WorkspacePage::resolve($request, 'reports/mice-registry-print'), [
             ...$this->buildPayload($request),
+            'workspaceRole' => WorkspacePage::role($request),
             'generated_at' => now()->toIso8601String(),
         ]);
     }
@@ -110,6 +119,7 @@ class MiceRegistryController extends Controller
             fputcsv($out, []);
             fputcsv($out, ['Enterprise Breakdown']);
             fputcsv($out, ['Group', 'Records', 'Permit To Engage', 'DOT Accredited', 'Active Members']);
+
             foreach ($enterpriseBreakdown as $row) {
                 fputcsv($out, [
                     $row['label'],
@@ -123,6 +133,7 @@ class MiceRegistryController extends Controller
             fputcsv($out, []);
             fputcsv($out, ['BTC Group Breakdown']);
             fputcsv($out, ['Code', 'Records', 'Permit To Engage', 'DOT Accredited', 'Active Members']);
+
             foreach ($groupBreakdown as $row) {
                 fputcsv($out, [
                     $row['label'],
@@ -198,6 +209,7 @@ class MiceRegistryController extends Controller
     {
         $filters = $this->filters($request);
         $rows = $this->filteredRows($filters);
+        $rowArray = $rows->values()->all();
 
         return [
             'filters' => $filters,
@@ -205,7 +217,9 @@ class MiceRegistryController extends Controller
             'enterprise_breakdown' => $this->enterpriseBreakdown($rows),
             'group_breakdown' => $this->groupBreakdown($rows),
             'year_options' => $this->yearOptions(),
-            'rows' => $rows->values()->all(),
+            'rows' => $rowArray,
+            'records' => $rowArray,
+            'miceRecords' => $rowArray,
             'can_manage' => $request->user()?->hasAnyRole(['admin', 'manager']) ?? false,
         ];
     }
@@ -238,7 +252,9 @@ class MiceRegistryController extends Controller
         $female = (int) ($data['female_employees'] ?? 0);
         $male = (int) ($data['male_employees'] ?? 0);
         $computedEmployees = $female + $male;
-        $providedEmployees = array_key_exists('total_employees', $data) ? (int) ($data['total_employees'] ?? 0) : 0;
+        $providedEmployees = array_key_exists('total_employees', $data)
+            ? (int) ($data['total_employees'] ?? 0)
+            : 0;
 
         $data['btc_group_code'] = strtoupper(trim((string) $data['btc_group_code']));
         $data['establishment_name'] = trim((string) $data['establishment_name']);
@@ -262,7 +278,7 @@ class MiceRegistryController extends Controller
             $data['record_no'] = $this->nextRecordNo($data['btc_group_code'], $miceRecord);
         }
 
-        if ($data['booking_id'] === null || $data['booking_id'] === 0) {
+        if (($data['booking_id'] ?? null) === null || (int) ($data['booking_id'] ?? 0) === 0) {
             $data['booking_id'] = null;
         }
 
@@ -360,7 +376,10 @@ class MiceRegistryController extends Controller
         return $rows
             ->groupBy(function (array $row) use ($field) {
                 $value = strtoupper(trim((string) ($row[$field] ?? '')));
-                return $value !== '' ? $value : ($field === 'enterprise_group' ? 'UNCLASSIFIED' : 'UNASSIGNED');
+
+                return $value !== ''
+                    ? $value
+                    : ($field === 'enterprise_group' ? 'UNCLASSIFIED' : 'UNASSIGNED');
             })
             ->map(fn (Collection $group, string $label) => [
                 'label' => $label,
@@ -394,8 +413,13 @@ class MiceRegistryController extends Controller
             ->limit(250)
             ->get()
             ->map(function (Booking $booking) {
-                $dateFrom = $booking->booking_date_from ? date('Y-m-d', strtotime((string) $booking->booking_date_from)) : null;
-                $dateTo = $booking->booking_date_to ? date('Y-m-d', strtotime((string) $booking->booking_date_to)) : null;
+                $dateFrom = $booking->booking_date_from
+                    ? date('Y-m-d', strtotime((string) $booking->booking_date_from))
+                    : null;
+
+                $dateTo = $booking->booking_date_to
+                    ? date('Y-m-d', strtotime((string) $booking->booking_date_to))
+                    : null;
 
                 return [
                     'id' => (int) $booking->id,
@@ -418,8 +442,18 @@ class MiceRegistryController extends Controller
             'enterprise_groups' => ['PTE', 'STE', 'UNCLASSIFIED'],
             'btc_group_codes' => ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9'],
             'month_options' => [
-                'January', 'February', 'March', 'April', 'May', 'June',
-                'July', 'August', 'September', 'October', 'November', 'December',
+                'January',
+                'February',
+                'March',
+                'April',
+                'May',
+                'June',
+                'July',
+                'August',
+                'September',
+                'October',
+                'November',
+                'December',
             ],
             'year_options' => $this->yearOptions(),
         ];

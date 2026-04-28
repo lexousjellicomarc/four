@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Response;
 use Inertia\Inertia;
+use App\Support\WorkspacePage;
 
 class CalendarAnalyticsController extends Controller
 {
@@ -19,7 +20,7 @@ class CalendarAnalyticsController extends Controller
         [$start, $end] = $this->resolveRange($request);
         $payload = $this->buildPayload($start, $end);
 
-        return Inertia::render('calendar/analytics', $payload);
+        return Inertia::render(WorkspacePage::resolve($request, 'calendar/analytics'), $payload);
     }
 
     public function print(Request $request)
@@ -27,7 +28,7 @@ class CalendarAnalyticsController extends Controller
         [$start, $end] = $this->resolveRange($request);
         $payload = $this->buildPayload($start, $end);
 
-        return Inertia::render('calendar/analytics-print', $payload);
+        return Inertia::render(WorkspacePage::resolve($request, 'calendar/analytics-print'), $payload);
     }
 
     public function export(Request $request)

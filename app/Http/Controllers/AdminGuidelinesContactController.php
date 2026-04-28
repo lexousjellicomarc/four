@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Support\WorkspacePage;
 
 class AdminGuidelinesContactController extends Controller
 {
@@ -17,7 +18,7 @@ class AdminGuidelinesContactController extends Controller
 
         $settings = SiteSetting::query()->first();
 
-        return Inertia::render('admin/guidelines-contacts', [
+        return Inertia::render(WorkspacePage::resolve($request, 'admin/guidelines-contacts'), [
             'siteSettings' => [
                 'mapEmbedUrl' => $settings?->map_embed_url,
                 'openMapUrl' => $settings?->open_map_url,

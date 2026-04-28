@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Support\WorkspacePage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BookingAuditController extends Controller
@@ -30,7 +31,7 @@ class BookingAuditController extends Controller
 
         $paginator->setCollection($this->transformEvents(collect($paginator->items())));
 
-        return Inertia::render('bookings/audit', [
+        return Inertia::render(WorkspacePage::resolve($request, 'bookings/audit'), [
             'events' => $paginator,
             'filters' => $filters,
             'stats' => $stats,
@@ -115,7 +116,7 @@ class BookingAuditController extends Controller
                 ->get()
         );
 
-        return Inertia::render('bookings/audit-print', [
+        return Inertia::render(WorkspacePage::resolve($request, 'bookings/audit-print'), [
             'events' => $events,
             'filters' => $filters,
             'stats' => $stats,

@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Permission\Models\Role;
+use App\Support\WorkspacePage;
 
 class UserRoleController extends Controller
 {
@@ -56,7 +57,7 @@ class UserRoleController extends Controller
                 ];
             });
 
-        return Inertia::render('users/roles', [
+        return Inertia::render(WorkspacePage::resolve($request, 'users/roles'), [
             'users' => $users,
             'availableRoles' => Role::query()->orderBy('name')->pluck('name')->all(),
             'filters' => [

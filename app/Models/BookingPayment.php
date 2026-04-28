@@ -57,7 +57,7 @@ class BookingPayment extends Model
 
         $version = $this->updated_at?->timestamp ?? $this->created_at?->timestamp ?? time();
 
-        return url("/bookings/{$this->booking_id}/payments/{$this->id}/proof-image") . '?v=' . $version;
+        return url("/bookings/{$this->booking_id}/payments/{$this->id}/proof") . '?v=' . $version;
     }
 
     public array $notificationChanges = [];

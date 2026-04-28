@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Support\WorkspacePage;
 
 class AdminInquiryController extends Controller
 {
@@ -31,7 +32,7 @@ class AdminInquiryController extends Controller
                 'created_at' => optional($inquiry->created_at)->toDateTimeString(),
             ]);
 
-        return Inertia::render('admin/inquiries/index', [
+        return Inertia::render(WorkspacePage::resolve($request, 'admin/inquiries/index'), [
             'inquiries' => $inquiries,
         ]);
     }

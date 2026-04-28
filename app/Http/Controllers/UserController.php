@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Support\WorkspacePage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -21,9 +22,12 @@ class UserController extends Controller
 
     public function index(Request $request): Response
     {
+        $search = trim((string) $request->input('q', $request->input('search', '')));
+        $role = trim((string) $request->input('role', ''));
+
         $query = User::query();
 
-        if ($search = trim((string) $request->input('search', ''))) {
+        if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('first_name', 'like', "%{$search}%")
@@ -36,50 +40,40 @@ class UserController extends Controller
             });
         }
 
-        if ($role = trim((string) $request->input('role', ''))) {
+        if ($role !== '') {
             $query->whereHas('roles', function ($q) use ($role) {
                 $q->where('name', $role);
             });
         }
 
-        $users = $query->with('roles')
+        $users = $query
+            ->with('roles')
             ->orderByDesc('id')
-            ->paginate(10)
-            ->through(function (User $user) {
-                return [
-                    'id' => $user->id,
-                    'name' => $user->display_name,
-                    'first_name' => $user->first_name,
-                    'middle_name' => $user->middle_name,
-                    'last_name' => $user->last_name,
-                    'email' => $user->email,
-                    'phone_number' => $user->phone_number,
-                    'organization_name' => $user->organization_name,
-                    'organization_type' => $user->organization_type,
-                    'position_title' => $user->position_title,
-                    'email_verified_at' => $user->email_verified_at?->toIso8601String(),
-                    'last_login_at' => $user->last_login_at?->toIso8601String(),
-                    'google_id' => $user->google_id,
-                    'role' => $user->roles->pluck('name')->first(),
-                    'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
-                ];
-            });
+            ->paginate((int) $request->integer('per_page', 10))
+            ->withQueryString()
+            ->through(fn (User $user) => $this->serializeUser($user));
 
-        $availableRoles = Role::query()->orderBy('name')->pluck('name')->all();
+        $availableRoles = Role::query()
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
 
-        return Inertia::render('users/index', [
+        return Inertia::render(WorkspacePage::resolve($request, 'users/index'), [
+            'workspaceRole' => WorkspacePage::role($request),
             'users' => $users,
             'availableRoles' => $availableRoles,
             'filters' => [
-                'search' => $request->input('search'),
-                'role' => $request->input('role'),
+                'q' => $search,
+                'search' => $search,
+                'role' => $role,
             ],
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
-        return Inertia::render('users/create', [
+        return Inertia::render(WorkspacePage::resolve($request, 'users/create'), [
+            'workspaceRole' => WorkspacePage::role($request),
             'availableRoles' => Role::query()->orderBy('name')->pluck('name')->all(),
             'defaults' => [
                 'country' => 'Philippines',
@@ -120,7 +114,7 @@ class UserController extends Controller
         $oldRoles = [];
         $newRoles = [];
 
-        if (!empty($payload['role'])) {
+        if (! empty($payload['role'])) {
             $user->syncRoles([$payload['role']]);
             $newRoles = [$payload['role']];
         } else {
@@ -130,75 +124,33 @@ class UserController extends Controller
         if ($actor) {
             $this->notifications->userCreated($user, $actor);
 
-            if (!empty($newRoles)) {
+            if (! empty($newRoles)) {
                 $this->notifications->userRolesUpdated($user, $actor, $oldRoles, $newRoles);
             }
         }
 
-        return redirect()->route('users.index')
+        return redirect()
+            ->route(WorkspacePage::routeName($request, 'users.index'))
             ->with('success', 'User created successfully.');
     }
 
-    public function show(User $user): Response
+    public function show(Request $request, User $user): Response
     {
         $user->load('roles');
 
-        return Inertia::render('users/show', [
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->display_name,
-                'first_name' => $user->first_name,
-                'middle_name' => $user->middle_name,
-                'last_name' => $user->last_name,
-                'email' => $user->email,
-                'phone_number' => $user->phone_number,
-                'organization_name' => $user->organization_name,
-                'organization_type' => $user->organization_type,
-                'position_title' => $user->position_title,
-                'address_line1' => $user->address_line1,
-                'barangay' => $user->barangay,
-                'city_municipality' => $user->city_municipality,
-                'province' => $user->province,
-                'postal_code' => $user->postal_code,
-                'country' => $user->country ?: 'Philippines',
-                'role' => $user->roles->pluck('name')->first(),
-                'email_is_verified' => (bool) $user->email_verified_at,
-                'email_verified_at' => $user->email_verified_at?->format('Y-m-d H:i:s'),
-                'google_id' => $user->google_id,
-                'last_login_at' => $user->last_login_at?->format('Y-m-d H:i:s'),
-                'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
-                'updated_at' => $user->updated_at?->format('Y-m-d H:i:s'),
-            ],
+        return Inertia::render(WorkspacePage::resolve($request, 'users/show'), [
+            'workspaceRole' => WorkspacePage::role($request),
+            'user' => $this->serializeUser($user, true),
         ]);
     }
 
-    public function edit(User $user): Response
+    public function edit(Request $request, User $user): Response
     {
-        return Inertia::render('users/edit', [
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->display_name,
-                'first_name' => $user->first_name,
-                'middle_name' => $user->middle_name,
-                'last_name' => $user->last_name,
-                'email' => $user->email,
-                'phone_number' => $user->phone_number,
-                'organization_name' => $user->organization_name,
-                'organization_type' => $user->organization_type,
-                'position_title' => $user->position_title,
-                'address_line1' => $user->address_line1,
-                'barangay' => $user->barangay,
-                'city_municipality' => $user->city_municipality,
-                'province' => $user->province,
-                'postal_code' => $user->postal_code,
-                'country' => $user->country ?: 'Philippines',
-                'email_is_verified' => (bool) $user->email_verified_at,
-                'email_verified_at' => $user->email_verified_at?->format('Y-m-d H:i:s'),
-                'google_id' => $user->google_id,
-                'last_login_at' => $user->last_login_at?->format('Y-m-d H:i:s'),
-                'role' => $user->roles->pluck('name')->first(),
-                'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
-            ],
+        $user->load('roles');
+
+        return Inertia::render(WorkspacePage::resolve($request, 'users/edit'), [
+            'workspaceRole' => WorkspacePage::role($request),
+            'user' => $this->serializeUser($user, true),
             'availableRoles' => Role::query()->orderBy('name')->pluck('name')->all(),
         ]);
     }
@@ -231,31 +183,36 @@ class UserController extends Controller
             'province' => $payload['province'] ?? null,
             'postal_code' => $payload['postal_code'] ?? null,
             'country' => $payload['country'] ?? 'Philippines',
-            'email_verified_at' => ($payload['email_is_verified'] ?? false) ? ($user->email_verified_at ?: now()) : null,
+            'email_verified_at' => ($payload['email_is_verified'] ?? false)
+                ? ($user->email_verified_at ?: now())
+                : null,
         ]);
 
-        if (!empty($payload['password'])) {
+        if (! empty($payload['password'])) {
             $user->update([
                 'password' => Hash::make($payload['password']),
             ]);
         }
 
-        if (!empty($payload['role'])) {
+        if (! empty($payload['role'])) {
             $user->syncRoles([$payload['role']]);
         } else {
             $user->syncRoles([]);
         }
 
-        $user->refresh();
+        $user->refresh()->load('roles');
+
         $newRoles = $user->roles->pluck('name')->all();
 
         $changes = [];
+
         foreach ($user->getAttributes() as $field => $newVal) {
-            if (!array_key_exists($field, $original)) {
+            if (! array_key_exists($field, $original)) {
                 continue;
             }
 
             $oldVal = $original[$field];
+
             if ($oldVal == $newVal) {
                 continue;
             }
@@ -273,6 +230,7 @@ class UserController extends Controller
 
             $oldSorted = $oldRoles;
             $newSorted = $newRoles;
+
             sort($oldSorted);
             sort($newSorted);
 
@@ -281,13 +239,14 @@ class UserController extends Controller
             }
         }
 
-        return redirect()->route('users.index')
+        return redirect()
+            ->route(WorkspacePage::routeName($request, 'users.index'))
             ->with('success', 'User updated successfully.');
     }
 
     public function destroy(Request $request, User $user): RedirectResponse
     {
-        if ($user->id === auth()->id()) {
+        if ((int) $user->id === (int) auth()->id()) {
             return back()->with('error', 'You cannot delete your own account.');
         }
 
@@ -301,7 +260,8 @@ class UserController extends Controller
 
         $user->delete();
 
-        return redirect()->route('users.index')
+        return redirect()
+            ->route(WorkspacePage::routeName($request, 'users.index'))
             ->with('success', 'User deleted successfully.');
     }
 
@@ -352,13 +312,66 @@ class UserController extends Controller
         ])->validate();
     }
 
+    protected function serializeUser(User $user, bool $detailed = false): array
+    {
+        $roles = $user->roles->pluck('name')->values()->all();
+
+        $payload = [
+            'id' => $user->id,
+            'name' => $user->display_name ?: $user->name,
+            'first_name' => $user->first_name,
+            'middle_name' => $user->middle_name,
+            'last_name' => $user->last_name,
+            'email' => $user->email,
+            'phone_number' => $user->phone_number,
+            'organization_name' => $user->organization_name,
+            'organization_type' => $user->organization_type,
+            'position_title' => $user->position_title,
+            'email_verified_at' => $this->formatDateTime($user->email_verified_at),
+            'last_login_at' => $this->formatDateTime($user->last_login_at ?? null),
+            'google_id' => $user->google_id,
+            'role' => $roles[0] ?? null,
+            'roles' => $roles,
+            'created_at' => $this->formatDateTime($user->created_at),
+        ];
+
+        if (! $detailed) {
+            return $payload;
+        }
+
+        return array_merge($payload, [
+            'address_line1' => $user->address_line1,
+            'barangay' => $user->barangay,
+            'city_municipality' => $user->city_municipality,
+            'province' => $user->province,
+            'postal_code' => $user->postal_code,
+            'country' => $user->country ?: 'Philippines',
+            'email_is_verified' => (bool) $user->email_verified_at,
+            'updated_at' => $this->formatDateTime($user->updated_at),
+        ]);
+    }
+
+    protected function formatDateTime(mixed $value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d H:i:s');
+        }
+
+        return (string) $value;
+    }
+
     protected function normalizePhoneNumber(mixed $value): ?string
     {
-        if (!is_string($value)) {
+        if (! is_string($value)) {
             return null;
         }
 
         $digits = preg_replace('/\D+/', '', $value) ?? '';
+
         if ($digits === '') {
             return null;
         }
@@ -376,7 +389,7 @@ class UserController extends Controller
 
     protected function trimNullable(mixed $value): ?string
     {
-        if (!is_string($value)) {
+        if (! is_string($value)) {
             return null;
         }
 

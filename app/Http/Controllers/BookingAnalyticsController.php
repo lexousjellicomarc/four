@@ -11,18 +11,22 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
+use App\Support\WorkspacePage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BookingAnalyticsController extends Controller
 {
     public function index(Request $request): InertiaResponse
     {
-        return Inertia::render('bookings/analytics', $this->buildPayload($request));
+        return Inertia::render(
+            WorkspacePage::resolve($request, 'bookings/analytics'),
+            $this->buildPayload($request)
+        );
     }
 
     public function print(Request $request): InertiaResponse
     {
-        return Inertia::render('bookings/analytics-print', [
+        return Inertia::render(WorkspacePage::resolve($request, 'bookings/analytics-print'), [
             ...$this->buildPayload($request),
             'generatedAt' => now()->toIso8601String(),
         ]);

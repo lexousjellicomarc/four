@@ -14,6 +14,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use App\Support\WorkspacePage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -95,7 +96,7 @@ class BookingOperationsController extends Controller
 
         $automationEvents = $this->automationEvents($filters);
 
-        return Inertia::render('bookings/operations', [
+        return Inertia::render(WorkspacePage::resolve($request, 'bookings/operations'), [
             'filters' => $filters,
             'bookings' => $paginated,
             'summary' => $summary,

@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Support\WorkspacePage;
 
 class ServiceController extends Controller
 {
@@ -28,9 +29,13 @@ class ServiceController extends Controller
         $perPage = (int) $request->integer('per_page', 10);
         $paginator = $this->services->paginate($perPage);
 
-        return Inertia::render('services/index', [
-            'services' => ServiceResource::collection($paginator)->response()->getData(true),
-            'serviceTypes' => ServiceTypeResource::collection(ServiceType::query()->orderBy('name')->get())->resolve($request),
+        return Inertia::render(WorkspacePage::resolve($request, 'services/index'), [
+            'workspaceRole' => WorkspacePage::role($request),
+            'services' => $services,
+            'rentalOptions' => $services,
+            'serviceTypes' => $serviceTypes,
+            'venueAreas' => $serviceTypes,
+            'filters' => $request->only(['q']),
         ]);
     }
 

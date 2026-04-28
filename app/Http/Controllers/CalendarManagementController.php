@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Support\WorkspacePage;
 
 class CalendarManagementController extends Controller
 {
@@ -186,7 +187,7 @@ class CalendarManagementController extends Controller
                 ->map(fn ($event) => $this->highlightRow($event, 'city')),
         ];
 
-        return Inertia::render('calendar/manage', [
+        return Inertia::render(WorkspacePage::resolve($request, 'calendar/manage'), [
             'month' => $month,
             'monthAvailability' => $monthAvailability,
             'events' => $bookingEvents->concat($publicEventItems)->concat($blockEvents)->values(),

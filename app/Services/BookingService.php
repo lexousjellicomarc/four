@@ -15,7 +15,7 @@ use App\Models\CalendarBlock;
 use App\Models\PublicEvent;
 use App\Models\BookingLifecycleEvent;
 use App\Models\Service;
-
+use App\Support\WorkspaceAccess;
 
 class BookingService implements BookingServiceInterface
 {
@@ -97,27 +97,21 @@ protected function normalizeLifecycleMeta(array $meta): array
      * - created_by_user_id == user id (prevents losing access if they edit booking email)
      */
     protected function baseBookingQuery(): Builder
-    {
-        $query = Booking::query()->select($this->bookingSelectColumns());
+{
+    $query = Booking::query()->select($this->bookingSelectColumns());
 
-        if (auth()->check() && auth()->user()->hasRole('user')) {
-            $user = auth()->user();
-            $email = (string) ($user->email ?? '');
-            $userId = (int) ($user->id ?? 0);
+    if (! auth()->check()) {
+        return $query->whereRaw('1 = 0');
+    }
 
-            $hasCreatorCol = Schema::hasColumn('bookings', 'created_by_user_id');
+    $request = request();
 
-            $query->where(function ($q) use ($email, $userId, $hasCreatorCol) {
-                $q->where('client_email', $email);
-
-                if ($hasCreatorCol && $userId > 0) {
-                    $q->orWhere('created_by_user_id', $userId);
-                }
-            });
-        }
-
+    if (WorkspaceAccess::isStaffLike($request)) {
         return $query;
     }
+
+    return WorkspaceAccess::applyBookingVisibility($request, $query);
+}
 
     public function paginate(array $filters = [], int $perPage = 15): LengthAwarePaginator
 {
@@ -339,8 +333,9 @@ protected function normalizeLifecycleMeta(array $meta): array
             $data['created_by_user_id'] = $user->id;
         }
 
-        if ($user && $user->hasRole('user')) {
+        if ($user && ! WorkspaceAccess::isStaffLike(request())) {
             $data['client_email'] = strtolower(trim((string) $user->email));
+            $data['created_by_user_id'] = $user->id;
             $data['booking_status'] = 'pending';
             $data['payment_status'] = 'unpaid';
         } elseif (! isset($data['payment_status'])) {
@@ -402,7 +397,7 @@ protected function normalizeLifecycleMeta(array $meta): array
 
         $user = auth()->user();
 
-        if ($user && $user->hasRole('user')) {
+        if ($user && ! WorkspaceAccess::isStaffLike(request())) {
             $allowed = [
                 'client_name',
                 'company_name',
@@ -414,6 +409,12 @@ protected function normalizeLifecycleMeta(array $meta): array
                 'survey_proof_image_mime',
                 'survey_proof_image_name',
                 'client_address',
+                'client_region',
+                'client_province',
+                'client_city_municipality',
+                'client_barangay',
+                'client_zip_code',
+                'client_street_address',
                 'head_of_organization',
                 'type_of_event',
                 'number_of_guests',
@@ -1722,7 +1723,7 @@ $publicVisibleBookings = $publicVisibleBookingsQuery
         return $this->bookingMatchesArea($booking, $area);
     })
     ->values();
-    
+
     $calendarBlocks = CalendarBlock::query()
         ->whereDate('date_from', '<=', $date)
         ->whereDate('date_to', '>=', $date)

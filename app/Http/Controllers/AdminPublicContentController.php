@@ -16,6 +16,7 @@ use Illuminate\Validation\Rule;
 use App\Models\TourismMember;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Support\WorkspacePage;
 
 class AdminPublicContentController extends Controller
 {
@@ -23,7 +24,7 @@ class AdminPublicContentController extends Controller
     {
         $this->ensureAdmin($request);
 
-        return Inertia::render('admin/home', [
+        return Inertia::render(WorkspacePage::resolve($request, 'admin/home'), [
             'initialBcccEvents' => $this->eventsPayload('bccc')->all(),
             'initialCityEvents' => $this->eventsPayload('city')->all(),
             'initialPackages' => $this->packagesPayload()->all(),

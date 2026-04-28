@@ -8,7 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Fortify\Features;
@@ -42,19 +42,15 @@ class AuthenticatedSessionController extends Controller
 
         Auth::login($user, $request->boolean('remember'));
 
-        $user->forceFill([
-            'last_login_at' => now(),
-        ])->saveQuietly();
+        if (Schema::hasColumn('users', 'last_login_at')) {
+            $user->forceFill([
+                'last_login_at' => now(),
+            ])->saveQuietly();
+        }
 
         $request->session()->regenerate();
 
-        $adminTarget = $this->resolveAdminTarget($request, $user);
-
-        if ($adminTarget) {
-            return redirect()->intended($adminTarget);
-        }
-
-        return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()->intended(route('role.home', absolute: false));
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -65,29 +61,5 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerateToken();
 
         return redirect('/');
-    }
-
-    protected function resolveAdminTarget(Request $request, mixed $user): ?string
-    {
-        $isAdminLike = method_exists($user, 'hasAnyRole')
-            && $user->hasAnyRole(['admin', 'manager']);
-
-        $redirectTo = (string) $request->input('redirect_to', '');
-
-        if (Str::startsWith($redirectTo, '/admin')) {
-            return $isAdminLike ? $redirectTo : null;
-        }
-
-        $previous = (string) url()->previous();
-
-        if (Str::contains($previous, '/admin')) {
-            return $isAdminLike ? '/admin/home' : null;
-        }
-
-        if ($isAdminLike) {
-            return '/admin/home';
-        }
-
-        return null;
     }
 }
