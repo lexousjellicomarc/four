@@ -3,27 +3,24 @@
 namespace App\Models;
 
 use App\Services\NotificationService;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Auth;
 
 class BookingPayment extends Model
 {
-    use HasFactory;
-
-    protected $table = 'booking_payments';
-
     protected $fillable = [
         'booking_id',
-        'status',
         'payment_method',
         'payment_gateway',
         'payment_type',
         'amount',
         'transaction_reference',
-        'remarks',
+        'status',
         'proof_image_path',
+        'proof_image_name',
+        'proof_image_mime',
+        'remarks',
         'payer_name',
         'card_holder_name',
         'card_last_four',
@@ -31,6 +28,10 @@ class BookingPayment extends Model
         'marketing_consent',
         'payment_meta',
         'paid_at',
+        'verified_at',
+        'approved_at',
+        'declined_at',
+        'failed_at',
     ];
 
     protected $casts = [
@@ -38,11 +39,17 @@ class BookingPayment extends Model
         'marketing_consent' => 'boolean',
         'payment_meta' => 'array',
         'paid_at' => 'datetime',
+        'verified_at' => 'datetime',
+        'approved_at' => 'datetime',
+        'declined_at' => 'datetime',
+        'failed_at' => 'datetime',
     ];
 
     protected $appends = [
         'proof_image_url',
     ];
+
+    public array $notificationChanges = [];
 
     public function booking(): BelongsTo
     {
@@ -51,16 +58,14 @@ class BookingPayment extends Model
 
     public function getProofImageUrlAttribute(): ?string
     {
-        if (! $this->proof_image_path || ! $this->booking_id) {
+        if (! $this->proof_image_path || ! $this->booking_id || ! $this->id) {
             return null;
         }
 
         $version = $this->updated_at?->timestamp ?? $this->created_at?->timestamp ?? time();
 
-        return url("/bookings/{$this->booking_id}/payments/{$this->id}/proof") . '?v=' . $version;
+        return url("/my-bookings/{$this->booking_id}/payments/{$this->id}/proof") . '?v=' . $version;
     }
-
-    public array $notificationChanges = [];
 
     protected static function booted(): void
     {
@@ -79,8 +84,8 @@ class BookingPayment extends Model
 
             try {
                 app(NotificationService::class)->paymentCreated($payment, $booking, Auth::user());
-            } catch (\Throwable $e) {
-                report($e);
+            } catch (\Throwable $exception) {
+                report($exception);
             }
         });
 
@@ -104,6 +109,7 @@ class BookingPayment extends Model
             }
 
             $changes = $payment->notificationChanges ?? [];
+
             if (empty($changes)) {
                 return;
             }
@@ -118,8 +124,8 @@ class BookingPayment extends Model
 
             try {
                 app(NotificationService::class)->paymentUpdated($payment, $booking, Auth::user(), $changes);
-            } catch (\Throwable $e) {
-                report($e);
+            } catch (\Throwable $exception) {
+                report($exception);
             }
         });
     }

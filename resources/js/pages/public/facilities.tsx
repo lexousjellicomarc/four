@@ -1,200 +1,304 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowRight, Search, Sparkles, Users } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import {
+  ArrowRight,
+  Building2,
+  CheckCircle2,
+  MapPin,
+  Search,
+  Sparkles,
+  Users,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
-import PageHero from '@/components/public/page-hero';
 import PublicLayout from '@/layouts/public-layout';
 import type { PublicSpaceItem } from '@/types/public-content';
-import { cn } from '@/lib/utils';
+
+const easeLuxury = [0.22, 1, 0.36, 1] as const;
+
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(' ');
+}
+
+function getSpaceImage(space?: PublicSpaceItem | null, dark = false) {
+  if (!space) {
+    return dark ? '/marketing/images/hero/night2.png' : '/marketing/images/hero/noon2.jpg';
+  }
+
+  if (dark) {
+    return space.darkImage || space.image || space.lightImage || '/marketing/images/hero/night2.png';
+  }
+
+  return space.lightImage || space.image || space.darkImage || '/marketing/images/hero/noon2.jpg';
+}
+
+function FacilityCard({ space, index }: { space: PublicSpaceItem; index: number }) {
+  const reduceMotion = useReducedMotion();
+  const reversed = index % 2 === 1;
+  const details = space.details?.length
+    ? space.details.slice(0, 3)
+    : [space.shortDescription || space.summary || 'Space details may be updated from the admin content area.'];
+
+  return (
+    <motion.article
+      initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 28, filter: 'blur(10px)' }}
+      whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+      viewport={{ once: true, amount: 0.16 }}
+      transition={{ duration: 0.68, ease: easeLuxury, delay: Math.min(index * 0.055, 0.28) }}
+      className="group relative grid overflow-hidden border border-[var(--bccc-line)] bg-[var(--bccc-surface)] shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl transition duration-500 hover:-translate-y-1 hover:border-[var(--bccc-line-gold)] hover:shadow-[var(--bccc-shadow-medium)] lg:grid-cols-2"
+    >
+      <div className={cx('relative min-h-[23rem] overflow-hidden bg-[#080806]', reversed && 'lg:order-2')}>
+        <img
+          src={getSpaceImage(space, false)}
+          alt={space.title}
+          className="absolute inset-0 h-full w-full object-cover transition duration-[1300ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.055] dark:hidden"
+          draggable={false}
+        />
+
+        <img
+          src={getSpaceImage(space, true)}
+          alt={space.title}
+          className="absolute inset-0 hidden h-full w-full object-cover transition duration-[1300ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.055] dark:block"
+          draggable={false}
+        />
+
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.10)_40%,rgba(0,0,0,0.72)_100%)]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/86 via-black/16 to-black/12" />
+
+        <div className="absolute left-5 top-5 border border-white/16 bg-black/30 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.24em] text-[#f4dfad] backdrop-blur-xl">
+          {space.category || 'Venue Space'}
+        </div>
+
+        {space.featured ? (
+          <div className="absolute right-5 top-5 border border-[#f4dfad]/35 bg-[#f4dfad]/14 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-[#f4dfad] backdrop-blur-xl">
+            Featured
+          </div>
+        ) : null}
+
+        <div className="absolute bottom-5 left-5 right-5">
+          <div className="inline-flex items-center gap-2 border border-white/12 bg-white/[0.08] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/78 backdrop-blur-xl">
+            <Users className="h-3.5 w-3.5 text-[#f4dfad]" />
+            {space.capacity || 'Flexible capacity'}
+          </div>
+        </div>
+      </div>
+
+      <div className="relative flex min-h-[23rem] flex-col justify-between p-6 sm:p-8 lg:p-10">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
+            Signature Space
+          </p>
+
+          <h2 className="mt-4 text-4xl font-semibold leading-[0.95] tracking-[-0.065em] text-[var(--bccc-text)] sm:text-5xl">
+            {space.title}
+          </h2>
+
+          <p className="mt-5 text-sm leading-8 text-[var(--bccc-text-muted)]">
+            {space.summary || space.shortDescription || 'Explore this facility for event planning, scheduling, and coordination.'}
+          </p>
+
+          <div className="mt-6 grid gap-3">
+            {details.map((detail, detailIndex) => (
+              <div
+                key={`${space.id}-detail-${detailIndex}`}
+                className="flex items-start gap-3 border border-[var(--bccc-line)] bg-[var(--bccc-surface-muted)] p-4"
+              >
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--bccc-gold-700)]" />
+                <span className="text-sm leading-7 text-[var(--bccc-text-muted)]">{detail}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-7 flex flex-wrap gap-3">
+          <Link
+            href={`/facilities/${space.slug}`}
+            className="bccc-button-primary"
+          >
+            {space.ctaLabel || 'View Space'}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+
+          <Link
+            href={`/bookings/create?venue=${encodeURIComponent(space.title)}`}
+            className="bccc-button-secondary"
+          >
+            Reserve this venue
+          </Link>
+        </div>
+      </div>
+    </motion.article>
+  );
+}
 
 export default function FacilitiesPage({ spaces = [] }: { spaces?: PublicSpaceItem[] }) {
+  const reduceMotion = useReducedMotion();
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    if (!keyword) return spaces;
+
+    if (!keyword) {
+      return spaces;
+    }
 
     return spaces.filter((item) =>
-      [item.title, item.category, item.capacity, item.summary, item.shortDescription, ...(item.details ?? [])]
+      [
+        item.title,
+        item.category,
+        item.capacity,
+        item.summary,
+        item.shortDescription,
+        ...(item.details ?? []),
+      ]
         .join(' ')
         .toLowerCase()
         .includes(keyword),
     );
   }, [search, spaces]);
 
-  const featured = filtered[0] ?? spaces[0];
+  const featured = filtered[0] ?? spaces[0] ?? null;
 
   return (
     <PublicLayout>
       <Head title="Facilities" />
 
-      <PageHero
-        eyebrow="Facilities"
-        title="A luxury-style venue presentation for every BCCC facility."
-        description="The facility page now behaves more like a premium hotel showcase, with richer image treatment, larger spotlight moments, and cleaner room-by-room discovery."
-        backgroundImages={[
-          featured?.lightImage || featured?.image || '/marketing/images/branding/noon.jpg',
-          featured?.darkImage || featured?.image || '/marketing/images/hero/night.png',
-        ]}
-        actions={[
-          { label: 'Check Calendar', href: '/calendar' },
-          { label: 'Book Now', href: '/bookings/create', variant: 'secondary' },
-        ]}
-      />
+      <section className="relative min-h-[76svh] overflow-hidden bg-[#080806] pt-32 text-white lg:pt-36">
+        <img
+          src={getSpaceImage(featured, false)}
+          alt={featured?.title || 'BCCC Facilities'}
+          className="absolute inset-0 h-full w-full object-cover opacity-72 dark:hidden"
+          draggable={false}
+        />
 
-      <section className="public-container mt-10 space-y-8 pb-14">
-        <div className="overflow-hidden rounded-[2.15rem] border border-black/5 bg-white/82 shadow-[0_28px_90px_rgba(15,23,42,0.08)] backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
-          <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
-            <div className="relative min-h-[420px] overflow-hidden">
-              <img
-                src={featured?.lightImage || featured?.image || '/marketing/images/branding/noon.jpg'}
-                alt={featured?.title || 'Featured facility'}
-                className="h-full w-full object-cover dark:hidden"
-              />
-              <img
-                src={featured?.darkImage || featured?.image || '/marketing/images/branding/noon.jpg'}
-                alt={featured?.title || 'Featured facility'}
-                className="hidden h-full w-full object-cover dark:block"
-              />
-              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.12),rgba(15,23,42,0.76))]" />
-              <div className="absolute inset-x-0 bottom-0 p-6 text-white sm:p-8">
-                <div className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] backdrop-blur-md">
-                  Featured Space
-                </div>
-                <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">{featured?.title || 'BCCC Facility'}</h2>
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white/86">
-                  <span className="rounded-full border border-white/10 bg-black/20 px-3 py-2">{featured?.category || 'Venue Space'}</span>
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-2">
-                    <Users className="h-4 w-4" />
-                    {featured?.capacity || 'Flexible capacity'}
-                  </span>
-                </div>
-              </div>
+        <img
+          src={getSpaceImage(featured, true)}
+          alt={featured?.title || 'BCCC Facilities'}
+          className="absolute inset-0 hidden h-full w-full object-cover opacity-72 dark:block"
+          draggable={false}
+        />
+
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.18)_38%,rgba(0,0,0,0.84)_100%)]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#080806] via-[#080806]/52 to-black/28" />
+
+        <div className="public-container relative z-10 grid min-h-[calc(76svh-9rem)] gap-8 pb-12 lg:grid-cols-[0.82fr_1.18fr] lg:items-end">
+          <motion.div
+            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 28, filter: 'blur(12px)' }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.78, ease: easeLuxury }}
+          >
+            <div className="inline-flex items-center gap-2 border border-[#f4dfad]/26 bg-[#f4dfad]/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.28em] text-[#f4dfad]">
+              <Building2 className="h-3.5 w-3.5" />
+              Facilities
             </div>
 
-            <div className="flex flex-col justify-between p-6 sm:p-8">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-[#f8f4ea] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#174f40] dark:bg-slate-900/70 dark:text-[#b6c6ff]">
-                  <Sparkles className="h-4 w-4" />
-                  Hotel-style Facility Presentation
-                </div>
+            <h1 className="mt-5 max-w-4xl text-[clamp(3rem,8vw,7.5rem)] font-medium leading-[0.88] tracking-[-0.085em] text-white">
+              Spaces designed for polished city events.
+            </h1>
+          </motion.div>
 
-                <p className="mt-5 text-sm leading-8 text-slate-600 dark:text-slate-300">
-                  {featured?.summary || featured?.shortDescription || 'Discover the venue through a more premium and immersive public presentation.'}
-                </p>
+          <motion.div
+            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 24, filter: 'blur(10px)' }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.78, ease: easeLuxury, delay: 0.12 }}
+            className="border border-white/12 bg-white/[0.07] p-5 shadow-[0_28px_90px_rgba(0,0,0,0.28)] backdrop-blur-2xl"
+          >
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#f4dfad]">
+              Featured Space
+            </p>
 
-                <div className="mt-6 grid gap-3">
-                  {(featured?.details?.length ? featured.details : [
-                    'Designed for polished public and private event staging.',
-                    'Supports flexible layouts from conferences to special functions.',
-                    'Blends formal venue service with visual warmth for public browsing.',
-                  ]).slice(0, 4).map((detail, index) => (
-                    <div
-                      key={`${detail}-${index}`}
-                      className="rounded-[1.35rem] border border-black/5 bg-[#f8f4ea] px-4 py-3 text-sm leading-7 text-slate-600 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-300"
-                    >
-                      {detail}
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.055em]">
+              {featured?.title || 'BCCC Facility'}
+            </h2>
 
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <Link
-                  href={featured ? `/facilities/${featured.slug}` : '/facilities'}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#174f40] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-[#294CFF]"
-                >
-                  View Featured Space
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <label className="flex items-center gap-3 rounded-full border border-black/10 bg-white px-4 py-3 dark:border-white/10 dark:bg-white/5">
-                  <Search className="h-4 w-4 text-slate-400" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search facilities"
-                    className="w-full bg-transparent text-sm font-medium outline-none"
-                  />
-                </label>
-              </div>
+            <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/68">
+              <span className="inline-flex items-center gap-2 border border-white/10 bg-white/[0.06] px-3 py-2">
+                <MapPin className="h-3.5 w-3.5 text-[#f4dfad]" />
+                {featured?.category || 'Venue Space'}
+              </span>
+
+              <span className="inline-flex items-center gap-2 border border-white/10 bg-white/[0.06] px-3 py-2">
+                <Users className="h-3.5 w-3.5 text-[#f4dfad]" />
+                {featured?.capacity || 'Flexible capacity'}
+              </span>
             </div>
+
+            <p className="mt-4 text-sm leading-7 text-white/66">
+              {featured?.summary ||
+                featured?.shortDescription ||
+                'Discover BCCC venue spaces through a more immersive public presentation.'}
+            </p>
+
+            {featured ? (
+              <Link
+                href={`/facilities/${featured.slug}`}
+                className="mt-5 inline-flex items-center gap-2 border border-[#f4dfad]/36 bg-[#f4dfad] px-5 py-3 text-[11px] font-black uppercase tracking-[0.2em] text-[#17120a] transition duration-500 hover:-translate-y-0.5 hover:bg-white"
+              >
+                View Featured Space
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            ) : null}
+          </motion.div>
+        </div>
+      </section>
+
+      <section className="relative overflow-hidden bg-[var(--bccc-bg)] py-10">
+        <div className="public-container">
+          <div className="flex flex-col gap-4 border border-[var(--bccc-line)] bg-[var(--bccc-surface)] p-4 shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
+                Search Facilities
+              </p>
+              <p className="mt-2 text-sm text-[var(--bccc-text-muted)]">
+                Filter by space name, category, capacity, or details.
+              </p>
+            </div>
+
+            <label className="flex min-h-12 w-full items-center gap-3 border border-[var(--bccc-line)] bg-[var(--bccc-surface-muted)] px-4 lg:max-w-xl">
+              <Search className="h-4 w-4 shrink-0 text-[var(--bccc-gold-700)]" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search facilities"
+                className="min-w-0 flex-1 bg-transparent text-sm font-medium text-[var(--bccc-text)] outline-none placeholder:text-[var(--bccc-text-muted)]/55"
+              />
+            </label>
           </div>
         </div>
+      </section>
 
-        {filtered.length === 0 ? (
-          <div className="rounded-[1.9rem] border border-dashed border-black/10 bg-white/70 px-6 py-10 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-            No facilities matched your search.
+      <section className="public-section relative overflow-hidden">
+        <div className="public-container">
+          <div className="mb-8 grid gap-5 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
+            <div>
+              <div className="bccc-section-kicker">
+                <Sparkles className="h-3.5 w-3.5" />
+                Venue Collection
+              </div>
+
+              <h2 className="mt-4 bccc-section-title-sm">
+                Browse each facility with clear venue information.
+              </h2>
+            </div>
+
+            <p className="bccc-section-copy lg:justify-self-end">
+              The facility list is intentionally image-led and editorial, making each space easier to understand before proceeding to booking.
+            </p>
           </div>
-        ) : (
-          <div className="space-y-8">
-            {filtered.map((space, index) => {
-              const reversed = index % 2 === 1;
 
-              return (
-                <article
-                  key={String(space.id)}
-                  className="overflow-hidden rounded-[2.2rem] border border-black/5 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5"
-                >
-                  <div className={cn('grid gap-0 lg:grid-cols-[1.08fr_0.92fr]', reversed && 'lg:grid-cols-[0.92fr_1.08fr]')}>
-                    <div className={cn('relative min-h-[380px] overflow-hidden', reversed && 'lg:order-2')}>
-                      <img src={space.lightImage || space.image} alt={space.title} className="h-full w-full object-cover dark:hidden" />
-                      <img src={space.darkImage || space.image} alt={space.title} className="hidden h-full w-full object-cover dark:block" />
-                      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.06),rgba(15,23,42,0.74))]" />
-                      <div className="absolute left-5 top-5 rounded-full border border-white/15 bg-black/28 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-white backdrop-blur-md">
-                        {space.category}
-                      </div>
-                      <div className="absolute inset-x-0 bottom-0 p-6 text-white sm:p-7">
-                        <h3 className="text-3xl font-semibold">{space.title}</h3>
-                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/12 bg-black/24 px-3 py-2 text-sm text-white/86">
-                          <Users className="h-4 w-4" />
-                          {space.capacity}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className={cn('flex flex-col justify-between p-6 sm:p-8', reversed && 'lg:order-1')}>
-                      <div>
-                        <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#174f40] dark:text-[#b6c6ff]">
-                          Signature Space
-                        </div>
-                        <p className="mt-4 text-sm leading-8 text-slate-600 dark:text-slate-300">
-                          {space.summary || space.shortDescription}
-                        </p>
-
-                        <div className="mt-6 grid gap-3">
-                          {(space.details?.length ? space.details : [space.shortDescription || space.summary]).slice(0, 4).map((detail, detailIndex) => (
-                            <div
-                              key={`${space.id}-${detailIndex}`}
-                              className="rounded-[1.25rem] border border-black/5 bg-[#f8f4ea] px-4 py-3 text-sm leading-7 text-slate-600 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-300"
-                            >
-                              {detail}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="mt-7 flex flex-wrap gap-3">
-                        <Link
-                          href={`/facilities/${space.slug}`}
-                          className="inline-flex items-center gap-2 rounded-full bg-[#0f8b6d] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-[#294CFF]"
-                        >
-                          {space.ctaLabel || 'View Space'}
-                          <ArrowRight className="h-4 w-4" />
-                        </Link>
-
-                        <Link
-                          href={`/bookings/create?venue=${encodeURIComponent(space.title)}`}
-                          className="inline-flex items-center gap-2 rounded-full border border-black/10 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-white dark:hover:bg-white/10"
-                        >
-                          Reserve this venue
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
+          {filtered.length === 0 ? (
+            <div className="bccc-public-panel p-8 text-center">
+              <p className="text-sm text-[var(--bccc-text-muted)]">
+                No facilities matched your search.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-5 lg:gap-7">
+              {filtered.map((space, index) => (
+                <FacilityCard key={space.id} space={space} index={index} />
+              ))}
+            </div>
+          )}
+        </div>
       </section>
     </PublicLayout>
   );

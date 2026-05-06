@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\BulkCalendarBlockRequest;
 use App\Http\Requests\StoreCalendarBlockRequest;
 use App\Models\CalendarBlock;
+use App\Support\WorkspaceAccess;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,6 +14,8 @@ class CalendarBlockController extends Controller
 {
     public function store(StoreCalendarBlockRequest $request): JsonResponse
     {
+        $this->ensureManageAccess($request);
+
         $payload = $this->payload($request);
         $payload['created_by_user_id'] = $request->user()?->id;
 
@@ -26,6 +29,8 @@ class CalendarBlockController extends Controller
 
     public function bulkStore(BulkCalendarBlockRequest $request): JsonResponse
     {
+        $this->ensureManageAccess($request);
+
         $payload = $this->bulkPayload($request);
         $payload['created_by_user_id'] = $request->user()?->id;
 
@@ -37,19 +42,18 @@ class CalendarBlockController extends Controller
 
         $start = Carbon::parse($request->input('date_from'))->startOfDay();
         $end = Carbon::parse($request->input('date_to'))->startOfDay();
+
         $explodeByDay = (bool) $request->boolean('explode_by_day');
         $excludeWeekends = (bool) $request->boolean('exclude_weekends');
 
         $created = collect();
 
         if (! $explodeByDay) {
-            $calendarBlock = CalendarBlock::query()->create([
+            $created->push(CalendarBlock::query()->create([
                 ...$payload,
                 'date_from' => $start->toDateString(),
                 'date_to' => $end->toDateString(),
-            ]);
-
-            $created->push($calendarBlock);
+            ]));
         } else {
             for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
                 if ($excludeWeekends && in_array((int) $day->dayOfWeekIso, [6, 7], true)) {
@@ -73,12 +77,17 @@ class CalendarBlockController extends Controller
                 ? 'Bulk calendar action created 1 block.'
                 : 'Bulk calendar action created ' . $created->count() . ' blocks.',
             'created_count' => $created->count(),
-            'items' => $created->take(30)->map(fn (CalendarBlock $block) => $this->row($block))->values(),
+            'items' => $created
+                ->take(50)
+                ->map(fn (CalendarBlock $block) => $this->row($block->fresh()))
+                ->values(),
         ]);
     }
 
     public function update(StoreCalendarBlockRequest $request, CalendarBlock $calendarBlock): JsonResponse
     {
+        $this->ensureManageAccess($request);
+
         $calendarBlock->update($this->payload($request));
 
         return response()->json([
@@ -103,45 +112,108 @@ class CalendarBlockController extends Controller
     protected function payload(StoreCalendarBlockRequest $request): array
     {
         return [
-            'title' => trim($request->string('title')->toString()),
-            'area' => $request->filled('area') ? trim($request->string('area')->toString()) : null,
-            'notes' => $request->filled('notes') ? trim($request->string('notes')->toString()) : null,
-            'block' => strtoupper($request->string('block')->toString()),
-            'public_status' => strtolower($request->string('public_status')->toString()),
-            'date_from' => $request->date('date_from')?->toDateString(),
-            'date_to' => $request->date('date_to')?->toDateString(),
+            'title' => trim((string) $request->input('title')),
+            'area' => $request->filled('area') ? trim((string) $request->input('area')) : null,
+            'notes' => $request->filled('notes') ? trim((string) $request->input('notes')) : null,
+            'block' => strtoupper((string) $request->input('block')),
+            'public_status' => strtolower((string) $request->input('public_status')),
+            'date_from' => Carbon::parse($request->input('date_from'))->toDateString(),
+            'date_to' => Carbon::parse($request->input('date_to'))->toDateString(),
         ];
     }
 
     protected function bulkPayload(BulkCalendarBlockRequest $request): array
     {
         return [
-            'title' => trim($request->string('title')->toString()),
-            'area' => $request->filled('area') ? trim($request->string('area')->toString()) : null,
-            'notes' => $request->filled('notes') ? trim($request->string('notes')->toString()) : null,
-            'block' => strtoupper($request->string('block')->toString()),
-            'public_status' => strtolower($request->string('public_status')->toString()),
+            'title' => trim((string) $request->input('title')),
+            'area' => $request->filled('area') ? trim((string) $request->input('area')) : null,
+            'notes' => $request->filled('notes') ? trim((string) $request->input('notes')) : null,
+            'block' => strtoupper((string) $request->input('block')),
+            'public_status' => strtolower((string) $request->input('public_status')),
         ];
     }
 
     protected function row(CalendarBlock $calendarBlock): array
     {
-        $dateFrom = optional($calendarBlock->date_from)->format('Y-m-d') ?? (string) $calendarBlock->date_from;
-        $dateTo = optional($calendarBlock->date_to)->format('Y-m-d') ?? (string) $calendarBlock->date_to;
+        $calendarBlock->loadMissing('createdBy');
+
+        $dateFrom = $this->dateString($calendarBlock->date_from);
+        $dateTo = $this->dateString($calendarBlock->date_to);
+        $block = strtoupper((string) ($calendarBlock->block ?? 'DAY'));
+        $publicStatus = strtolower((string) ($calendarBlock->public_status ?? 'red'));
 
         return [
             'id' => $calendarBlock->id,
             'title' => $calendarBlock->title,
             'area' => $calendarBlock->area ?? '',
-            'block' => strtoupper((string) $calendarBlock->block),
-            'blockLabel' => $this->blockLabel((string) $calendarBlock->block),
+            'notes' => $calendarBlock->notes ?? '',
+            'note' => $calendarBlock->notes ?? '',
+            'block' => $block,
+            'blockLabel' => $this->blockLabel($block),
+            'public_status' => $publicStatus,
+            'statusColor' => $publicStatus,
+            'statusLabel' => $this->statusLabel($publicStatus),
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
-            'note' => $calendarBlock->notes ?? '',
-            'statusColor' => strtolower((string) ($calendarBlock->public_status ?? 'red')),
-            'statusLabel' => $this->statusLabel((string) ($calendarBlock->public_status ?? 'red')),
+            'starts_at' => $this->startDateTime($dateFrom, $block),
+            'ends_at' => $this->endDateTime($dateTo, $block),
             'spansMultipleDays' => $dateFrom !== '' && $dateTo !== '' && $dateFrom !== $dateTo,
+            'created_by_user_id' => $calendarBlock->created_by_user_id,
+            'created_by' => $calendarBlock->createdBy ? [
+                'id' => $calendarBlock->createdBy->id,
+                'name' => $calendarBlock->createdBy->name,
+                'email' => $calendarBlock->createdBy->email,
+            ] : null,
+            'created_at' => optional($calendarBlock->created_at)->toIso8601String(),
+            'updated_at' => optional($calendarBlock->updated_at)->toIso8601String(),
         ];
+    }
+
+    protected function dateString($value): string
+    {
+        if (! $value) {
+            return '';
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->format('Y-m-d');
+        }
+
+        return Carbon::parse($value)->format('Y-m-d');
+    }
+
+    protected function startDateTime(string $date, string $block): ?string
+    {
+        if ($date === '') {
+            return null;
+        }
+
+        $day = Carbon::parse($date)->startOfDay();
+
+        return match (strtoupper($block)) {
+            'AM' => $day->copy()->setTime(6, 0)->format('Y-m-d\TH:i'),
+            'PM' => $day->copy()->setTime(12, 0)->format('Y-m-d\TH:i'),
+            'EVE' => $day->copy()->setTime(18, 0)->format('Y-m-d\TH:i'),
+            default => $day->copy()->setTime(6, 0)->format('Y-m-d\TH:i'),
+        };
+    }
+
+    protected function endDateTime(string $date, string $block): ?string
+    {
+        if ($date === '') {
+            return null;
+        }
+
+        $day = Carbon::parse($date)->startOfDay();
+
+        return match (strtoupper($block)) {
+            'AM' => $day->copy()->setTime(12, 0)->format('Y-m-d\TH:i'),
+            'PM' => $day->copy()->setTime(18, 0)->format('Y-m-d\TH:i'),
+            'EVE' => $day->copy()->setTime(23, 59)->format('Y-m-d\TH:i'),
+            default => $day->copy()->setTime(23, 59)->format('Y-m-d\TH:i'),
+        };
     }
 
     protected function blockLabel(string $block): string
@@ -150,7 +222,7 @@ class CalendarBlockController extends Controller
             'AM' => 'AM (6:00 AM - 12:00 PM)',
             'PM' => 'PM (12:00 PM - 6:00 PM)',
             'EVE' => 'EVE (6:00 PM - 11:59 PM)',
-            default => 'Whole day',
+            default => 'Whole Day',
         };
     }
 
@@ -167,8 +239,16 @@ class CalendarBlockController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || ! $user->hasAnyRole(['admin', 'manager'])) {
-            abort(403);
+        abort_unless($user, 403);
+
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['admin', 'manager'])) {
+            return;
         }
+
+        if (in_array((string) ($user->role_name ?? $user->role ?? ''), ['admin', 'manager'], true)) {
+            return;
+        }
+
+        abort_unless(WorkspaceAccess::role($request) === 'admin' || WorkspaceAccess::role($request) === 'manager', 403);
     }
 }

@@ -1,494 +1,860 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
+import type { LucideIcon } from 'lucide-react';
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  Cell,
-} from 'recharts';
-import type { ComponentType } from 'react';
-import {
-  Activity,
-  AlertTriangle,
-  CalendarDays,
-  CircleDollarSign,
-  Download,
-  FileText,
-  Gauge,
-  ShieldAlert,
-  Wallet,
+    Activity,
+    AlertTriangle,
+    ArrowRight,
+    BarChart3,
+    CalendarDays,
+    CircleDollarSign,
+    Download,
+    FileText,
+    Gauge,
+    PieChart,
+    Search,
+    ShieldAlert,
+    TrendingUp,
+    Wallet,
 } from 'lucide-react';
 
-const breadcrumbs: BreadcrumbItem[] = [
-  { title: 'Bookings', href: '/bookings' },
-  { title: 'Analytics', href: '/bookings/analytics' },
-];
+type Option = {
+    id: number;
+    name: string;
+};
 
-type Option = { id: number; name: string };
-type Breakdown = { label: string; value: number };
-type TrendPoint = { label: string; bookings: number; guests: number; confirmed_revenue: number };
-type ServicePoint = { label: string; usage_count: number; revenue_total: number };
-type WorkloadPoint = { label: string; bookings: number; guests: number };
-type RiskBooking = {
-  id: number;
-  client_name: string;
-  company_name: string;
-  type_of_event: string;
-  booking_status: string;
-  payment_status: string;
-  booking_date_from: string | null;
-  booking_date_to: string | null;
-  created_at: string | null;
-  number_of_guests: number;
-  items_total: number;
-  submitted_total: number;
-  confirmed_total: number;
-  outstanding: number;
-  policy: {
-    state: string;
+type Breakdown = {
     label: string;
-    half_required: number;
-    half_paid_met: boolean;
-    fully_paid_met: boolean;
-    down_payment_due_at: string | null;
-    full_payment_due_at: string | null;
-    hours_since_created: number | null;
-  };
+    value: number;
+};
+
+type TrendPoint = {
+    label: string;
+    bookings: number;
+    guests: number;
+    confirmed_revenue: number;
+};
+
+type ServicePoint = {
+    label: string;
+    usage_count: number;
+    revenue_total: number;
+};
+
+type WorkloadPoint = {
+    label: string;
+    bookings: number;
+    guests: number;
+};
+
+type RiskBooking = {
+    id: number;
+    client_name: string;
+    company_name: string;
+    type_of_event: string;
+    booking_status: string;
+    payment_status: string;
+    booking_date_from: string | null;
+    booking_date_to: string | null;
+    created_at: string | null;
+    number_of_guests: number;
+    items_total: number;
+    submitted_total: number;
+    confirmed_total: number;
+    outstanding: number;
+    policy?: {
+        state?: string;
+        label?: string;
+        half_required?: number;
+        half_paid_met?: boolean;
+        fully_paid_met?: boolean;
+        down_payment_due_at?: string | null;
+        full_payment_due_at?: string | null;
+        hours_since_created?: number | null;
+    };
 };
 
 type Props = {
-  filters: {
-    q?: string;
-    booking_status?: string;
-    payment_status?: string;
-    service_id?: string;
-    date_from?: string;
-    date_to?: string;
-  };
-  services: Option[];
-  summary: {
-    total_bookings: number;
-    total_guests: number;
-    pending: number;
-    active: number;
-    confirmed: number;
-    completed: number;
-    cancelled_declined: number;
-    submitted_revenue: number;
-    confirmed_revenue: number;
-    outstanding_balance: number;
-    due_24h_soon: number;
-    due_24h_overdue: number;
-    due_48h_soon: number;
-    due_48h_overdue: number;
-    half_paid_met: number;
-    fully_paid_met: number;
-    automation_events_7d: number;
-    auto_declined_7d: number;
-    auto_deleted_7d: number;
-  };
-  statusBreakdown: Breakdown[];
-  paymentBreakdown: Breakdown[];
-  monthlyTrend: TrendPoint[];
-  upcomingWorkload: WorkloadPoint[];
-  topServices: ServicePoint[];
-  highRiskBookings: RiskBooking[];
+    filters: {
+        q?: string;
+        booking_status?: string;
+        payment_status?: string;
+        service_id?: string;
+        date_from?: string;
+        date_to?: string;
+    };
+    services: Option[];
+    summary: {
+        total_bookings: number;
+        total_guests: number;
+        pending: number;
+        active: number;
+        confirmed: number;
+        completed: number;
+        cancelled_declined: number;
+        submitted_revenue: number;
+        confirmed_revenue: number;
+        outstanding_balance: number;
+        due_24h_soon: number;
+        due_24h_overdue: number;
+        due_48h_soon: number;
+        due_48h_overdue: number;
+        half_paid_met: number;
+        fully_paid_met: number;
+        automation_events_7d: number;
+        auto_declined_7d: number;
+        auto_deleted_7d: number;
+    };
+    statusBreakdown: Breakdown[];
+    paymentBreakdown: Breakdown[];
+    monthlyTrend: TrendPoint[];
+    upcomingWorkload: WorkloadPoint[];
+    topServices: ServicePoint[];
+    highRiskBookings: RiskBooking[];
 };
 
-const PIE_COLORS = ['#2563eb', '#0f766e', '#d97706', '#dc2626', '#7c3aed', '#475569', '#0891b2'];
+function currentBookingsBase() {
+    if (window.location.pathname.startsWith('/admin')) return '/admin/bookings';
+    if (window.location.pathname.startsWith('/manager'))
+        return '/manager/bookings';
 
-function money(value: number) {
-  return `₱ ${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return '/bookings';
 }
 
-function dt(value?: string | null) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
+function breadcrumbs(): BreadcrumbItem[] {
+    return [
+        { title: 'Bookings', href: currentBookingsBase() },
+        { title: 'Analytics', href: `${currentBookingsBase()}/analytics` },
+    ];
 }
 
-function statusTone(value?: string) {
-  const v = String(value || '').toLowerCase();
-  if (v === 'pending') return 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200';
-  if (v === 'active' || v === 'confirmed') return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200';
-  if (v === 'completed') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200';
-  if (v === 'declined' || v === 'cancelled') return 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-200';
-  if (v === 'paid') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200';
-  if (v === 'partial') return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200';
-  if (v === 'unpaid' || v === 'owing') return 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-200';
-  return 'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-200';
+function money(value: unknown) {
+    const parsed = Number(value ?? 0);
+
+    return new Intl.NumberFormat('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(Number.isFinite(parsed) ? parsed : 0);
+}
+
+function numberValue(value: unknown) {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function cleanLabel(value: unknown) {
+    return String(value || '—')
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatDateTime(value?: string | null) {
+    if (!value) return '—';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat('en-PH', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    }).format(date);
+}
+
+function queryString(filters: Props['filters']) {
+    const params = new URLSearchParams();
+
+    Object.entries(filters || {}).forEach(([key, value]) => {
+        if (
+            value !== undefined &&
+            value !== null &&
+            String(value).trim() !== ''
+        ) {
+            params.set(key, String(value));
+        }
+    });
+
+    return params.toString();
+}
+
+function maxValue<T>(items: T[], getter: (item: T) => number) {
+    return Math.max(1, ...items.map((item) => getter(item)));
 }
 
 function policyTone(state?: string) {
-  switch (state) {
-    case '24h_overdue':
-      return 'bg-red-600 text-white';
-    case '48h_overdue':
-      return 'bg-red-500 text-white';
-    case '24h_soon':
-      return 'bg-amber-500 text-black';
-    case '48h_soon':
-      return 'bg-yellow-400 text-black';
-    default:
-      return 'bg-emerald-600 text-white';
-  }
+    const value = String(state || '').toLowerCase();
+
+    if (value.includes('overdue')) return 'is-bad';
+    if (value.includes('soon')) return 'is-warn';
+    if (value.includes('watch')) return 'is-public';
+
+    return 'is-good';
 }
 
 function StatCard({
-  title,
-  value,
-  helper,
-  icon: Icon,
+    label,
+    value,
+    helper,
+    icon: Icon,
 }: {
-  title: string;
-  value: string | number;
-  helper?: string;
-  icon: ComponentType<{ className?: string }>;
+    label: string;
+    value: string | number;
+    helper: string;
+    icon: LucideIcon;
 }) {
-  return (
-    <div className="rounded-[1.6rem] border bg-card p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{title}</div>
-          <div className="mt-2 text-3xl font-semibold tracking-tight">{value}</div>
-          {helper ? <div className="mt-2 text-sm text-muted-foreground">{helper}</div> : null}
+    return (
+        <article className="analytics-kpi-card">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <p className="backend-booking-label">{label}</p>
+                    <p className="mt-3 text-3xl font-black tracking-[-0.055em] text-slate-950 dark:text-white">
+                        {value}
+                    </p>
+                </div>
+
+                <div className="alh-admin-kpi-icon">
+                    <Icon className="h-5 w-5" />
+                </div>
+            </div>
+
+            <p className="mt-4 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                {helper}
+            </p>
+        </article>
+    );
+}
+
+function MiniBar({
+    label,
+    value,
+    max,
+    suffix,
+}: {
+    label: string;
+    value: number;
+    max: number;
+    suffix?: string;
+}) {
+    const width = Math.max(4, Math.min(100, (value / Math.max(max, 1)) * 100));
+
+    return (
+        <div className="analytics-mini-bar">
+            <div className="flex items-center justify-between gap-3">
+                <span>{label}</span>
+                <strong>
+                    {value}
+                    {suffix || ''}
+                </strong>
+            </div>
+
+            <div className="analytics-mini-bar-track">
+                <div style={{ width: `${width}%` }} />
+            </div>
         </div>
-        <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-          <Icon className="h-5 w-5" />
+    );
+}
+
+function RevenueBar({
+    label,
+    bookings,
+    guests,
+    revenue,
+    maxBookings,
+    maxRevenue,
+}: {
+    label: string;
+    bookings: number;
+    guests: number;
+    revenue: number;
+    maxBookings: number;
+    maxRevenue: number;
+}) {
+    const bookingWidth = Math.max(
+        4,
+        Math.min(100, (bookings / Math.max(maxBookings, 1)) * 100),
+    );
+    const revenueWidth = Math.max(
+        4,
+        Math.min(100, (revenue / Math.max(maxRevenue, 1)) * 100),
+    );
+
+    return (
+        <article className="analytics-trend-row">
+            <div>
+                <p>{label}</p>
+                <span>
+                    {bookings} booking{bookings === 1 ? '' : 's'} · {guests}{' '}
+                    guest
+                    {guests === 1 ? '' : 's'}
+                </span>
+            </div>
+
+            <div className="analytics-trend-bars">
+                <div>
+                    <span style={{ width: `${bookingWidth}%` }} />
+                </div>
+                <div>
+                    <span style={{ width: `${revenueWidth}%` }} />
+                </div>
+            </div>
+
+            <strong>{money(revenue)}</strong>
+        </article>
+    );
+}
+
+function EmptyState({
+    icon: Icon,
+    title,
+    description,
+}: {
+    icon: LucideIcon;
+    title: string;
+    description: string;
+}) {
+    return (
+        <div className="analytics-empty-state">
+            <Icon className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-700" />
+            <h3>{title}</h3>
+            <p>{description}</p>
         </div>
-      </div>
-    </div>
-  );
+    );
 }
 
 export default function BookingAnalytics({
-  filters,
-  services,
-  summary,
-  statusBreakdown,
-  paymentBreakdown,
-  monthlyTrend,
-  upcomingWorkload,
-  topServices,
-  highRiskBookings,
+    filters,
+    services = [],
+    summary,
+    statusBreakdown = [],
+    paymentBreakdown = [],
+    monthlyTrend = [],
+    upcomingWorkload = [],
+    topServices = [],
+    highRiskBookings = [],
 }: Props) {
-  const applyFilters = (formData: FormData) => {
-    router.get(
-      '/bookings/analytics',
-      {
-        q: String(formData.get('q') || ''),
-        booking_status: String(formData.get('booking_status') || ''),
-        payment_status: String(formData.get('payment_status') || ''),
-        service_id: String(formData.get('service_id') || ''),
-        date_from: String(formData.get('date_from') || ''),
-        date_to: String(formData.get('date_to') || ''),
-      },
-      { preserveScroll: true, preserveState: true, replace: true },
+    const basePath = currentBookingsBase();
+    const analyticsPath = `${basePath}/analytics`;
+    const query = queryString(filters);
+    const exportHref = query
+        ? `${analyticsPath}/export?${query}`
+        : `${analyticsPath}/export`;
+    const printHref = query
+        ? `${analyticsPath}/print?${query}`
+        : `${analyticsPath}/print`;
+
+    const maxStatus = maxValue(statusBreakdown, (item) =>
+        numberValue(item.value),
     );
-  };
+    const maxPayment = maxValue(paymentBreakdown, (item) =>
+        numberValue(item.value),
+    );
+    const maxMonthlyBookings = maxValue(monthlyTrend, (item) =>
+        numberValue(item.bookings),
+    );
+    const maxMonthlyRevenue = maxValue(monthlyTrend, (item) =>
+        numberValue(item.confirmed_revenue),
+    );
+    const maxServiceUsage = maxValue(topServices, (item) =>
+        numberValue(item.usage_count),
+    );
+    const maxWorkload = maxValue(upcomingWorkload, (item) =>
+        numberValue(item.bookings),
+    );
 
-  const query = new URLSearchParams(
-    Object.fromEntries(
-      Object.entries(filters || {}).filter(([, value]) => String(value || '').trim() !== ''),
-    ) as Record<string, string>,
-  ).toString();
+    function applyFilters(formData: FormData) {
+        router.get(
+            analyticsPath,
+            {
+                q: String(formData.get('q') || '') || undefined,
+                booking_status:
+                    String(formData.get('booking_status') || '') || undefined,
+                payment_status:
+                    String(formData.get('payment_status') || '') || undefined,
+                service_id:
+                    String(formData.get('service_id') || '') || undefined,
+                date_from: String(formData.get('date_from') || '') || undefined,
+                date_to: String(formData.get('date_to') || '') || undefined,
+            },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                replace: true,
+            },
+        );
+    }
 
-  return (
-    <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="Booking Analytics" />
+    return (
+        <AppLayout breadcrumbs={breadcrumbs()}>
+            <Head title="Booking Analytics" />
 
-      <div className="space-y-6 p-4 md:p-6">
-        <div className="rounded-[2rem] border bg-card p-6 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <div className="inline-flex rounded-full border bg-primary/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
-                Admin Analytics
-              </div>
-              <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">Booking analytics dashboard</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
-                This page gives you the faster admin view: status distribution, payment distribution, monthly trend,
-                service demand, upcoming workload, and the bookings most at risk of violating the 24-hour / 48-hour payment rules.
-              </p>
-            </div>
+            <div className="backend-admin-page space-y-5">
+                <section className="analytics-hero">
+                    <div>
+                        <p className="backend-booking-label">
+                            Booking Analytics
+                        </p>
+                        <h1>
+                            Booking performance, payments, workload, and
+                            deadline risk.
+                        </h1>
+                        <span>
+                            A compact monitoring page for reservation trends,
+                            payment compliance, high-risk records, and
+                            operational demand.
+                        </span>
+                    </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Link href="/bookings" className="inline-flex items-center rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted">
-                Back to bookings
-              </Link>
-              <a
-                href={query ? `/bookings/analytics/export?${query}` : '/bookings/analytics/export'}
-                className="inline-flex items-center rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted"
-              >
-                <Download className="mr-2 h-4 w-4" /> Export CSV
-              </a>
-              <a
-                href={query ? `/bookings/analytics/print?${query}` : '/bookings/analytics/print'}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-              >
-                <FileText className="mr-2 h-4 w-4" /> Printable report
-              </a>
-            </div>
-          </div>
-
-          <form
-            className="mt-6 grid gap-3 lg:grid-cols-6"
-            onSubmit={(event) => {
-              event.preventDefault();
-              applyFilters(new FormData(event.currentTarget));
-            }}
-          >
-            <input name="q" defaultValue={filters.q || ''} placeholder="Search client, company, email, event" className="rounded-xl border bg-background px-3 py-2 text-sm" />
-
-            <select name="booking_status" defaultValue={filters.booking_status || ''} className="rounded-xl border bg-background px-3 py-2 text-sm">
-              <option value="">All booking statuses</option>
-              <option value="pending">Pending</option>
-              <option value="active">Active</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="completed">Completed</option>
-              <option value="declined">Declined</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-
-            <select name="payment_status" defaultValue={filters.payment_status || ''} className="rounded-xl border bg-background px-3 py-2 text-sm">
-              <option value="">All payment statuses</option>
-              <option value="unpaid">Unpaid</option>
-              <option value="partial">Partial</option>
-              <option value="paid">Paid</option>
-              <option value="owing">Owing</option>
-            </select>
-
-            <select name="service_id" defaultValue={filters.service_id || ''} className="rounded-xl border bg-background px-3 py-2 text-sm">
-              <option value="">All services</option>
-              {services.map((service) => (
-                <option key={service.id} value={service.id}>{service.name}</option>
-              ))}
-            </select>
-
-            <input name="date_from" type="date" defaultValue={filters.date_from || ''} className="rounded-xl border bg-background px-3 py-2 text-sm" />
-            <input name="date_to" type="date" defaultValue={filters.date_to || ''} className="rounded-xl border bg-background px-3 py-2 text-sm" />
-
-            <div className="lg:col-span-6 flex flex-wrap gap-2">
-              <button type="submit" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Apply filters</button>
-              <Link href="/bookings/analytics" className="rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted">Reset</Link>
-            </div>
-          </form>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="Filtered bookings" value={summary.total_bookings} helper={`${summary.total_guests} total guests`} icon={Gauge} />
-          <StatCard title="Confirmed revenue" value={money(summary.confirmed_revenue)} helper={`Submitted: ${money(summary.submitted_revenue)}`} icon={CircleDollarSign} />
-          <StatCard title="Outstanding balance" value={money(summary.outstanding_balance)} helper={`${summary.half_paid_met} reached 50% threshold`} icon={Wallet} />
-          <StatCard title="Automation (7d)" value={summary.automation_events_7d} helper={`${summary.auto_declined_7d} auto-declined • ${summary.auto_deleted_7d} auto-deleted`} icon={Activity} />
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="24H due soon" value={summary.due_24h_soon} helper="Down payment nearing deadline" icon={AlertTriangle} />
-          <StatCard title="24H overdue" value={summary.due_24h_overdue} helper="50% not yet reached" icon={ShieldAlert} />
-          <StatCard title="48H due soon" value={summary.due_48h_soon} helper="Full payment nearing deadline" icon={CalendarDays} />
-          <StatCard title="48H overdue" value={summary.due_48h_overdue} helper={`${summary.fully_paid_met} already fully paid`} icon={ShieldAlert} />
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-2">
-          <div className="rounded-[1.8rem] border bg-card p-5 shadow-sm">
-            <div className="mb-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Trend</div>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Monthly booking and revenue trend</h2>
-            </div>
-            <div className="h-[340px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthlyTrend}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 12 }} allowDecimals={false} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Line yAxisId="left" type="monotone" dataKey="bookings" name="Bookings" stroke="#2563eb" strokeWidth={2.5} />
-                  <Line yAxisId="left" type="monotone" dataKey="guests" name="Guests" stroke="#0f766e" strokeWidth={2.5} />
-                  <Line yAxisId="right" type="monotone" dataKey="confirmed_revenue" name="Confirmed Revenue" stroke="#d97706" strokeWidth={2.5} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="grid gap-6">
-            <div className="rounded-[1.8rem] border bg-card p-5 shadow-sm">
-              <div className="mb-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Status Mix</div>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Booking status distribution</h2>
-              </div>
-              <div className="h-[240px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={statusBreakdown}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Bar dataKey="value" name="Bookings" fill="#2563eb" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="rounded-[1.8rem] border bg-card p-5 shadow-sm">
-              <div className="mb-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Payment Mix</div>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Payment status distribution</h2>
-              </div>
-              <div className="h-[260px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Tooltip />
-                    <Legend />
-                    <Pie data={paymentBreakdown} dataKey="value" nameKey="label" outerRadius={88} innerRadius={42} paddingAngle={4}>
-                      {paymentBreakdown.map((entry, index) => (
-                        <Cell key={`${entry.label}-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <div className="rounded-[1.8rem] border bg-card p-5 shadow-sm">
-            <div className="mb-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Service Demand</div>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Top-used services</h2>
-            </div>
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topServices} layout="vertical" margin={{ left: 24, right: 16 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" allowDecimals={false} />
-                  <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="usage_count" name="Usage Count" fill="#0f766e" radius={[0, 8, 8, 0]} />
-                  <Bar dataKey="revenue_total" name="Revenue" fill="#d97706" radius={[0, 8, 8, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="rounded-[1.8rem] border bg-card p-5 shadow-sm">
-            <div className="mb-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Upcoming Load</div>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Next 30 days workload</h2>
-            </div>
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={upcomingWorkload}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="bookings" name="Bookings" fill="#7c3aed" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="guests" name="Guests" fill="#0891b2" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-[1.8rem] border bg-card p-5 shadow-sm">
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Policy Watch</div>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Bookings that need quick admin attention</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                This list prioritizes bookings that are close to or past the 24-hour / 48-hour payment policy deadlines.
-              </p>
-            </div>
-            <Link href="/bookings/audit" className="inline-flex items-center rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted">
-              Open lifecycle audit
-            </Link>
-          </div>
-
-          <div className="mt-5 overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-y-3">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                  <th className="px-3">Booking</th>
-                  <th className="px-3">Schedule</th>
-                  <th className="px-3">Statuses</th>
-                  <th className="px-3">Amounts</th>
-                  <th className="px-3">Policy</th>
-                  <th className="px-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {highRiskBookings.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="rounded-2xl border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
-                      No high-risk bookings matched the current filters.
-                    </td>
-                  </tr>
-                ) : (
-                  highRiskBookings.map((booking) => (
-                    <tr key={booking.id} className="rounded-2xl border bg-background/70">
-                      <td className="rounded-l-2xl border-y border-l px-3 py-4 align-top">
-                        <div className="font-semibold">{booking.company_name || booking.client_name}</div>
-                        <div className="mt-1 text-sm text-muted-foreground">{booking.client_name}</div>
-                        <div className="mt-1 text-sm text-muted-foreground">{booking.type_of_event || '—'}</div>
-                        <div className="mt-2 text-xs text-muted-foreground">Created: {dt(booking.created_at)}</div>
-                      </td>
-                      <td className="border-y px-3 py-4 align-top text-sm">
-                        <div>{dt(booking.booking_date_from)}</div>
-                        <div className="mt-1 text-muted-foreground">to {dt(booking.booking_date_to)}</div>
-                        <div className="mt-2 text-muted-foreground">Guests: {booking.number_of_guests}</div>
-                      </td>
-                      <td className="border-y px-3 py-4 align-top">
-                        <div className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusTone(booking.booking_status)}`}>
-                          {booking.booking_status || 'unknown'}
-                        </div>
-                        <div className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusTone(booking.payment_status)}`}>
-                          {booking.payment_status || 'unknown'}
-                        </div>
-                      </td>
-                      <td className="border-y px-3 py-4 align-top text-sm">
-                        <div>Total: {money(booking.items_total)}</div>
-                        <div className="mt-1 text-muted-foreground">Submitted: {money(booking.submitted_total)}</div>
-                        <div className="mt-1 text-muted-foreground">Confirmed: {money(booking.confirmed_total)}</div>
-                        <div className="mt-2 font-semibold text-red-600">Outstanding: {money(booking.outstanding)}</div>
-                      </td>
-                      <td className="border-y px-3 py-4 align-top text-sm">
-                        <div className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${policyTone(booking.policy.state)}`}>
-                          {booking.policy.label}
-                        </div>
-                        <div className="mt-2 text-muted-foreground">50% target: {money(booking.policy.half_required)}</div>
-                        <div className="mt-1 text-muted-foreground">24H: {dt(booking.policy.down_payment_due_at)}</div>
-                        <div className="mt-1 text-muted-foreground">48H: {dt(booking.policy.full_payment_due_at)}</div>
-                      </td>
-                      <td className="rounded-r-2xl border-y border-r px-3 py-4 text-right align-top">
-                        <Link href={`/bookings/${booking.id}`} className="inline-flex rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-                          Open booking
+                    <div className="flex flex-wrap gap-2">
+                        <Link href={basePath} className="alh-secondary-button">
+                            Back to Bookings
                         </Link>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </AppLayout>
-  );
+
+                        <a href={exportHref} className="alh-secondary-button">
+                            <Download className="h-4 w-4" />
+                            Export CSV
+                        </a>
+
+                        <a
+                            href={printHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="alh-primary-button"
+                        >
+                            <FileText className="h-4 w-4" />
+                            Print Report
+                        </a>
+                    </div>
+                </section>
+
+                <section className="analytics-filter-panel">
+                    <form
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            applyFilters(new FormData(event.currentTarget));
+                        }}
+                        className="analytics-filter-grid"
+                    >
+                        <div className="relative lg:col-span-2">
+                            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                name="q"
+                                defaultValue={filters.q || ''}
+                                placeholder="Search client, company, email, event..."
+                                className="backend-booking-input pl-10"
+                            />
+                        </div>
+
+                        <select
+                            name="booking_status"
+                            defaultValue={filters.booking_status || ''}
+                            className="backend-booking-input"
+                        >
+                            <option value="">All booking statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="active">Active</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="completed">Completed</option>
+                            <option value="declined">Declined</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+
+                        <select
+                            name="payment_status"
+                            defaultValue={filters.payment_status || ''}
+                            className="backend-booking-input"
+                        >
+                            <option value="">All payment statuses</option>
+                            <option value="unpaid">Unpaid</option>
+                            <option value="partial">Partial</option>
+                            <option value="paid">Paid</option>
+                            <option value="owing">Owing</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="pending">Pending</option>
+                        </select>
+
+                        <select
+                            name="service_id"
+                            defaultValue={filters.service_id || ''}
+                            className="backend-booking-input"
+                        >
+                            <option value="">All venue/rental options</option>
+                            {services.map((service) => (
+                                <option key={service.id} value={service.id}>
+                                    {service.name}
+                                </option>
+                            ))}
+                        </select>
+
+                        <input
+                            name="date_from"
+                            type="date"
+                            defaultValue={filters.date_from || ''}
+                            className="backend-booking-input"
+                            aria-label="Date from"
+                        />
+
+                        <input
+                            name="date_to"
+                            type="date"
+                            defaultValue={filters.date_to || ''}
+                            className="backend-booking-input"
+                            aria-label="Date to"
+                        />
+
+                        <button
+                            type="submit"
+                            className="alh-primary-button justify-center"
+                        >
+                            Apply Filters
+                        </button>
+
+                        <Link
+                            href={analyticsPath}
+                            className="alh-secondary-button justify-center"
+                        >
+                            Reset
+                        </Link>
+                    </form>
+                </section>
+
+                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <StatCard
+                        label="Filtered Bookings"
+                        value={summary.total_bookings}
+                        helper={`${summary.total_guests} total guests in the filtered result set.`}
+                        icon={Gauge}
+                    />
+
+                    <StatCard
+                        label="Confirmed Revenue"
+                        value={money(summary.confirmed_revenue)}
+                        helper={`Submitted total: ${money(summary.submitted_revenue)}.`}
+                        icon={CircleDollarSign}
+                    />
+
+                    <StatCard
+                        label="Outstanding Balance"
+                        value={money(summary.outstanding_balance)}
+                        helper={`${summary.half_paid_met} records reached the 50% threshold.`}
+                        icon={Wallet}
+                    />
+
+                    <StatCard
+                        label="Automation 7 Days"
+                        value={summary.automation_events_7d}
+                        helper={`${summary.auto_declined_7d} auto-declined · ${summary.auto_deleted_7d} auto-deleted.`}
+                        icon={Activity}
+                    />
+                </section>
+
+                <section className="grid gap-5 xl:grid-cols-2">
+                    <div className="analytics-panel">
+                        <div className="analytics-panel-header">
+                            <div>
+                                <p className="backend-booking-label">
+                                    Status Mix
+                                </p>
+                                <h2>Booking status distribution</h2>
+                            </div>
+                            <PieChart className="h-5 w-5 text-slate-400" />
+                        </div>
+
+                        <div className="grid gap-3 p-5">
+                            {statusBreakdown.length > 0 ? (
+                                statusBreakdown.map((item) => (
+                                    <MiniBar
+                                        key={item.label}
+                                        label={cleanLabel(item.label)}
+                                        value={numberValue(item.value)}
+                                        max={maxStatus}
+                                    />
+                                ))
+                            ) : (
+                                <EmptyState
+                                    icon={PieChart}
+                                    title="No status data"
+                                    description="Booking status distribution will appear when data exists."
+                                />
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="analytics-panel">
+                        <div className="analytics-panel-header">
+                            <div>
+                                <p className="backend-booking-label">
+                                    Payment Mix
+                                </p>
+                                <h2>Payment status distribution</h2>
+                            </div>
+                            <CircleDollarSign className="h-5 w-5 text-slate-400" />
+                        </div>
+
+                        <div className="grid gap-3 p-5">
+                            {paymentBreakdown.length > 0 ? (
+                                paymentBreakdown.map((item) => (
+                                    <MiniBar
+                                        key={item.label}
+                                        label={cleanLabel(item.label)}
+                                        value={numberValue(item.value)}
+                                        max={maxPayment}
+                                    />
+                                ))
+                            ) : (
+                                <EmptyState
+                                    icon={CircleDollarSign}
+                                    title="No payment data"
+                                    description="Payment status distribution will appear when data exists."
+                                />
+                            )}
+                        </div>
+                    </div>
+                </section>
+
+                <section className="analytics-panel overflow-hidden">
+                    <div className="analytics-panel-header">
+                        <div>
+                            <p className="backend-booking-label">Trend</p>
+                            <h2>Monthly bookings and confirmed revenue</h2>
+                            <span>
+                                Two-bar rows show booking volume and confirmed
+                                revenue in the same period.
+                            </span>
+                        </div>
+                        <TrendingUp className="h-5 w-5 text-slate-400" />
+                    </div>
+
+                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {monthlyTrend.length > 0 ? (
+                            monthlyTrend.map((item) => (
+                                <RevenueBar
+                                    key={item.label}
+                                    label={item.label}
+                                    bookings={numberValue(item.bookings)}
+                                    guests={numberValue(item.guests)}
+                                    revenue={numberValue(
+                                        item.confirmed_revenue,
+                                    )}
+                                    maxBookings={maxMonthlyBookings}
+                                    maxRevenue={maxMonthlyRevenue}
+                                />
+                            ))
+                        ) : (
+                            <EmptyState
+                                icon={TrendingUp}
+                                title="No monthly trend yet"
+                                description="Monthly booking volume and revenue will appear here."
+                            />
+                        )}
+                    </div>
+                </section>
+
+                <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+                    <main className="analytics-panel overflow-hidden">
+                        <div className="analytics-panel-header">
+                            <div>
+                                <p className="backend-booking-label">
+                                    Service Demand
+                                </p>
+                                <h2>Top venue/rental options</h2>
+                            </div>
+                            <BarChart3 className="h-5 w-5 text-slate-400" />
+                        </div>
+
+                        <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                            {topServices.length > 0 ? (
+                                topServices.map((item) => (
+                                    <article
+                                        key={item.label}
+                                        className="analytics-service-row"
+                                    >
+                                        <div>
+                                            <h3>{item.label}</h3>
+                                            <p>
+                                                {item.usage_count} usage
+                                                {item.usage_count === 1
+                                                    ? ''
+                                                    : 's'}{' '}
+                                                · {money(item.revenue_total)}
+                                            </p>
+                                        </div>
+
+                                        <div className="analytics-mini-bar-track">
+                                            <div
+                                                style={{
+                                                    width: `${Math.max(
+                                                        4,
+                                                        Math.min(
+                                                            100,
+                                                            (numberValue(
+                                                                item.usage_count,
+                                                            ) /
+                                                                maxServiceUsage) *
+                                                                100,
+                                                        ),
+                                                    )}%`,
+                                                }}
+                                            />
+                                        </div>
+                                    </article>
+                                ))
+                            ) : (
+                                <EmptyState
+                                    icon={BarChart3}
+                                    title="No service demand data"
+                                    description="Top venue and rental option usage will appear here."
+                                />
+                            )}
+                        </div>
+                    </main>
+
+                    <aside className="analytics-panel overflow-hidden">
+                        <div className="analytics-panel-header">
+                            <div>
+                                <p className="backend-booking-label">
+                                    Upcoming
+                                </p>
+                                <h2>Workload forecast</h2>
+                            </div>
+                            <CalendarDays className="h-5 w-5 text-slate-400" />
+                        </div>
+
+                        <div className="grid gap-3 p-5">
+                            {upcomingWorkload.length > 0 ? (
+                                upcomingWorkload.map((item) => (
+                                    <MiniBar
+                                        key={item.label}
+                                        label={`${item.label} · ${item.guests} guests`}
+                                        value={numberValue(item.bookings)}
+                                        max={maxWorkload}
+                                    />
+                                ))
+                            ) : (
+                                <EmptyState
+                                    icon={CalendarDays}
+                                    title="No upcoming workload"
+                                    description="Upcoming booking workload will appear here."
+                                />
+                            )}
+                        </div>
+                    </aside>
+                </section>
+
+                <section className="analytics-panel overflow-hidden">
+                    <div className="analytics-panel-header">
+                        <div>
+                            <p className="backend-booking-label">Risk Queue</p>
+                            <h2>High-risk booking records</h2>
+                            <span>
+                                These are the bookings most likely to need
+                                payment follow-up or lifecycle review.
+                            </span>
+                        </div>
+                        <ShieldAlert className="h-5 w-5 text-slate-400" />
+                    </div>
+
+                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {highRiskBookings.length > 0 ? (
+                            highRiskBookings.map((booking) => (
+                                <article
+                                    key={booking.id}
+                                    className="analytics-risk-row"
+                                >
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap gap-2">
+                                            <span
+                                                className={`alh-status-chip ${policyTone(booking.policy?.state)}`}
+                                            >
+                                                {booking.policy?.label ||
+                                                    cleanLabel(
+                                                        booking.policy?.state ||
+                                                            'Watch',
+                                                    )}
+                                            </span>
+                                            <span className="booking-mini-pill">
+                                                {cleanLabel(
+                                                    booking.booking_status,
+                                                )}
+                                            </span>
+                                            <span className="booking-mini-pill">
+                                                {cleanLabel(
+                                                    booking.payment_status,
+                                                )}
+                                            </span>
+                                        </div>
+
+                                        <h3>
+                                            {booking.type_of_event ||
+                                                `Booking #${booking.id}`}
+                                        </h3>
+                                        <p>
+                                            {booking.company_name ||
+                                                booking.client_name ||
+                                                'Client'}{' '}
+                                            ·{' '}
+                                            {formatDateTime(
+                                                booking.booking_date_from,
+                                            )}
+                                        </p>
+
+                                        <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                                            <div className="alh-admin-mini-box">
+                                                <span>Total</span>
+                                                <strong>
+                                                    {money(booking.items_total)}
+                                                </strong>
+                                            </div>
+                                            <div className="alh-admin-mini-box">
+                                                <span>Submitted</span>
+                                                <strong>
+                                                    {money(
+                                                        booking.submitted_total,
+                                                    )}
+                                                </strong>
+                                            </div>
+                                            <div className="alh-admin-mini-box">
+                                                <span>Confirmed</span>
+                                                <strong>
+                                                    {money(
+                                                        booking.confirmed_total,
+                                                    )}
+                                                </strong>
+                                            </div>
+                                            <div className="alh-admin-mini-box">
+                                                <span>Outstanding</span>
+                                                <strong>
+                                                    {money(booking.outstanding)}
+                                                </strong>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <Link
+                                        href={`${basePath}/${booking.id}`}
+                                        className="alh-primary-button"
+                                    >
+                                        Open
+                                        <ArrowRight className="h-4 w-4" />
+                                    </Link>
+                                </article>
+                            ))
+                        ) : (
+                            <EmptyState
+                                icon={AlertTriangle}
+                                title="No high-risk bookings"
+                                description="Bookings with payment deadline risk will appear here."
+                            />
+                        )}
+                    </div>
+                </section>
+            </div>
+        </AppLayout>
+    );
 }

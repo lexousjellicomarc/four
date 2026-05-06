@@ -49,10 +49,12 @@ export default function SortOrderBoard({
     return (
         <article className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#16171b]">
             <div className="mb-4">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#174f40] dark:text-[#9dc0ff]">
+                <p className="text-xs font-black tracking-[0.16em] text-[#174f40] uppercase dark:text-[#9dc0ff]">
                     Display Order
                 </p>
-                <h3 className="mt-2 text-xl font-black tracking-tight">{title}</h3>
+                <h3 className="mt-2 text-xl font-black tracking-tight">
+                    {title}
+                </h3>
                 <p className="mt-2 text-sm leading-7 text-[#595651] dark:text-[#c8c8ce]">
                     {description}
                 </p>
@@ -71,7 +73,11 @@ export default function SortOrderBoard({
                                 return;
                             }
 
-                            const next = reorderList(localItems, dragIndex, index);
+                            const next = reorderList(
+                                localItems,
+                                dragIndex,
+                                index,
+                            );
                             setDragIndex(null);
                             await persist(next);
                         }}
@@ -82,7 +88,9 @@ export default function SortOrderBoard({
                         </div>
 
                         <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold">{item.title}</p>
+                            <p className="truncate text-sm font-bold">
+                                {item.title}
+                            </p>
                             {item.subtitle && (
                                 <p className="mt-1 truncate text-xs text-[#64615b] dark:text-[#bfbfc7]">
                                     {item.subtitle}
@@ -95,7 +103,11 @@ export default function SortOrderBoard({
                                 type="button"
                                 disabled={saving || index === 0}
                                 onClick={async () => {
-                                    const next = reorderList(localItems, index, index - 1);
+                                    const next = reorderList(
+                                        localItems,
+                                        index,
+                                        index - 1,
+                                    );
                                     await persist(next);
                                 }}
                                 className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 disabled:opacity-40 dark:border-white/10"
@@ -106,9 +118,15 @@ export default function SortOrderBoard({
 
                             <button
                                 type="button"
-                                disabled={saving || index === localItems.length - 1}
+                                disabled={
+                                    saving || index === localItems.length - 1
+                                }
                                 onClick={async () => {
-                                    const next = reorderList(localItems, index, index + 1);
+                                    const next = reorderList(
+                                        localItems,
+                                        index,
+                                        index + 1,
+                                    );
                                     await persist(next);
                                 }}
                                 className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 disabled:opacity-40 dark:border-white/10"
@@ -122,7 +140,9 @@ export default function SortOrderBoard({
             </div>
 
             <div className="mt-4 rounded-[1.2rem] bg-[#f7f2e8] px-4 py-3 text-sm text-[#5a5650] dark:bg-[#1d1e23] dark:text-[#c8c8ce]">
-                {saving ? 'Saving new display order...' : 'You can drag cards or use the arrow buttons to change order.'}
+                {saving
+                    ? 'Saving new display order...'
+                    : 'You can drag cards or use the arrow buttons to change order.'}
             </div>
         </article>
     );

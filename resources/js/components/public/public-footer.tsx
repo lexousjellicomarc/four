@@ -1,158 +1,88 @@
-import { Link } from '@inertiajs/react';
-import { ArrowUp, ArrowUpRight, Mail, MapPin, Phone } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import type { SiteSettings } from '@/layouts/public-layout';
+import { Link, usePage } from '@inertiajs/react';
 
-type Props = {
-  siteSettings?: SiteSettings;
+type PublicSiteSettings = {
+  logo_url?: string | null;
+  city_seal_url?: string | null;
+  philippines_seal_url?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
 };
 
-const footerNav = [
-  { label: 'Home', href: '/' },
-  { label: 'Facilities', href: '/facilities' },
-  { label: 'Events', href: '/events' },
-  { label: 'Calendar', href: '/calendar' },
-  { label: 'Tourism Office', href: '/tourism-office' },
-  { label: 'Contact', href: '/contact' },
-  { label: 'Guidelines', href: '/guidelines' },
-];
+type PageProps = {
+  siteSettings?: PublicSiteSettings;
+};
 
-export default function PublicFooter({ siteSettings }: Props) {
-  const [showTop, setShowTop] = useState(false);
+export default function PublicFooter() {
+  const { props } = usePage<PageProps>();
+  const settings = props.siteSettings || {};
 
-  useEffect(() => {
-    const handler = () => setShowTop(window.scrollY > 520);
-    handler();
-    window.addEventListener('scroll', handler);
-    return () => window.removeEventListener('scroll', handler);
-  }, []);
-
-  const openMapUrl = useMemo(
-    () =>
-      siteSettings?.openMapUrl ||
-      'https://www.google.com/maps/search/?api=1&query=CH3X%2BRRW%2C%20Baguio%2C%20Benguet%2C%20Philippines',
-    [siteSettings?.openMapUrl],
-  );
-
-  const visitaUrl = siteSettings?.visitaUrl || 'https://visita.baguio.gov.ph';
-  const artsUrl = siteSettings?.creativeBaguioUrl || 'https://creativecity.baguio.gov.ph';
+  const citySealUrl = settings.city_seal_url || settings.logo_url || '/images/baguio-city-seal.png';
+  const philippinesSealUrl = settings.philippines_seal_url || '/images/philippines-coat-of-arms.png';
 
   return (
-    <>
-      <footer className="w-full border-t border-black/5 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/60">
-        <div className="mx-auto w-full">
-          <div className="grid gap-8 border border-black/5 bg-white/80 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/5 lg:grid-cols-[1.15fr_0.85fr_0.85fr_0.9fr] lg:p-8">
-            <div className="space-y-4">
-              <img
-                src="/marketing/images/logo/lightlogo.png"
-                alt="BCCC EASE"
-                className="h-16 w-auto dark:hidden"
-              />
-              <img
-                src="/marketing/images/logo/darklogo.png"
-                alt="BCCC EASE"
-                className="hidden h-16 w-auto dark:block"
-              />
-              <p className="max-w-xl text-sm leading-7 text-slate-600 dark:text-slate-300">
-                {siteSettings?.footerDescription ||
-                  'BCCC EASE is the public information and venue guidance page for the Baguio Convention and Cultural Center.'}
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  href="/bookings/create"
-                  className="rounded-full bg-[#0f8b6d] px-5 py-3 text-sm font-extrabold uppercase tracking-[0.14em] text-white dark:bg-[#294CFF]"
-                >
-                  Book Your Event
-                </Link>
-                <Link
-                  href="/contact"
-                  className="rounded-full border border-black/10 px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] dark:border-white/10"
-                >
-                  Contact Us
-                </Link>
-              </div>
-            </div>
+    <footer className="bgo-reference-footer-wrap">
+      <div className="bgo-reference-footer">
+        <div className="bgo-reference-footer-grid">
+          <section className="bgo-reference-footer-emblem">
+            <img src={philippinesSealUrl} alt="Republic of the Philippines coat of arms" />
+          </section>
 
-            <div>
-              <div className="mb-4 text-sm font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-300">
-                Quick Links
-              </div>
-              <div className="grid gap-3 text-sm">
-                {footerNav.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="transition hover:text-[#0f8b6d] dark:hover:text-[#9cb6ff]"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
+          <section className="bgo-reference-footer-block">
+            <h3>Republic of the Philippines</h3>
+            <p>All content is in the public domain unless otherwise stated.</p>
+            <p>© {new Date().getFullYear()}. All rights reserved.</p>
+          </section>
 
-            <div>
-              <div className="mb-4 text-sm font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-300">
-                Baguio Links
-              </div>
-              <div className="grid gap-3 text-sm text-slate-600 dark:text-slate-300">
-                <a
-                  href={visitaUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 transition hover:text-[#0f8b6d] dark:hover:text-[#9cb6ff]"
-                >
-                  Visita Baguio
-                  <ArrowUpRight className="h-4 w-4" />
-                </a>
-                <a
-                  href={artsUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 transition hover:text-[#0f8b6d] dark:hover:text-[#9cb6ff]"
-                >
-                  Arts Website
-                  <ArrowUpRight className="h-4 w-4" />
-                </a>
-              </div>
-            </div>
+          <section className="bgo-reference-footer-block">
+            <h3>About GOVPH</h3>
+            <p>Learn more about the Philippine government, its structure, how government works and the people behind it.</p>
 
-            <div>
-              <div className="mb-4 text-sm font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-300">
-                Contact Details
-              </div>
-              <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300">
-                <a href={openMapUrl} target="_blank" rel="noreferrer" className="flex items-start gap-3">
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{siteSettings?.address || 'CH3X+RRW, Baguio, Benguet, Philippines'}</span>
-                </a>
-                <a href={`tel:${siteSettings?.phone || ''}`} className="flex items-center gap-3">
-                  <Phone className="h-4 w-4 shrink-0" />
-                  <span>{siteSettings?.phone || '(074) 446 2009'}</span>
-                </a>
-                <a href={`mailto:${siteSettings?.email || ''}`} className="flex items-center gap-3">
-                  <Mail className="h-4 w-4 shrink-0" />
-                  <span>{siteSettings?.email || 'info@bccc-ease.com'}</span>
-                </a>
-              </div>
+            <div className="bgo-reference-footer-links">
+              <a href="https://www.gov.ph/" target="_blank" rel="noreferrer">GOV.PH</a>
+              <a href="https://data.gov.ph/" target="_blank" rel="noreferrer">Open Data Portal</a>
+              <a href="https://www.officialgazette.gov.ph/" target="_blank" rel="noreferrer">Official Gazette</a>
             </div>
-          </div>
+          </section>
 
-          <div className="text-center text-sm text-slate-500 dark:text-slate-400">
-            {siteSettings?.footerCopyright || '© 2026 BCCC EASE • City Government of Baguio • All Rights Reserved'}
-          </div>
+          <section className="bgo-reference-footer-block">
+            <h3>Government Links</h3>
+
+            <div className="bgo-reference-footer-links">
+              <a href="https://op-proper.gov.ph/" target="_blank" rel="noreferrer">Office of the President</a>
+              <a href="https://ovp.gov.ph/" target="_blank" rel="noreferrer">Office of the Vice President</a>
+              <a href="https://legacy.senate.gov.ph/" target="_blank" rel="noreferrer">Senate of the Philippines</a>
+              <a href="https://www.congress.gov.ph/" target="_blank" rel="noreferrer">House of Representatives</a>
+              <a href="https://sc.judiciary.gov.ph/" target="_blank" rel="noreferrer">Supreme Court</a>
+              <a href="https://ca.judiciary.gov.ph/" target="_blank" rel="noreferrer">Court of Appeals</a>
+              <a href="https://sb.judiciary.gov.ph/" target="_blank" rel="noreferrer">Sandiganbayan</a>
+            </div>
+          </section>
+
+          <section className="bgo-reference-footer-block bgo-reference-footer-contact">
+            <h3>Contact Us</h3>
+            <p>Email: {settings.contact_email || 'pacd@baguio.gov.ph'}</p>
+            <p>Viber: {settings.contact_phone || '+63 945 823 7040'}</p>
+
+            <div className="bgo-reference-footer-quick">
+              <Link href="/contact">Contact BCCC</Link>
+              <Link href="/book">Book Your Event</Link>
+            </div>
+          </section>
+
+          <section className="bgo-reference-footer-city-seal">
+            <img src={citySealUrl} alt="City of Baguio official seal" />
+          </section>
         </div>
-      </footer>
 
-      {showTop && (
-        <button
-          type="button"
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="fixed bottom-6 right-6 z-[80] inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#0f8b6d] text-white shadow-xl transition hover:-translate-y-1 dark:bg-[#294CFF]"
-          aria-label="Scroll to top"
-        >
-          <ArrowUp className="h-5 w-5" />
-        </button>
-      )}
-    </>
+        <div className="bgo-reference-footer-divider" />
+
+        <div className="bgo-reference-footer-powered">
+          Powered by: City Mayor&apos;s Office-Management in Information and Technology Division
+        </div>
+
+        <div className="bgo-reference-footer-watermark one" aria-hidden="true" />
+        <div className="bgo-reference-footer-watermark two" aria-hidden="true" />
+      </div>
+    </footer>
   );
 }

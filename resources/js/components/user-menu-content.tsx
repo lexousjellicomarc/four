@@ -1,3 +1,4 @@
+import ConfirmActionDialog from '@/components/confirm-action-dialog';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -11,7 +12,6 @@ import { type User } from '@/types';
 import { Link, router } from '@inertiajs/react';
 import { LogOut, Settings } from 'lucide-react';
 import { useState } from 'react';
-import ConfirmActionDialog from '@/components/confirm-action-dialog';
 
 interface UserMenuContentProps {
     user: User;

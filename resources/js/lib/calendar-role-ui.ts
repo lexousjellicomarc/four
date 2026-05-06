@@ -3,308 +3,322 @@ import type { RoleKey } from '@/lib/role-workspaces';
 export type CalendarBlockKey = 'AM' | 'PM' | 'EVE';
 
 export type CalendarAvailabilityDay = {
-  AM?: boolean;
-  PM?: boolean;
-  EVE?: boolean;
-  is_fully_booked?: boolean;
-  day_status?: string;
+    AM?: boolean;
+    PM?: boolean;
+    EVE?: boolean;
+    is_fully_booked?: boolean;
+    day_status?: string;
 };
 
 export type CalendarEventItem = {
-  id: number | string;
-  kind?: 'booking' | 'block' | 'public_event' | string;
-  block_id?: number | string;
-  block?: string | null;
-  area?: string | null;
-  title: string;
-  start: string;
-  end: string;
-  status?: string | null;
-  public_status?: string | null;
-  groupKey?: string | null;
+    id: number | string;
+    kind?: 'booking' | 'block' | 'public_event' | string;
+    block_id?: number | string;
+    block?: string | null;
+    area?: string | null;
+    title: string;
+    start: string;
+    end: string;
+    status?: string | null;
+    public_status?: string | null;
+    groupKey?: string | null;
 };
 
 export type CalendarDayCell = {
-  date: Date;
-  key: string;
-  dayNumber: number;
-  isCurrentMonth: boolean;
-  isToday: boolean;
-  availability?: CalendarAvailabilityDay;
-  events: CalendarEventItem[];
+    date: Date;
+    key: string;
+    dayNumber: number;
+    isCurrentMonth: boolean;
+    isToday: boolean;
+    availability?: CalendarAvailabilityDay;
+    events: CalendarEventItem[];
 };
 
 export function normalizeCalendarRole(value?: string | null): RoleKey {
-  if (value === 'admin') return 'admin';
-  if (value === 'manager') return 'manager';
-  if (value === 'staff') return 'staff';
-  return 'user';
+    if (value === 'admin') return 'admin';
+    if (value === 'manager') return 'manager';
+    if (value === 'staff') return 'staff';
+    return 'user';
 }
 
 export function calendarRoleCopy(role: RoleKey) {
-  if (role === 'admin') {
-    return {
-      eyebrow: 'Executive Calendar Control',
-      title: 'Booking Calendar',
-      description:
-        'Full calendar workspace for bookings, public events, blocked dates, schedule review, and venue operations.',
-      primaryAction: 'Manage Calendar',
-      secondaryAction: 'Create Booking',
-      tertiaryAction: 'Calendar Analytics',
-      manageHref: '/admin/calendar/manage',
-      createHref: '/admin/bookings/create',
-      analyticsHref: '/admin/calendar/analytics',
-      bookingsHref: '/admin/bookings',
-    };
-  }
+    if (role === 'admin') {
+        return {
+            eyebrow: 'Executive Calendar Control',
+            title: 'Booking Calendar',
+            description:
+                'Full calendar workspace for bookings, public events, blocked dates, schedule review, and venue operations.',
+            primaryAction: 'Manage Calendar',
+            secondaryAction: 'Create Booking',
+            tertiaryAction: 'Calendar Analytics',
+            manageHref: '/admin/calendar/manage',
+            createHref: '/admin/bookings/create',
+            analyticsHref: '/admin/calendar/analytics',
+            bookingsHref: '/admin/bookings',
+        };
+    }
 
-  if (role === 'manager') {
-    return {
-      eyebrow: 'Management Calendar Review',
-      title: 'Calendar Monitoring',
-      description:
-        'Review venue usage, booking activity, payment-sensitive schedules, and calendar conflicts for operational decisions.',
-      primaryAction: 'Manage Calendar',
-      secondaryAction: 'Review Bookings',
-      tertiaryAction: 'Calendar Analytics',
-      manageHref: '/manager/calendar/manage',
-      createHref: '/manager/bookings',
-      analyticsHref: '/manager/calendar/analytics',
-      bookingsHref: '/manager/bookings',
-    };
-  }
+    if (role === 'manager') {
+        return {
+            eyebrow: 'Management Calendar Review',
+            title: 'Calendar Monitoring',
+            description:
+                'Review venue usage, booking activity, payment-sensitive schedules, and calendar conflicts for operational decisions.',
+            primaryAction: 'Manage Calendar',
+            secondaryAction: 'Review Bookings',
+            tertiaryAction: 'Calendar Analytics',
+            manageHref: '/manager/calendar/manage',
+            createHref: '/manager/bookings',
+            analyticsHref: '/manager/calendar/analytics',
+            bookingsHref: '/manager/bookings',
+        };
+    }
 
-  if (role === 'staff') {
-    return {
-      eyebrow: 'Daily Operations Calendar',
-      title: 'Staff Calendar',
-      description:
-        'Daily schedule workspace for checking venue availability, assisting bookings, and coordinating client requests.',
-      primaryAction: 'Booking Records',
-      secondaryAction: 'Assist Booking',
-      tertiaryAction: 'Public Website',
-      manageHref: '/staff/bookings',
-      createHref: '/staff/bookings/create',
-      analyticsHref: '/',
-      bookingsHref: '/staff/bookings',
-    };
-  }
+    if (role === 'staff') {
+        return {
+            eyebrow: 'Daily Operations Calendar',
+            title: 'Staff Calendar',
+            description:
+                'Daily schedule workspace for checking venue availability, assisting bookings, and coordinating client requests.',
+            primaryAction: 'Booking Records',
+            secondaryAction: 'Assist Booking',
+            tertiaryAction: 'Public Website',
+            manageHref: '/staff/bookings',
+            createHref: '/staff/bookings/create',
+            analyticsHref: '/',
+            bookingsHref: '/staff/bookings',
+        };
+    }
 
-  return {
-    eyebrow: 'Client Calendar',
-    title: 'My Calendar',
-    description:
-      'Client-facing calendar view for checking your booking requests and schedule references.',
-    primaryAction: 'My Bookings',
-    secondaryAction: 'Book Event',
-    tertiaryAction: 'Public Website',
-    manageHref: '/my-bookings',
-    createHref: '/book',
-    analyticsHref: '/',
-    bookingsHref: '/my-bookings',
-  };
+    return {
+        eyebrow: 'Client Calendar',
+        title: 'My Calendar',
+        description:
+            'Client-facing calendar view for checking your booking requests and schedule references.',
+        primaryAction: 'My Bookings',
+        secondaryAction: 'Book Event',
+        tertiaryAction: 'Public Website',
+        manageHref: '/my-bookings',
+        createHref: '/book',
+        analyticsHref: '/',
+        bookingsHref: '/my-bookings',
+    };
 }
 
 export function roleCalendarBasePath(role: RoleKey): string {
-  if (role === 'admin') return '/admin/calendar';
-  if (role === 'manager') return '/manager/calendar';
-  if (role === 'staff') return '/staff/calendar';
-  return '/my-dashboard';
+    if (role === 'admin') return '/admin/calendar';
+    if (role === 'manager') return '/manager/calendar';
+    if (role === 'staff') return '/staff/calendar';
+    return '/my-dashboard';
 }
 
-export function roleBookingShowPath(role: RoleKey, id: number | string): string {
-  if (role === 'admin') return `/admin/bookings/${id}`;
-  if (role === 'manager') return `/manager/bookings/${id}`;
-  if (role === 'staff') return `/staff/bookings/${id}`;
-  return `/my-bookings/${id}`;
+export function roleBookingShowPath(
+    role: RoleKey,
+    id: number | string,
+): string {
+    if (role === 'admin') return `/admin/bookings/${id}`;
+    if (role === 'manager') return `/manager/bookings/${id}`;
+    if (role === 'staff') return `/staff/bookings/${id}`;
+    return `/my-bookings/${id}`;
 }
 
 export function roleBookingCreatePath(role: RoleKey, dateKey?: string): string {
-  const query = dateKey ? `?date=${dateKey}&start=06:00&end=12:00` : '';
+    const query = dateKey ? `?date=${dateKey}&start=06:00&end=12:00` : '';
 
-  if (role === 'admin') return `/admin/bookings/create${query}`;
-  if (role === 'staff') return `/staff/bookings/create${query}`;
-  return `/book${query}`;
+    if (role === 'admin') return `/admin/bookings/create${query}`;
+    if (role === 'staff') return `/staff/bookings/create${query}`;
+    return `/book${query}`;
 }
 
-export function roleCalendarManagePath(role: RoleKey, dateKey?: string): string {
-  const query = dateKey ? `?date=${dateKey}` : '';
+export function roleCalendarManagePath(
+    role: RoleKey,
+    dateKey?: string,
+): string {
+    const query = dateKey ? `?date=${dateKey}` : '';
 
-  if (role === 'admin') return `/admin/calendar/manage${query}`;
-  if (role === 'manager') return `/manager/calendar/manage${query}`;
-  return roleCalendarBasePath(role);
+    if (role === 'admin') return `/admin/calendar/manage${query}`;
+    if (role === 'manager') return `/manager/calendar/manage${query}`;
+    return roleCalendarBasePath(role);
 }
 
 export function formatDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
 
-  return `${year}-${month}-${day}`;
+    return `${year}-${month}-${day}`;
 }
 
 export function parseMonth(month: string): Date {
-  if (/^\d{4}-\d{2}$/.test(month)) {
-    const [year, monthNumber] = month.split('-').map(Number);
-    return new Date(year, monthNumber - 1, 1);
-  }
+    if (/^\d{4}-\d{2}$/.test(month)) {
+        const [year, monthNumber] = month.split('-').map(Number);
+        return new Date(year, monthNumber - 1, 1);
+    }
 
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1);
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
 export function addMonths(date: Date, amount: number): Date {
-  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+    return new Date(date.getFullYear(), date.getMonth() + amount, 1);
 }
 
 export function monthLabel(month: string): string {
-  const date = parseMonth(month);
+    const date = parseMonth(month);
 
-  return date.toLocaleDateString('en-PH', {
-    month: 'long',
-    year: 'numeric',
-  });
+    return date.toLocaleDateString('en-PH', {
+        month: 'long',
+        year: 'numeric',
+    });
 }
 
 export function buildMonthGrid(
-  month: string,
-  availability: Record<string, CalendarAvailabilityDay>,
-  events: CalendarEventItem[],
+    month: string,
+    availability: Record<string, CalendarAvailabilityDay>,
+    events: CalendarEventItem[],
 ): CalendarDayCell[] {
-  const firstOfMonth = parseMonth(month);
-  const firstGridDate = new Date(firstOfMonth);
-  firstGridDate.setDate(firstGridDate.getDate() - firstGridDate.getDay());
+    const firstOfMonth = parseMonth(month);
+    const firstGridDate = new Date(firstOfMonth);
+    firstGridDate.setDate(firstGridDate.getDate() - firstGridDate.getDay());
 
-  const todayKey = formatDateKey(new Date());
-  const eventMap = buildEventMap(events);
+    const todayKey = formatDateKey(new Date());
+    const eventMap = buildEventMap(events);
 
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(firstGridDate);
-    date.setDate(firstGridDate.getDate() + index);
+    return Array.from({ length: 42 }, (_, index) => {
+        const date = new Date(firstGridDate);
+        date.setDate(firstGridDate.getDate() + index);
 
-    const key = formatDateKey(date);
+        const key = formatDateKey(date);
 
-    return {
-      date,
-      key,
-      dayNumber: date.getDate(),
-      isCurrentMonth: date.getMonth() === firstOfMonth.getMonth(),
-      isToday: key === todayKey,
-      availability: availability[key],
-      events: eventMap.get(key) ?? [],
-    };
-  });
+        return {
+            date,
+            key,
+            dayNumber: date.getDate(),
+            isCurrentMonth: date.getMonth() === firstOfMonth.getMonth(),
+            isToday: key === todayKey,
+            availability: availability[key],
+            events: eventMap.get(key) ?? [],
+        };
+    });
 }
 
-export function buildEventMap(events: CalendarEventItem[]): Map<string, CalendarEventItem[]> {
-  const map = new Map<string, CalendarEventItem[]>();
+export function buildEventMap(
+    events: CalendarEventItem[],
+): Map<string, CalendarEventItem[]> {
+    const map = new Map<string, CalendarEventItem[]>();
 
-  events.forEach((event) => {
-    const keys = eventDateKeys(event);
+    events.forEach((event) => {
+        const keys = eventDateKeys(event);
 
-    keys.forEach((key) => {
-      const list = map.get(key) ?? [];
-      list.push(event);
-      map.set(key, list);
+        keys.forEach((key) => {
+            const list = map.get(key) ?? [];
+            list.push(event);
+            map.set(key, list);
+        });
     });
-  });
 
-  return map;
+    return map;
 }
 
 export function eventDateKeys(event: CalendarEventItem): string[] {
-  const startKey = String(event.start || '').slice(0, 10);
-  const endKeyRaw = String(event.end || '').slice(0, 10);
-  const endTimeRaw = String(event.end || '').slice(11, 16);
+    const startKey = String(event.start || '').slice(0, 10);
+    const endKeyRaw = String(event.end || '').slice(0, 10);
+    const endTimeRaw = String(event.end || '').slice(11, 16);
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey)) {
-    return [];
-  }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey)) {
+        return [];
+    }
 
-  let start = parseDateKey(startKey);
-  let end = /^\d{4}-\d{2}-\d{2}$/.test(endKeyRaw)
-    ? parseDateKey(endKeyRaw)
-    : parseDateKey(startKey);
+    let start = parseDateKey(startKey);
+    let end = /^\d{4}-\d{2}-\d{2}$/.test(endKeyRaw)
+        ? parseDateKey(endKeyRaw)
+        : parseDateKey(startKey);
 
-  if (endTimeRaw === '00:00' && end.getTime() > start.getTime()) {
-    end = new Date(end);
-    end.setDate(end.getDate() - 1);
-  }
+    if (endTimeRaw === '00:00' && end.getTime() > start.getTime()) {
+        end = new Date(end);
+        end.setDate(end.getDate() - 1);
+    }
 
-  if (end.getTime() < start.getTime()) {
-    end = start;
-  }
+    if (end.getTime() < start.getTime()) {
+        end = start;
+    }
 
-  const keys: string[] = [];
-  const cursor = new Date(start);
+    const keys: string[] = [];
+    const cursor = new Date(start);
 
-  while (cursor.getTime() <= end.getTime()) {
-    keys.push(formatDateKey(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
+    while (cursor.getTime() <= end.getTime()) {
+        keys.push(formatDateKey(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+    }
 
-  return keys;
+    return keys;
 }
 
 export function parseDateKey(key: string): Date {
-  const [year, month, day] = key.split('-').map(Number);
-  return new Date(year, month - 1, day);
+    const [year, month, day] = key.split('-').map(Number);
+    return new Date(year, month - 1, day);
 }
 
 export function cleanCalendarLabel(value?: string | null): string {
-  return String(value || 'Not set')
-    .replace(/^PUBLIC:\s*/i, '')
-    .replace(/^BLOCK:\s*/i, '')
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    return String(value || 'Not set')
+        .replace(/^PUBLIC:\s*/i, '')
+        .replace(/^BLOCK:\s*/i, '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export function eventTone(event: CalendarEventItem): string {
-  const kind = String(event.kind || '').toLowerCase();
-  const status = String(event.status || '').toLowerCase();
+    const kind = String(event.kind || '').toLowerCase();
+    const status = String(event.status || '').toLowerCase();
 
-  if (kind === 'block' || status === 'blocked') {
-    return 'border-red-400/25 bg-red-400/10 text-red-100';
-  }
+    if (kind === 'block' || status === 'blocked') {
+        return 'border-red-400/25 bg-red-400/10 text-red-100';
+    }
 
-  if (kind === 'public_event' || status === 'public_booked') {
-    return 'border-sky-300/25 bg-sky-300/10 text-sky-100';
-  }
+    if (kind === 'public_event' || status === 'public_booked') {
+        return 'border-sky-300/25 bg-sky-300/10 text-sky-100';
+    }
 
-  if (status === 'confirmed' || status === 'active' || status === 'completed') {
-    return 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100';
-  }
+    if (
+        status === 'confirmed' ||
+        status === 'active' ||
+        status === 'completed'
+    ) {
+        return 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100';
+    }
 
-  if (status === 'private_booked') {
-    return 'border-amber-300/25 bg-amber-300/10 text-amber-100';
-  }
+    if (status === 'private_booked') {
+        return 'border-amber-300/25 bg-amber-300/10 text-amber-100';
+    }
 
-  return 'border-white/10 bg-white/10 text-current';
+    return 'border-white/10 bg-white/10 text-current';
 }
 
 export function availabilityTone(day?: CalendarAvailabilityDay): string {
-  if (!day) return 'border-white/10 bg-black/[0.08]';
+    if (!day) return 'border-white/10 bg-black/[0.08]';
 
-  if (day.is_fully_booked || day.day_status === 'fully_booked') {
-    return 'border-red-300/25 bg-red-400/10';
-  }
+    if (day.is_fully_booked || day.day_status === 'fully_booked') {
+        return 'border-red-300/25 bg-red-400/10';
+    }
 
-  if (day.day_status === 'partial' || day.day_status === 'partially_booked') {
-    return 'border-amber-300/25 bg-amber-400/10';
-  }
+    if (day.day_status === 'partial' || day.day_status === 'partially_booked') {
+        return 'border-amber-300/25 bg-amber-400/10';
+    }
 
-  return 'border-emerald-300/25 bg-emerald-400/10';
+    return 'border-emerald-300/25 bg-emerald-400/10';
 }
 
 export function availabilityLabel(day?: CalendarAvailabilityDay): string {
-  if (!day) return 'No data';
-  if (day.is_fully_booked || day.day_status === 'fully_booked') return 'Fully Booked';
-  if (day.day_status === 'partial' || day.day_status === 'partially_booked') return 'Partial';
-  return 'Available';
+    if (!day) return 'No data';
+    if (day.is_fully_booked || day.day_status === 'fully_booked')
+        return 'Fully Booked';
+    if (day.day_status === 'partial' || day.day_status === 'partially_booked')
+        return 'Partial';
+    return 'Available';
 }
 
 export function blockLabel(block: CalendarBlockKey): string {
-  if (block === 'AM') return 'AM';
-  if (block === 'PM') return 'PM';
-  return 'EVE';
+    if (block === 'AM') return 'AM';
+    if (block === 'PM') return 'PM';
+    return 'EVE';
 }

@@ -1,39 +1,35 @@
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, ShieldCheck } from 'lucide-react';
 
 type BookingFormLoadingLayerProps = {
-  visible: boolean;
-  label?: string;
-  sublabel?: string;
+    visible: boolean;
+    label?: string;
+    sublabel?: string;
 };
 
 export function BookingFormLoadingLayer({
-  visible,
-  label = 'Preparing your booking page',
-  sublabel = 'Please wait while the form updates.',
+    visible,
+    label = 'Loading reservation form',
+    sublabel = 'Please wait while the next booking section is prepared.',
 }: BookingFormLoadingLayerProps) {
-  return (
-    <div
-      className={`booking-form-loading-layer ${visible ? 'is-visible' : ''}`}
-      aria-hidden={!visible}
-    >
-      <div className="booking-form-loading-card">
-        <div className="booking-form-loading-orb">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
+    if (!visible) return null;
 
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-[#c9a96a]" />
-            <p className="truncate text-sm font-black tracking-[-0.02em]">
-              {label}
-            </p>
-          </div>
+    return (
+        <div className="booking-form-loading-layer">
+            <div className="booking-form-loading-card">
+                <div className="booking-form-loading-icon">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
 
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {sublabel}
-          </p>
+                <div className="min-w-0">
+                    <p className="backend-booking-label">BCCC EASE</p>
+                    <h3>{label}</h3>
+                    <span>{sublabel}</span>
+                </div>
+
+                <div className="booking-form-loading-seal">
+                    <ShieldCheck className="h-5 w-5" />
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }

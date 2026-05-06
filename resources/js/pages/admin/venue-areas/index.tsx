@@ -1,5 +1,3 @@
-import { VenueAreasPage } from '@/components/admin-resource/venue-areas-page';
+import { VenueAreasPage } from '@/components/admin-resource/system-setup-pages';
 
-export default function AdminVenueAreasIndex() {
-  return <VenueAreasPage />;
-} 
+export default VenueAreasPage;

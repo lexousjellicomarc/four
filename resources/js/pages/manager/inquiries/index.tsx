@@ -1,1 +1,3 @@
-export { default } from '../../admin/inquiries/index';
+import { InquiriesPage } from '@/components/admin-resource/inquiries-page';
+
+export default InquiriesPage;

@@ -1,5 +1,11 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { ArrowLeft, Building2, CalendarDays, ClipboardList, Save } from 'lucide-react';
+import {
+    ArrowLeft,
+    Building2,
+    CalendarDays,
+    ClipboardList,
+    Save,
+} from 'lucide-react';
 import type { FormEvent } from 'react';
 
 type RegistryFormMode = 'create' | 'edit';
@@ -97,7 +103,9 @@ export default function MiceRegistryForm({
         remarks: valueOf(record?.remarks),
     });
 
-    const pageTitle = title ?? (isEdit ? 'Edit MICE Registry Record' : 'Create MICE Registry Record');
+    const pageTitle =
+        title ??
+        (isEdit ? 'Edit MICE Registry Record' : 'Create MICE Registry Record');
 
     const finalSubmitUrl =
         submitUrl ??
@@ -128,7 +136,7 @@ export default function MiceRegistryForm({
                 <div className="mx-auto max-w-6xl">
                     <div className="mb-6 flex flex-col gap-4 rounded-[2rem] border border-[#dfd1bb] bg-white/90 p-5 shadow-[0_24px_80px_rgba(57,39,19,0.10)] backdrop-blur md:flex-row md:items-center md:justify-between">
                         <div>
-                            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#d4b27a]/50 bg-[#fff8ec] px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.24em] text-[#8b6634]">
+                            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#d4b27a]/50 bg-[#fff8ec] px-4 py-1.5 text-xs font-semibold tracking-[0.24em] text-[#8b6634] uppercase">
                                 <ClipboardList className="h-4 w-4" />
                                 MICE Report Registry
                             </div>
@@ -138,8 +146,9 @@ export default function MiceRegistryForm({
                             </h1>
 
                             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#735f46]">
-                                Encode and maintain official MICE-related event information for reporting,
-                                monitoring, and tourism documentation.
+                                Encode and maintain official MICE-related event
+                                information for reporting, monitoring, and
+                                tourism documentation.
                             </p>
                         </div>
 
@@ -152,44 +161,79 @@ export default function MiceRegistryForm({
                         </Link>
                     </div>
 
-                    <form onSubmit={submit} className="rounded-[2rem] border border-[#dfd1bb] bg-white p-5 shadow-[0_24px_80px_rgba(57,39,19,0.10)] md:p-8">
+                    <form
+                        onSubmit={submit}
+                        className="rounded-[2rem] border border-[#dfd1bb] bg-white p-5 shadow-[0_24px_80px_rgba(57,39,19,0.10)] md:p-8"
+                    >
                         <section className="mb-8">
                             <div className="mb-5 flex items-center gap-3 border-b border-[#eadfce] pb-4">
                                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f5ead8] text-[#8b6634]">
                                     <CalendarDays className="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h2 className="text-lg font-semibold text-[#2f2418]">Event Information</h2>
-                                    <p className="text-sm text-[#7a674f]">Basic details of the MICE activity.</p>
+                                    <h2 className="text-lg font-semibold text-[#2f2418]">
+                                        Event Information
+                                    </h2>
+                                    <p className="text-sm text-[#7a674f]">
+                                        Basic details of the MICE activity.
+                                    </p>
                                 </div>
                             </div>
 
                             <div className="grid gap-5 md:grid-cols-2">
-                                <Field label="Event Name" error={form.errors.event_name} required>
+                                <Field
+                                    label="Event Name"
+                                    error={form.errors.event_name}
+                                    required
+                                >
                                     <input
                                         value={form.data.event_name}
-                                        onChange={(event) => form.setData('event_name', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'event_name',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                         placeholder="Enter event name"
                                     />
                                 </Field>
 
-                                <Field label="Organizer Name" error={form.errors.organizer_name} required>
+                                <Field
+                                    label="Organizer Name"
+                                    error={form.errors.organizer_name}
+                                    required
+                                >
                                     <input
                                         value={form.data.organizer_name}
-                                        onChange={(event) => form.setData('organizer_name', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'organizer_name',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                         placeholder="Enter organizer name"
                                     />
                                 </Field>
 
-                                <Field label="Organization Type" error={form.errors.organization_type}>
+                                <Field
+                                    label="Organization Type"
+                                    error={form.errors.organization_type}
+                                >
                                     <select
                                         value={form.data.organization_type}
-                                        onChange={(event) => form.setData('organization_type', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'organization_type',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                     >
-                                        <option value="">Select organization type</option>
+                                        <option value="">
+                                            Select organization type
+                                        </option>
                                         {organizationTypes.map((item) => (
                                             <option key={item} value={item}>
                                                 {item}
@@ -198,13 +242,23 @@ export default function MiceRegistryForm({
                                     </select>
                                 </Field>
 
-                                <Field label="Event Type" error={form.errors.event_type}>
+                                <Field
+                                    label="Event Type"
+                                    error={form.errors.event_type}
+                                >
                                     <select
                                         value={form.data.event_type}
-                                        onChange={(event) => form.setData('event_type', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'event_type',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                     >
-                                        <option value="">Select event type</option>
+                                        <option value="">
+                                            Select event type
+                                        </option>
                                         {eventTypes.map((item) => (
                                             <option key={item} value={item}>
                                                 {item}
@@ -213,20 +267,38 @@ export default function MiceRegistryForm({
                                     </select>
                                 </Field>
 
-                                <Field label="Date From" error={form.errors.event_date_from} required>
+                                <Field
+                                    label="Date From"
+                                    error={form.errors.event_date_from}
+                                    required
+                                >
                                     <input
                                         type="date"
                                         value={form.data.event_date_from}
-                                        onChange={(event) => form.setData('event_date_from', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'event_date_from',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                     />
                                 </Field>
 
-                                <Field label="Date To" error={form.errors.event_date_to} required>
+                                <Field
+                                    label="Date To"
+                                    error={form.errors.event_date_to}
+                                    required
+                                >
                                     <input
                                         type="date"
                                         value={form.data.event_date_to}
-                                        onChange={(event) => form.setData('event_date_to', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'event_date_to',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                     />
                                 </Field>
@@ -234,7 +306,12 @@ export default function MiceRegistryForm({
                                 <Field label="Venue" error={form.errors.venue}>
                                     <input
                                         value={form.data.venue}
-                                        onChange={(event) => form.setData('venue', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'venue',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                         placeholder="Example: Baguio Convention and Cultural Center"
                                     />
@@ -248,52 +325,88 @@ export default function MiceRegistryForm({
                                     <Building2 className="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h2 className="text-lg font-semibold text-[#2f2418]">Participants and Revenue</h2>
-                                    <p className="text-sm text-[#7a674f]">Data used for MICE reporting summaries.</p>
+                                    <h2 className="text-lg font-semibold text-[#2f2418]">
+                                        Participants and Revenue
+                                    </h2>
+                                    <p className="text-sm text-[#7a674f]">
+                                        Data used for MICE reporting summaries.
+                                    </p>
                                 </div>
                             </div>
 
                             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-                                <Field label="Total Participants" error={form.errors.number_of_participants}>
+                                <Field
+                                    label="Total Participants"
+                                    error={form.errors.number_of_participants}
+                                >
                                     <input
                                         type="number"
                                         min="0"
                                         value={form.data.number_of_participants}
-                                        onChange={(event) => form.setData('number_of_participants', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'number_of_participants',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                         placeholder="0"
                                     />
                                 </Field>
 
-                                <Field label="Local Participants" error={form.errors.local_participants}>
+                                <Field
+                                    label="Local Participants"
+                                    error={form.errors.local_participants}
+                                >
                                     <input
                                         type="number"
                                         min="0"
                                         value={form.data.local_participants}
-                                        onChange={(event) => form.setData('local_participants', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'local_participants',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                         placeholder="0"
                                     />
                                 </Field>
 
-                                <Field label="Foreign Participants" error={form.errors.foreign_participants}>
+                                <Field
+                                    label="Foreign Participants"
+                                    error={form.errors.foreign_participants}
+                                >
                                     <input
                                         type="number"
                                         min="0"
                                         value={form.data.foreign_participants}
-                                        onChange={(event) => form.setData('foreign_participants', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'foreign_participants',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                         placeholder="0"
                                     />
                                 </Field>
 
-                                <Field label="Revenue Generated" error={form.errors.revenue_generated}>
+                                <Field
+                                    label="Revenue Generated"
+                                    error={form.errors.revenue_generated}
+                                >
                                     <input
                                         type="number"
                                         min="0"
                                         step="0.01"
                                         value={form.data.revenue_generated}
-                                        onChange={(event) => form.setData('revenue_generated', event.target.value)}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'revenue_generated',
+                                                event.target.value,
+                                            )
+                                        }
                                         className="form-input"
                                         placeholder="0.00"
                                     />
@@ -305,7 +418,12 @@ export default function MiceRegistryForm({
                             <Field label="Remarks" error={form.errors.remarks}>
                                 <textarea
                                     value={form.data.remarks}
-                                    onChange={(event) => form.setData('remarks', event.target.value)}
+                                    onChange={(event) =>
+                                        form.setData(
+                                            'remarks',
+                                            event.target.value,
+                                        )
+                                    }
                                     className="form-input min-h-32 resize-y"
                                     placeholder="Write additional notes, source remarks, or reporting observations..."
                                 />
@@ -326,7 +444,11 @@ export default function MiceRegistryForm({
                                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#7c5428] px-6 py-3 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(124,84,40,0.28)] transition hover:-translate-y-0.5 hover:bg-[#5f3e1d] disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Save className="h-4 w-4" />
-                                {form.processing ? 'Saving...' : isEdit ? 'Update Record' : 'Save Record'}
+                                {form.processing
+                                    ? 'Saving...'
+                                    : isEdit
+                                      ? 'Update Record'
+                                      : 'Save Record'}
                             </button>
                         </div>
                     </form>
@@ -380,7 +502,11 @@ function Field({
 
             {children}
 
-            {error && <span className="mt-2 block text-xs font-medium text-red-600">{error}</span>}
+            {error && (
+                <span className="mt-2 block text-xs font-medium text-red-600">
+                    {error}
+                </span>
+            )}
         </label>
     );
 }

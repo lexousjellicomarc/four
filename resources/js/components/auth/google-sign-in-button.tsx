@@ -21,11 +21,7 @@ export default function GoogleSignInButton({
                 window.location.href = href;
             }}
         >
-            <svg
-                aria-hidden="true"
-                className="h-5 w-5"
-                viewBox="0 0 24 24"
-            >
+            <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24">
                 <path
                     fill="#4285F4"
                     d="M21.805 10.023h-9.18v3.955h5.262c-.227 1.272-.95 2.35-2.033 3.072v2.548h3.287c1.925-1.773 3.039-4.386 3.039-7.51 0-.69-.062-1.351-.175-1.988Z"

@@ -1,6 +1,6 @@
-import { useForm } from '@inertiajs/react';
-import type { Service } from '@/types';
 import ConfirmActionDialog from '@/components/confirm-action-dialog';
+import type { Service } from '@/types';
+import { useForm } from '@inertiajs/react';
 
 interface DeleteServiceDialogProps {
     open: boolean;

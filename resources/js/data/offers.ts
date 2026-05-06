@@ -23,7 +23,8 @@ export const offers: OfferItem[] = [
     },
     {
         title: 'Exhibit Package',
-        subtitle: 'For showcase booths, public displays, and gallery-style activations.',
+        subtitle:
+            'For showcase booths, public displays, and gallery-style activations.',
         description:
             'Designed for product exhibits, cultural showcases, and public-facing installations requiring flexible layout.',
         image: '/marketing/images/offers/exhibit-package.jpg',
@@ -45,7 +46,8 @@ export const offers: OfferItem[] = [
     },
     {
         title: 'Cultural Program Package',
-        subtitle: 'For performances, heritage nights, and audience-centered cultural features.',
+        subtitle:
+            'For performances, heritage nights, and audience-centered cultural features.',
         description:
             'A good fit for public cultural showcases, performance support, and community-oriented venue programming.',
         image: '/marketing/images/offers/exhibit-package.jpg',

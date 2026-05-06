@@ -1,6 +1,4 @@
 import { BookingRolePageShell } from '@/components/bookings/booking-role-page-shell';
-import { BookingStatusBadge } from '@/components/bookings/booking-status-badge';
-import { OfficialReservationPreview } from '@/components/bookings/official-reservation-preview';
 import {
   BCCC_BOOKING_GENERAL_GUIDELINES,
   BOOKING_USAGE_LABELS,
@@ -15,19 +13,8 @@ import {
   bookingBasePath,
   bookingShowPath,
   normalizeWorkspaceRole,
-  type BookingLike,
 } from '@/lib/booking-role-ui';
-import { type RoleThemeKey } from '@/lib/role-theme';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
+import type { RoleThemeKey } from '@/lib/role-theme';
 import { Link, useForm, usePage } from '@inertiajs/react';
 import {
   AlertTriangle,
@@ -41,8 +28,7 @@ import {
   Eye,
   EyeOff,
   FileText,
-  ImageIcon,
-  Loader2,
+  LoaderCircle,
   MapPin,
   PackageCheck,
   Pencil,
@@ -56,16 +42,14 @@ import {
   X,
 } from 'lucide-react';
 import {
-  FormEvent,
-  ReactNode,
+  type FormEvent,
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 
-import { BookingFormLoadingLayer } from '@/components/bookings/booking-form-loading-layer';
-import { useBookingScrollMotion } from '@/hooks/use-booking-scroll-motion';
 type ServiceOption = {
   id: number | string;
   name: string;
@@ -93,11 +77,21 @@ type InitialSchedule = {
   date?: string | null;
   start_time?: string | null;
   end_time?: string | null;
+
+  date_from?: string | null;
+  date_to?: string | null;
+  booking_date_from?: string | null;
+  booking_date_to?: string | null;
+
+  from?: string | null;
+  to?: string | null;
 };
+
+type BookingRecord = Record<string, any>;
 
 type BookingFormPageProps = {
   workspaceRole?: string;
-  booking?: BookingLike;
+  booking?: BookingRecord;
   serviceTypes?: ServiceTypeOption[] | PaginatedLike<ServiceTypeOption>;
   services?: ServiceOption[] | PaginatedLike<ServiceOption>;
   initialSchedule?: InitialSchedule;
@@ -108,7 +102,6 @@ type BookingFormPageProps = {
 
 type BookingFormData = {
   service_id: string;
-
   organization_type: string;
   company_name: string;
   client_name: string;
@@ -125,6 +118,7 @@ type BookingFormData = {
 
   head_of_organization: string;
   type_of_event: string;
+
   booking_date_from: string;
   booking_date_to: string;
   number_of_guests: string;
@@ -153,10 +147,12 @@ type StepDefinition = {
   icon: typeof PackageCheck;
 };
 
+type FieldName = keyof BookingFormData;
+
 const BOOKING_STEPS: StepDefinition[] = [
   {
     title: 'Package',
-    subtitle: 'Area, usage, and rate',
+    subtitle: 'Venue and rate',
     icon: PackageCheck,
   },
   {
@@ -166,12 +162,12 @@ const BOOKING_STEPS: StepDefinition[] = [
   },
   {
     title: 'Address',
-    subtitle: 'Organizer location',
+    subtitle: 'Client location',
     icon: MapPin,
   },
   {
     title: 'Schedule',
-    subtitle: 'Date, guests, charges',
+    subtitle: 'Date and guests',
     icon: CalendarDays,
   },
   {
@@ -185,6 +181,52 @@ const BOOKING_STEPS: StepDefinition[] = [
     icon: CheckCircle2,
   },
 ];
+
+const ORGANIZATION_TYPES = [
+  'Private',
+  'Government',
+  'NGO',
+  'Academe',
+  'Religious',
+  'Corporate',
+  'Others',
+];
+
+const EVENT_TYPE_OPTIONS = [
+  'Conference',
+  'Convention',
+  'Summit',
+  'Seminar',
+  'Workshop',
+  'Training',
+  'Meeting',
+  'Board Meeting',
+  'General Assembly',
+  'Government Program',
+  'Public Forum',
+  'Press Conference',
+  'Exhibit',
+  'Expo',
+  'Trade Fair',
+  'Corporate Event',
+  'Cultural Program',
+  'Concert',
+  'Awards Night',
+  'Graduation',
+  'Recognition Program',
+  'Wedding Reception',
+  'Private Event',
+];
+
+const PH_DEFAULTS = {
+  region: 'CAR',
+  province: 'Benguet',
+  city: 'Baguio City',
+};
+
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(' ');
+}
 
 function collection<T>(value?: T[] | PaginatedLike<T>): T[] {
   if (Array.isArray(value)) return value;
@@ -214,6 +256,15 @@ function money(value: unknown): string {
   }).format(number);
 }
 
+function normalizeSearch(value?: string | null): string {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/gallery\s*2600/g, 'gallery2600')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 function toInputDateTime(value?: string | null): string {
   if (!value) return '';
 
@@ -239,13 +290,39 @@ function buildInitialDateTime(
   fallback?: string | null,
   part?: 'from' | 'to',
 ): string {
-  if (fallback) return toInputDateTime(fallback);
+  if (fallback) {
+    return toInputDateTime(fallback);
+  }
 
-  if (schedule?.date && schedule?.start_time && part === 'from') {
+  if (!schedule) {
+    return '';
+  }
+
+  const exactFrom = firstValue(
+    schedule.booking_date_from,
+    schedule.date_from,
+    schedule.from,
+  );
+
+  const exactTo = firstValue(
+    schedule.booking_date_to,
+    schedule.date_to,
+    schedule.to,
+  );
+
+  if (part === 'from' && exactFrom) {
+    return toInputDateTime(exactFrom);
+  }
+
+  if (part === 'to' && exactTo) {
+    return toInputDateTime(exactTo);
+  }
+
+  if (schedule.date && schedule.start_time && part === 'from') {
     return `${schedule.date}T${schedule.start_time}`;
   }
 
-  if (schedule?.date && schedule?.end_time && part === 'to') {
+  if (schedule.date && schedule.end_time && part === 'to') {
     return `${schedule.date}T${schedule.end_time}`;
   }
 
@@ -281,8 +358,16 @@ function flattenServices(
   });
 }
 
+function serviceTypeNameForService(service: ServiceOption): string {
+  return firstValue(service.service_type_name, service.service_type?.name);
+}
+
 function serviceSearchName(service: ServiceOption): string {
-  return [service.name, service.service_type_name, service.service_type?.name]
+  return [
+    service.name,
+    service.service_type_name,
+    service.service_type?.name,
+  ]
     .filter(Boolean)
     .join(' ');
 }
@@ -306,20 +391,38 @@ function matchCatalogWithServices(services: ServiceOption[]): MatchedVenueItem[]
   });
 }
 
-function formTitle(role: RoleThemeKey, editing: boolean): string {
-  if (role === 'admin') return editing ? 'Edit Reservation' : 'Create Reservation';
-  if (role === 'manager') return 'Review Reservation';
-  if (role === 'staff') return editing ? 'Update Assisted Booking' : 'Assist Booking';
+function matchInitialServiceId(
+  booking: BookingRecord | undefined,
+  initialVenue: string | null | undefined,
+  services: ServiceOption[],
+): string {
+  const direct = firstValue(booking?.service_id, booking?.service?.id);
 
-  return editing ? 'Update Your Event Request' : 'Reserve Your Event Space';
-}
-
-function formDescription(role: RoleThemeKey): string {
-  if (role === 'user') {
-    return 'Complete the reservation form one page at a time, review the details, then submit your booking request.';
+  if (direct) {
+    return direct;
   }
 
-  return 'Create or update a reservation using the official BCCC booking structure, charges, guidelines, and backend requirements.';
+  const needle = normalizeSearch(initialVenue);
+
+  if (!needle) {
+    return '';
+  }
+
+  const matched = services.find((service) => {
+    const haystack = normalizeSearch(
+      [
+        service.name,
+        serviceTypeNameForService(service),
+        service.service_type?.name,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    );
+
+    return haystack.includes(needle) || needle.includes(haystack);
+  });
+
+  return matched?.id ? String(matched.id) : '';
 }
 
 function combinedAddress(data: BookingFormData): string {
@@ -335,80 +438,148 @@ function combinedAddress(data: BookingFormData): string {
     .join(', ');
 }
 
-function easeOutQuint(t: number): number {
-  return 1 - Math.pow(1 - t, 5);
+function formTitle(role: RoleThemeKey, editing: boolean): string {
+  if (role === 'admin') return editing ? 'Edit Reservation' : 'Create Reservation';
+  if (role === 'manager') return 'Review Reservation';
+  if (role === 'staff') return editing ? 'Update Assisted Booking' : 'Assist Booking';
+
+  return editing ? 'Update Your Event Request' : 'Reserve Your Event Space';
 }
 
-function smoothScrollElementTo(
-  element: HTMLElement,
-  targetLeft: number,
-  duration = 850,
-) {
-  const startLeft = element.scrollLeft;
-  const distance = targetLeft - startLeft;
-  const startTime = performance.now();
-
-  function frame(now: number) {
-    const elapsed = now - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const eased = easeOutQuint(progress);
-
-    element.scrollLeft = startLeft + distance * eased;
-
-    if (progress < 1) {
-      requestAnimationFrame(frame);
-    }
+function formDescription(role: RoleThemeKey): string {
+  if (role === 'user') {
+    return 'Complete each page slowly, review the summary, then submit your event request for BCCC assessment.';
   }
 
-  requestAnimationFrame(frame);
+  return 'Create or update a reservation using the official BCCC booking fields, rules, schedule, and payment workflow.';
 }
 
-function scrollStageToStart() {
-  const stage = document.querySelector('.booking-wizard-stage');
+function formatDateTime(value?: string | null): string {
+  if (!value) return 'Not set';
 
-  if (stage) {
-    stage.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function dateOnlyFromDateTime(value?: string | null): string {
+  return value && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : '';
+}
+
+function rangeHours(from?: string | null, to?: string | null): number {
+  if (!from || !to) return 0;
+
+  const start = Date.parse(from);
+  const end = Date.parse(to);
+
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return 0;
   }
+
+  return Math.round(((end - start) / 36_000) / 10);
+}
+
+function fieldStatusClass(error?: string): string {
+  return error
+    ? 'border-rose-300/70 bg-rose-50 text-rose-900 placeholder:text-rose-300 focus:border-rose-500 dark:border-rose-400/50 dark:bg-rose-500/10 dark:text-white'
+    : 'border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] text-[var(--bccc-backend-text)] focus:border-[var(--bccc-backend-gold-line)]';
+}
+
+function StepIcon({
+  icon: Icon,
+  done,
+  current,
+}: {
+  icon: typeof PackageCheck;
+  done: boolean;
+  current: boolean;
+}) {
+  if (done) {
+    return <Check className="h-4 w-4" />;
+  }
+
+  return <Icon className={cx('h-4 w-4', current && 'text-[var(--bccc-backend-gold)]')} />;
 }
 
 function Field({
   label,
   required,
   error,
+  helper,
   children,
 }: {
   label: string;
   required?: boolean;
   error?: string;
+  helper?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <label className="booking-wizard-field">
-      <span className="backend-booking-label">
+    <label className="booking-lux-field">
+      <span className="booking-lux-field-label">
         {label}
-        {required ? <span className="ml-1 text-red-500">*</span> : null}
+        {required ? <strong>*</strong> : null}
       </span>
 
       {children}
 
-      {error ? <span className="text-xs font-semibold text-red-500">{error}</span> : null}
+      {helper && !error ? (
+        <span className="booking-lux-field-helper">{helper}</span>
+      ) : null}
+
+      {error ? (
+        <span className="booking-lux-field-error">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {error}
+        </span>
+      ) : null}
     </label>
   );
 }
 
-function WizardNotice({ errors }: { errors: Record<string, string> }) {
-  const values = Object.values(errors);
+function ServerErrorsBanner({ errors }: { errors: Record<string, string> }) {
+  const values = Object.values(errors).filter(Boolean);
 
   if (values.length === 0) return null;
 
   return (
-    <div className="booking-wizard-notice">
-      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+    <div className="booking-lux-error-banner">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-1 h-5 w-5 shrink-0" />
+        <div>
+          <p className="font-semibold">Please review the highlighted fields.</p>
+          <ul className="mt-2 space-y-1 text-sm leading-6">
+            {values.slice(0, 5).map((error) => (
+              <li key={error}>• {error}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WizardNotice({ errors }: { errors: Record<string, string> }) {
+  const values = Object.values(errors).filter(Boolean);
+
+  if (values.length === 0) return null;
+
+  return (
+    <div className="booking-step-warning">
+      <AlertTriangle className="h-5 w-5 shrink-0" />
       <div>
-        <p className="font-black">Complete this page first.</p>
-        <ul className="mt-1 list-inside list-disc space-y-0.5 text-xs">
+        <p className="font-semibold">Complete this page first.</p>
+        <ul className="mt-2 space-y-1 text-sm leading-6">
           {values.map((error) => (
-            <li key={error}>{error}</li>
+            <li key={error}>• {error}</li>
           ))}
         </ul>
       </div>
@@ -426,39 +597,42 @@ function VenueImage({
   const [failed, setFailed] = useState(false);
 
   return (
-    <div className={`booking-hotel-card-image ${item.fallbackClass}`}>
-      {!failed ? (
+    <div className="booking-venue-image">
+      {!failed && item.image ? (
         <img
           src={item.image}
-          alt={item.displayLabel}
+          alt={item.displayLabel || item.label}
           onError={() => setFailed(true)}
-          className="h-full w-full object-cover brightness-[0.54] saturate-[0.95] transition duration-700 group-hover:scale-[1.04]"
+          className="h-full w-full object-cover brightness-[0.58] saturate-[0.95] transition duration-700 group-hover:scale-[1.04]"
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <ImageIcon className="h-12 w-12 text-white/35" />
+        <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_30%_15%,rgba(169,132,67,0.30),transparent_35%),linear-gradient(135deg,#15382f,#070b08)]">
+          <Sparkles className="h-12 w-12 text-[#f1d69d]/80" />
         </div>
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/5" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/78 via-black/28 to-transparent" />
 
-      <div className="booking-hotel-card-badges">
-        <span>{item.category === 'package' ? 'Complete Package' : 'Individual Space'}</span>
-        <span>{item.capacity}</span>
+      <div className="absolute inset-x-0 bottom-0 p-5 text-white">
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#f1d69d]">
+          {item.category === 'package' ? 'Complete Package' : 'Individual Space'}
+          {item.capacity ? ` · ${item.capacity}` : ''}
+        </p>
+
+        <h3 className="mt-2 text-2xl font-semibold tracking-[-0.055em]">
+          {item.displayLabel || item.label}
+        </h3>
+
+        <p className="mt-2 line-clamp-2 text-sm leading-6 text-white/72">
+          {item.subtitle}
+        </p>
       </div>
 
-      <div
-        className={`booking-hotel-selected-mark ${
-          selected ? 'is-selected' : ''
-        }`}
-      >
-        {selected ? <Check className="h-4 w-4" /> : null}
-      </div>
-
-      <div className="booking-hotel-image-caption">
-        <p>{item.subtitle}</p>
-        <h3>{item.displayLabel}</h3>
-      </div>
+      {selected ? (
+        <div className="absolute right-4 top-4 border border-[#d7b46a]/60 bg-[#d7b46a]/18 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#f9e3ad]">
+          Selected
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -473,97 +647,85 @@ function VenueCard({
   onSelect: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <article
       data-venue-key={item.key}
-      onClick={onSelect}
-      disabled={!item.configured}
-      className={`booking-hotel-card group ${selected ? 'is-selected' : ''} ${
-        !item.configured ? 'is-disabled' : ''
-      }`}
+      className={cx(
+        'booking-venue-card group',
+        selected && 'is-selected',
+        !item.configured && 'is-disabled',
+      )}
     >
       <VenueImage item={item} selected={selected} />
 
-      <div className="booking-hotel-card-body">
-        <div className="booking-hotel-card-title-row">
-          <div className="min-w-0">
-            <p className="backend-booking-label">
+      <div className="grid gap-4 p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--bccc-backend-gold)]">
               {item.category === 'package' ? 'Flagship reservation' : 'Venue selection'}
             </p>
 
-            <h4>{item.label}</h4>
+            <h4 className="mt-2 text-2xl font-semibold tracking-[-0.055em] text-[var(--bccc-backend-text)]">
+              {item.label}
+            </h4>
           </div>
 
-          <Badge
-            variant="outline"
-            className={
+          <span
+            className={cx(
+              'border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]',
               item.configured
-                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200'
-                : 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-200'
-            }
+                ? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200'
+                : 'border-rose-300/40 bg-rose-400/10 text-rose-700 dark:text-rose-200',
+            )}
           >
             {item.configured ? 'Ready' : 'Missing'}
-          </Badge>
+          </span>
         </div>
 
-        <p className="booking-hotel-card-description">
+        <p className="min-h-[4.5rem] text-sm leading-7 text-[var(--bccc-backend-muted)]">
           {item.longDescription || item.description}
         </p>
 
-        <div className="booking-hotel-rate-grid">
-          <div>
+        <div className="grid gap-2 text-sm">
+          <div className="booking-rate-line">
             <span>Whole Day</span>
             <strong>{money(item.rates.whole_day)}</strong>
           </div>
-          <div>
+
+          <div className="booking-rate-line">
             <span>Half Day</span>
             <strong>{money(item.rates.half_day)}</strong>
           </div>
-          <div>
+
+          <div className="booking-rate-line">
             <span>Extra Hour</span>
             <strong>{money(item.rates.additional_hour)}</strong>
           </div>
         </div>
 
-        <div className="booking-hotel-selected-details">
-          <div>
-            <p className="backend-booking-label">Included</p>
-            <div className="booking-hotel-pill-grid">
-              {item.includes.map((included) => (
-                <span key={included}>
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  {included}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="backend-booking-label">Highlights</p>
-            <div className="booking-hotel-pill-grid">
-              {item.amenities.slice(0, 6).map((amenity) => (
-                <span key={amenity}>
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {amenity}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="backend-booking-label">Ideal For</p>
-            <div className="booking-hotel-pill-grid">
-              {item.idealFor.slice(0, 5).map((ideal) => (
-                <span key={ideal}>
-                  <Star className="h-3.5 w-3.5" />
-                  {ideal}
-                </span>
-              ))}
-            </div>
+        <div>
+          <p className="booking-mini-heading">Included</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {item.includes.slice(0, 6).map((included) => (
+              <span key={included} className="booking-chip">
+                {included}
+              </span>
+            ))}
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={onSelect}
+          disabled={!item.configured}
+          className={cx(
+            'booking-venue-select-btn',
+            selected && 'is-selected',
+          )}
+        >
+          {selected ? 'Selected Package' : item.configured ? 'Choose Package' : 'Backend Option Missing'}
+        </button>
       </div>
-    </button>
+    </article>
   );
 }
 
@@ -577,7 +739,7 @@ function Stepper({
   onStepClick: (index: number) => void;
 }) {
   return (
-    <div className="booking-wizard-top-steps">
+    <nav className="booking-stepper" aria-label="Booking form steps">
       {BOOKING_STEPS.map((step, index) => {
         const Icon = step.icon;
         const current = index === activeStep;
@@ -590,22 +752,24 @@ function Stepper({
             type="button"
             disabled={!unlocked}
             onClick={() => onStepClick(index)}
-            className={`booking-wizard-step-pill ${current ? 'is-current' : ''} ${
-              done ? 'is-done' : ''
-            }`}
+            className={cx(
+              'booking-wizard-step-pill',
+              current && 'is-current',
+              done && 'is-done',
+            )}
           >
-            <span className="booking-wizard-step-icon">
-              {done ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+            <span className="booking-step-icon">
+              <StepIcon icon={Icon} done={done} current={current} />
             </span>
 
-            <span className="hidden min-w-0 text-left lg:block">
-              <span className="block truncate text-xs font-black">{step.title}</span>
-              <span className="block truncate text-[10px] text-muted-foreground">{step.subtitle}</span>
+            <span className="min-w-0">
+              <span className="block truncate">{step.title}</span>
+              <small className="block truncate">{step.subtitle}</small>
             </span>
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }
 
@@ -621,23 +785,24 @@ function ReviewBlock({
   onEdit: () => void;
 }) {
   return (
-    <Card className="backend-booking-card booking-review-card">
-      <CardHeader className="flex-row items-center justify-between gap-4">
+    <section className="booking-review-block">
+      <header className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="backend-booking-icon">
-            <Icon className="h-5 w-5" />
-          </div>
-          <CardTitle className="text-lg font-black">{title}</CardTitle>
+          <span className="booking-review-icon">
+            <Icon className="h-4 w-4" />
+          </span>
+
+          <h3>{title}</h3>
         </div>
 
-        <Button type="button" variant="outline" size="sm" onClick={onEdit} className="rounded-full">
-          <Pencil className="mr-2 h-4 w-4" />
+        <button type="button" onClick={onEdit} className="booking-review-edit">
+          <Pencil className="h-3.5 w-3.5" />
           Edit
-        </Button>
-      </CardHeader>
+        </button>
+      </header>
 
-      <CardContent>{children}</CardContent>
-    </Card>
+      <div className="mt-4">{children}</div>
+    </section>
   );
 }
 
@@ -645,9 +810,9 @@ function ReviewGrid({ items }: { items: Array<[string, ReactNode]> }) {
   return (
     <div className="booking-review-grid">
       {items.map(([label, value]) => (
-        <div key={label} className="rounded-2xl border bg-muted/35 p-3">
-          <p className="backend-booking-label">{label}</p>
-          <div className="mt-1 text-sm font-bold leading-6">{value || '—'}</div>
+        <div key={label}>
+          <p>{label}</p>
+          <strong>{value || '—'}</strong>
         </div>
       ))}
     </div>
@@ -656,17 +821,15 @@ function ReviewGrid({ items }: { items: Array<[string, ReactNode]> }) {
 
 export function BookingFormPage() {
   const { props } = usePage<BookingFormPageProps>();
+
   const role = normalizeWorkspaceRole(props.workspaceRole) as RoleThemeKey;
   const booking = props.booking;
-  const bookingAny = booking as Record<string, any> | undefined;
   const editing = Boolean(booking?.id);
   const isClient = role === 'user';
   const isManager = role === 'manager';
   const isStaffLike = role === 'admin' || role === 'manager' || role === 'staff';
 
   const packageCarouselRef = useRef<HTMLDivElement | null>(null);
-
-useBookingScrollMotion(true);
 
   useEffect(() => {
     document.documentElement.classList.add('booking-wizard-screen-active');
@@ -683,15 +846,9 @@ useBookingScrollMotion(true);
 
   const venueItems = useMemo(() => matchCatalogWithServices(services), [services]);
 
-  const initialServiceId = firstValue(
-    bookingAny?.service_id,
-    bookingAny?.service?.id,
-    props.initialVenue &&
-      services.find((service) =>
-        serviceSearchName(service)
-          .toUpperCase()
-          .includes(String(props.initialVenue).toUpperCase()),
-      )?.id,
+  const initialServiceId = useMemo(
+    () => matchInitialServiceId(booking, props.initialVenue, services),
+    [booking, props.initialVenue, services],
   );
 
   const matchedInitialVenue =
@@ -714,16 +871,45 @@ useBookingScrollMotion(true);
   const [showDigitalForm, setShowDigitalForm] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [stepLoading, setStepLoading] = useState(false);
+
   const selectedVenue = venueItems.find((item) => item.key === selectedVenueKey);
+
   const selectedIndex = Math.max(
     0,
     venueItems.findIndex((item) => item.key === selectedVenueKey),
   );
 
-  const estimatedBase = estimateVenueCharge(selectedVenue, usage, Number(durationHours || 1));
+  const estimatedBase = estimateVenueCharge(
+    selectedVenue,
+    usage,
+    Number(durationHours || 1),
+  );
+
   const estimatedAdditional = Number(additionalCharges || 0);
   const estimatedTotal = estimatedBase + (Number.isFinite(estimatedAdditional) ? estimatedAdditional : 0);
-  const backHref = editing && booking?.id ? bookingShowPath(role, booking.id) : bookingBasePath(role);
+
+  const backHref =
+    editing && booking?.id ? bookingShowPath(role, booking.id) : bookingBasePath(role);
+
+  const initialFrom = buildInitialDateTime(
+    props.initialSchedule,
+    booking?.booking_date_from,
+    'from',
+  );
+
+  const initialTo = buildInitialDateTime(
+    props.initialSchedule,
+    booking?.booking_date_to,
+    'to',
+  );
+
+  const hasPublicPrefill = Boolean(
+    props.initialVenue ||
+      props.initialEventType ||
+      props.initialGuests ||
+      initialFrom ||
+      initialTo,
+  );
 
   const {
     data,
@@ -735,39 +921,48 @@ useBookingScrollMotion(true);
     transform,
   } = useForm<BookingFormData>({
     service_id: initialServiceId,
+    organization_type: firstValue(booking?.organization_type, 'Private'),
+    company_name: firstValue(booking?.company_name),
+    client_name: firstValue(booking?.client_name),
+    client_contact_number: firstValue(booking?.client_contact_number),
+    client_email: firstValue(booking?.client_email),
 
-    organization_type: firstValue(bookingAny?.organization_type, 'Private'),
-    company_name: firstValue(bookingAny?.company_name),
-    client_name: firstValue(bookingAny?.client_name),
-    client_contact_number: firstValue(bookingAny?.client_contact_number),
-    client_email: firstValue(bookingAny?.client_email),
+    client_address: firstValue(booking?.client_address),
+    client_region: firstValue(booking?.client_region, PH_DEFAULTS.region),
+    client_province: firstValue(booking?.client_province, PH_DEFAULTS.province),
+    client_city_municipality: firstValue(booking?.client_city_municipality, PH_DEFAULTS.city),
+    client_barangay: firstValue(booking?.client_barangay),
+    client_zip_code: firstValue(booking?.client_zip_code),
+    client_street_address: firstValue(booking?.client_street_address, booking?.client_address),
 
-    client_address: firstValue(bookingAny?.client_address),
-    client_region: firstValue(bookingAny?.client_region, 'CAR'),
-    client_province: firstValue(bookingAny?.client_province, 'Benguet'),
-    client_city_municipality: firstValue(bookingAny?.client_city_municipality, 'Baguio City'),
-    client_barangay: firstValue(bookingAny?.client_barangay),
-    client_zip_code: firstValue(bookingAny?.client_zip_code),
-    client_street_address: firstValue(bookingAny?.client_street_address, bookingAny?.client_address),
+    head_of_organization: firstValue(booking?.head_of_organization),
+    type_of_event: firstValue(booking?.type_of_event, props.initialEventType),
 
-    head_of_organization: firstValue(bookingAny?.head_of_organization),
-    type_of_event: firstValue(bookingAny?.type_of_event, props.initialEventType),
-    booking_date_from: buildInitialDateTime(props.initialSchedule, bookingAny?.booking_date_from, 'from'),
-    booking_date_to: buildInitialDateTime(props.initialSchedule, bookingAny?.booking_date_to, 'to'),
-    number_of_guests: firstValue(bookingAny?.number_of_guests, props.initialGuests),
+    booking_date_from: initialFrom,
+    booking_date_to: initialTo,
+    number_of_guests: firstValue(booking?.number_of_guests, props.initialGuests),
 
-    survey_email: firstValue(bookingAny?.survey_email, bookingAny?.client_email),
+    survey_email: firstValue(booking?.survey_email, booking?.client_email),
     survey_proof_image: null,
 
-    booking_status: firstValue(bookingAny?.booking_status, 'pending'),
-    payment_status: firstValue(bookingAny?.payment_status, 'unpaid'),
-    is_public_calendar_visible: Boolean(bookingAny?.is_public_calendar_visible ?? false),
-    public_calendar_title: firstValue(bookingAny?.public_calendar_title),
+    booking_status: firstValue(booking?.booking_status, 'pending'),
+    payment_status: firstValue(booking?.payment_status, 'unpaid'),
+    is_public_calendar_visible: Boolean(booking?.is_public_calendar_visible ?? false),
+    public_calendar_title: firstValue(booking?.public_calendar_title),
 
-    package_acknowledged: Boolean(editing),
+    package_acknowledged: Boolean(editing || hasPublicPrefill),
     policy_acknowledged: Boolean(editing),
     accuracy_acknowledged: Boolean(editing),
   });
+
+  const mergedErrors = {
+    ...errors,
+    ...stepErrors,
+  } as Record<string, string>;
+
+  function fieldError(name: FieldName | string): string | undefined {
+    return mergedErrors[name];
+  }
 
   function focusVenueCard(key: BookingVenueKey) {
     window.requestAnimationFrame(() => {
@@ -778,15 +973,15 @@ useBookingScrollMotion(true);
 
       const carouselRect = carousel.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
-      const currentScroll = carousel.scrollLeft;
 
-      const target =
-        currentScroll +
-        (cardRect.left - carouselRect.left) -
-        carouselRect.width / 2 +
-        cardRect.width / 2;
-
-      smoothScrollElementTo(carousel, target, 900);
+      carousel.scrollTo({
+        left:
+          carousel.scrollLeft +
+          (cardRect.left - carouselRect.left) -
+          carouselRect.width / 2 +
+          cardRect.width / 2,
+        behavior: 'smooth',
+      });
     });
   }
 
@@ -812,6 +1007,20 @@ useBookingScrollMotion(true);
     }
   }
 
+  function setScheduleBlock(block: 'AM' | 'PM' | 'EVE' | 'DAY') {
+    const baseDate = dateOnlyFromDateTime(data.booking_date_from) || new Date().toISOString().slice(0, 10);
+
+    const ranges = {
+      AM: [`${baseDate}T06:00`, `${baseDate}T12:00`],
+      PM: [`${baseDate}T12:00`, `${baseDate}T18:00`],
+      EVE: [`${baseDate}T18:00`, `${baseDate}T23:59`],
+      DAY: [`${baseDate}T06:00`, `${baseDate}T23:59`],
+    };
+
+    setData('booking_date_from', ranges[block][0]);
+    setData('booking_date_to', ranges[block][1]);
+  }
+
   function validateStep(step: number): boolean {
     const nextErrors: Record<string, string> = {};
 
@@ -819,9 +1028,11 @@ useBookingScrollMotion(true);
       if (!selectedVenue) nextErrors.package = 'Select a booking package or venue.';
       if (!data.service_id) nextErrors.service_id = 'Selected package must be connected to a backend Rental Option.';
       if (!usage) nextErrors.usage = 'Select Whole Day, Half Day, or Additional Hour.';
+
       if (usage === 'additional_hour' && Number(durationHours || 0) <= 0) {
         nextErrors.duration = 'Enter a valid number of additional hours.';
       }
+
       if (!data.package_acknowledged) {
         nextErrors.package_acknowledged = 'Confirm that you reviewed the package, rates, and inclusions.';
       }
@@ -829,9 +1040,13 @@ useBookingScrollMotion(true);
 
     if (step === 1) {
       if (!data.type_of_event.trim()) nextErrors.type_of_event = 'Event title/type is required.';
-      if (!data.client_name.trim()) nextErrors.client_name = 'Contact person is required.';
-      if (!data.client_contact_number.trim()) nextErrors.client_contact_number = 'Telephone/contact number is required.';
       if (!data.company_name.trim()) nextErrors.company_name = 'Name of organization is required.';
+      if (!data.client_name.trim()) nextErrors.client_name = 'Contact person is required.';
+      if (!data.client_contact_number.trim()) nextErrors.client_contact_number = 'Contact number is required.';
+      if (!/^09\d{9}$/.test(data.client_contact_number.replace(/\D+/g, ''))) {
+        nextErrors.client_contact_number = 'Use a valid Philippine mobile number, example: 09171234567.';
+      }
+      if (!data.client_email.trim()) nextErrors.client_email = 'Email address is required.';
     }
 
     if (step === 2) {
@@ -845,6 +1060,10 @@ useBookingScrollMotion(true);
       if (!data.booking_date_from.trim()) nextErrors.booking_date_from = 'Start date/time is required.';
       if (!data.booking_date_to.trim()) nextErrors.booking_date_to = 'End date/time is required.';
       if (!data.number_of_guests.trim()) nextErrors.number_of_guests = 'Number of guests is required.';
+
+      if (Number(data.number_of_guests || 0) < 1) {
+        nextErrors.number_of_guests = 'Number of guests must be at least 1.';
+      }
 
       if (data.booking_date_from && data.booking_date_to) {
         const start = Date.parse(data.booking_date_from);
@@ -871,6 +1090,18 @@ useBookingScrollMotion(true);
     return Object.keys(nextErrors).length === 0;
   }
 
+  function validateAllBeforeSubmit(): boolean {
+    for (let step = 0; step <= 4; step += 1) {
+      if (!validateStep(step)) {
+        setActiveStep(step);
+        setMaxStep((current) => Math.max(current, step));
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   function runStepTransition(callback: () => void) {
     setStepLoading(true);
 
@@ -879,55 +1110,78 @@ useBookingScrollMotion(true);
 
       window.setTimeout(() => {
         setStepLoading(false);
-      }, 180);
-    }, 180);
+      }, 160);
+    }, 160);
+  }
+
+  function scrollStageToStart() {
+    const stage = document.querySelector('.booking-wizard-stage');
+
+    if (stage) {
+      stage.scrollTo({
+        left: 0,
+        top: 0,
+        behavior: 'smooth',
+      });
+    }
   }
 
   function goToStep(index: number) {
-  if (index > maxStep || index === activeStep) return;
+    if (index > maxStep || index === activeStep) return;
 
-  runStepTransition(() => {
-    setActiveStep(index);
-    setStepErrors({});
-    scrollStageToStart();
-  });
-}
+    runStepTransition(() => {
+      setActiveStep(index);
+      setStepErrors({});
+      scrollStageToStart();
+    });
+  }
 
-function continueStep() {
-  if (!validateStep(activeStep)) return;
+  function continueStep() {
+    if (!validateStep(activeStep)) return;
 
-  const nextStep = Math.min(activeStep + 1, BOOKING_STEPS.length - 1);
+    const nextStep = Math.min(activeStep + 1, BOOKING_STEPS.length - 1);
 
-  runStepTransition(() => {
-    setActiveStep(nextStep);
-    setMaxStep((current) => Math.max(current, nextStep));
-    setStepErrors({});
-    scrollStageToStart();
-  });
-}
+    runStepTransition(() => {
+      setActiveStep(nextStep);
+      setMaxStep((current) => Math.max(current, nextStep));
+      setStepErrors({});
+      scrollStageToStart();
+    });
+  }
 
-function previousStep() {
-  if (activeStep === 0) return;
+  function previousStep() {
+    if (activeStep === 0) return;
 
-  runStepTransition(() => {
-    setActiveStep((current) => Math.max(current - 1, 0));
-    setStepErrors({});
-    scrollStageToStart();
-  });
-}
+    runStepTransition(() => {
+      setActiveStep((current) => Math.max(current - 1, 0));
+      setStepErrors({});
+      scrollStageToStart();
+    });
+  }
 
   function finalSubmit() {
-    if (!validateStep(4)) {
-      setActiveStep(4);
-      return;
-    }
+    if (!validateAllBeforeSubmit()) return;
 
     const finalAddress = combinedAddress(data);
 
     transform((current) => ({
       ...current,
+      client_contact_number: current.client_contact_number.replace(/\D+/g, ''),
       client_address: current.client_address || finalAddress,
       public_calendar_title: current.public_calendar_title || current.type_of_event,
+      items: current.service_id
+        ? [
+            {
+              service_id: current.service_id,
+              quantity: 1,
+            },
+          ]
+        : [],
+      estimated_usage: usage,
+      estimated_duration_hours: durationHours,
+      estimated_other_rentals: otherRentals,
+      estimated_additional_charges: additionalCharges,
+      reservation_notes: reservationNotes,
     }));
 
     if (editing && booking?.id) {
@@ -952,7 +1206,7 @@ function previousStep() {
     });
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
     if (activeStep < BOOKING_STEPS.length - 1) {
@@ -967,204 +1221,234 @@ function previousStep() {
     const isReview = activeStep === BOOKING_STEPS.length - 1;
 
     return (
-      <div className="booking-wizard-footer">
-        <Button
+      <footer className="booking-step-footer">
+        <button
           type="button"
-          variant="outline"
           onClick={previousStep}
           disabled={activeStep === 0 || processing}
-          className="rounded-full"
+          className="booking-secondary-action"
         >
-          <ChevronLeft className="mr-2 h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" />
           Previous
-        </Button>
+        </button>
 
-        <div className="flex min-w-0 flex-1 justify-end gap-2">
-          <Button asChild type="button" variant="outline" className="rounded-full">
-            <Link href={backHref}>Cancel</Link>
-          </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Link href={backHref} className="booking-ghost-action">
+            Cancel
+          </Link>
 
-          <Button type="submit" disabled={processing} className="rounded-full">
-            {processing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          <button type="submit" disabled={processing || stepLoading} className="booking-primary-action">
+            {processing || stepLoading ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
             ) : isReview ? (
-              <Save className="mr-2 h-4 w-4" />
+              <Save className="h-4 w-4" />
             ) : (
-              <ArrowRight className="mr-2 h-4 w-4" />
+              <ArrowRight className="h-4 w-4" />
             )}
+
             {isReview ? (editing ? 'Save Booking' : 'Submit Booking') : 'Save & Continue'}
-          </Button>
+          </button>
         </div>
-      </div>
+      </footer>
+    );
+  }
+
+  function PrefillBanner() {
+    if (!hasPublicPrefill) return null;
+
+    return (
+      <section className="public-booking-prefill-banner p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-[var(--bccc-backend-gold)]">
+              Public Availability Selection Applied
+            </p>
+
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-[var(--bccc-backend-text)]">
+              Your selected calendar details were pre-filled.
+            </h2>
+
+            <p className="mt-2 max-w-3xl text-sm leading-7 text-[var(--bccc-backend-muted)]">
+              Review the selected venue, event type, guest count, and schedule before submitting. Final reservation still depends on BCCC assessment and payment compliance.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {props.initialVenue ? (
+              <span className="booking-prefill-chip is-active">{props.initialVenue}</span>
+            ) : null}
+
+            {data.booking_date_from ? (
+              <span className="booking-prefill-chip">{formatDateTime(data.booking_date_from)}</span>
+            ) : null}
+
+            {data.booking_date_to ? (
+              <span className="booking-prefill-chip">{formatDateTime(data.booking_date_to)}</span>
+            ) : null}
+          </div>
+        </div>
+      </section>
     );
   }
 
   function SummaryDrawer() {
     return (
       <>
-        <button
-          type="button"
-          className={`booking-summary-side-tab ${summaryOpen ? 'is-open' : ''}`}
-          onClick={() => setSummaryOpen(true)}
-        >
-          <FileText className="h-4 w-4" />
-          <span>Summary</span>
+        <button type="button" className="booking-summary-fab" onClick={() => setSummaryOpen(true)}>
+          <ReceiptText className="h-4 w-4" />
+          Summary
         </button>
 
-        <aside className={`booking-summary-drawer ${summaryOpen ? 'is-open' : ''}`}>
-          <div className="booking-summary-drawer-card">
-            <div className="booking-summary-drawer-header">
-              <div className="min-w-0">
-                <p className="backend-booking-label">Live Reservation Summary</p>
-                <h3>{selectedVenue?.displayLabel ?? 'No package selected'}</h3>
-                <p>
-                  {BOOKING_USAGE_LABELS[usage]}
-                  {usage === 'additional_hour' ? ` · ${durationHours || 0} hour(s)` : ''}
-                </p>
-              </div>
+        <div className={cx('booking-summary-overlay', summaryOpen && 'is-open')} onClick={() => setSummaryOpen(false)} />
 
-              <button
-                type="button"
-                className="booking-summary-close"
-                onClick={() => setSummaryOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </button>
+        <aside className={cx('booking-summary-drawer', summaryOpen && 'is-open')}>
+          <header className="flex items-start justify-between gap-4 border-b border-[var(--bccc-backend-line)] p-5">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[var(--bccc-backend-gold)]">
+                Live Reservation Summary
+              </p>
+
+              <h3 className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-[var(--bccc-backend-text)]">
+                {selectedVenue?.displayLabel ?? 'No package selected'}
+              </h3>
+
+              <p className="mt-2 text-sm leading-7 text-[var(--bccc-backend-muted)]">
+                {BOOKING_USAGE_LABELS[usage]}
+                {usage === 'additional_hour' ? ` · ${durationHours || 0} hour(s)` : ''}
+              </p>
             </div>
 
-            <Separator />
+            <button type="button" onClick={() => setSummaryOpen(false)} className="booking-icon-button">
+              <X className="h-5 w-5" />
+            </button>
+          </header>
 
-            <div className="booking-summary-drawer-grid">
-              <div>
-                <p className="backend-booking-label">Base Charge</p>
-                <strong>{money(estimatedBase)}</strong>
-              </div>
+          <div className="grid gap-4 p-5">
+            <SummaryLine label="Base Charge" value={money(estimatedBase)} />
+            <SummaryLine label="Estimated Total" value={money(estimatedTotal)} strong />
+            <SummaryLine label="Event" value={data.type_of_event || 'Not encoded yet'} />
+            <SummaryLine label="Organizer" value={data.company_name || data.client_name || 'Not encoded yet'} />
+            <SummaryLine
+              label="Schedule"
+              value={`${formatDateTime(data.booking_date_from)} → ${formatDateTime(data.booking_date_to)}`}
+            />
+            <SummaryLine label="Guests" value={data.number_of_guests || 'Not encoded yet'} />
 
-              <div>
-                <p className="backend-booking-label">Estimated Total</p>
-                <strong>{money(estimatedTotal)}</strong>
-              </div>
-
-              <div>
-                <p className="backend-booking-label">Event</p>
-                <strong>{data.type_of_event || 'Not encoded yet'}</strong>
-              </div>
-
-              <div>
-                <p className="backend-booking-label">Organizer</p>
-                <strong>{data.company_name || data.client_name || 'Not encoded yet'}</strong>
-              </div>
-
-              <div>
-                <p className="backend-booking-label">Schedule</p>
-                <strong>
-                  {data.booking_date_from || 'No start date'} → {data.booking_date_to || 'No end date'}
-                </strong>
-              </div>
-
-              <div>
-                <p className="backend-booking-label">Guests</p>
-                <strong>{data.number_of_guests || 'Not encoded yet'}</strong>
-              </div>
-            </div>
-
-            <div className="booking-summary-actions">
-              <Button
-                type="button"
-                variant={showDigitalForm ? 'default' : 'outline'}
-                className="w-full rounded-full"
-                onClick={() => {
-                  setShowDigitalForm((current) => !current);
-                  setSummaryOpen(false);
-                }}
-              >
-                {showDigitalForm ? (
-                  <EyeOff className="mr-2 h-4 w-4" />
-                ) : (
-                  <Eye className="mr-2 h-4 w-4" />
-                )}
-                {showDigitalForm ? 'Hide Digital Form' : 'View Digital Form'}
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowDigitalForm((current) => !current);
+                setSummaryOpen(false);
+              }}
+              className="booking-secondary-action justify-center"
+            >
+              {showDigitalForm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showDigitalForm ? 'Hide Digital Form' : 'View Digital Form'}
+            </button>
           </div>
         </aside>
       </>
     );
   }
 
+  function SummaryLine({
+    label,
+    value,
+    strong = false,
+  }: {
+    label: string;
+    value: ReactNode;
+    strong?: boolean;
+  }) {
+    return (
+      <div className="booking-summary-line">
+        <span>{label}</span>
+        <strong className={strong ? 'text-[var(--bccc-backend-gold)]' : ''}>{value}</strong>
+      </div>
+    );
+  }
+
   function DigitalFormPanel() {
-    if (!showDigitalForm) {
-      return null;
-    }
+    if (!showDigitalForm) return null;
 
     return (
-      <aside className="booking-digital-form-panel">
-        <div className="booking-digital-form-topbar no-print">
+      <section className="booking-digital-form">
+        <header className="flex flex-col gap-3 border-b border-[var(--bccc-backend-line)] p-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="backend-booking-label">Official Preview</p>
-            <h3 className="text-lg font-black tracking-[-0.03em]">
+            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-[var(--bccc-backend-gold)]">
+              Official Preview
+            </p>
+
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-[var(--bccc-backend-text)]">
               Digital Reservation Form
-            </h3>
+            </h2>
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full"
-            onClick={() => setShowDigitalForm(false)}
-          >
-            <EyeOff className="mr-2 h-4 w-4" />
+          <button type="button" onClick={() => setShowDigitalForm(false)} className="booking-ghost-action">
             Hide
-          </Button>
-        </div>
+          </button>
+        </header>
 
-        <div className="booking-digital-form-scroll">
-          <OfficialReservationPreview
-            data={data}
-            selectedVenue={selectedVenue}
-            usage={usage}
-            durationHours={durationHours}
-            otherRentals={otherRentals}
-            additionalCharges={additionalCharges}
-            reservationNotes={reservationNotes}
-            estimatedBase={estimatedBase}
-            estimatedTotal={estimatedTotal}
-            fullAddress={combinedAddress(data)}
+        <div className="grid gap-5 p-5 lg:grid-cols-2">
+          <ReviewGrid
+            items={[
+              ['Organization', data.company_name],
+              ['Event', data.type_of_event],
+              ['Contact Person', data.client_name],
+              ['Contact Number', data.client_contact_number],
+              ['Email', data.client_email],
+              ['Address', combinedAddress(data)],
+              ['Venue', selectedVenue?.displayLabel],
+              ['Schedule', `${formatDateTime(data.booking_date_from)} → ${formatDateTime(data.booking_date_to)}`],
+              ['Guests', data.number_of_guests],
+              ['Estimated Total', money(estimatedTotal)],
+            ]}
           />
+
+          <div className="border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] p-5 text-sm leading-7 text-[var(--bccc-backend-muted)]">
+            <p className="font-semibold text-[var(--bccc-backend-text)]">
+              This preview is for checking only.
+            </p>
+
+            <p className="mt-2">
+              Final approved charges, reservation status, and payment compliance will be confirmed by the BCCC office after assessment.
+            </p>
+          </div>
         </div>
-      </aside>
+      </section>
     );
   }
 
   function renderPackageStep() {
     return (
-      <div className="booking-step-screen booking-package-step-screen">
-        <div className="booking-hotel-header">
-          <div>
-            <Badge
-              variant="outline"
-              className="border-[#c9a96a]/30 bg-[#c9a96a]/10 text-[#7a5c21] dark:text-[#e8d8b5]"
-            >
-              Hotel-style package selection
-            </Badge>
-            <h2>Choose your BCCC event space</h2>
-            <p>
-              Select the venue package like a premium stay: compare rates, inclusions,
-              amenities, and backend readiness in one focused carousel.
-            </p>
-          </div>
-
-          <div className="booking-hotel-carousel-controls">
-            <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={() => moveVenue('previous')}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={() => moveVenue('next')}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+      <section className="booking-step-panel">
+        <div className="booking-step-kicker">
+          <Sparkles className="h-4 w-4" />
+          Hotel-style package selection
         </div>
 
-        <div ref={packageCarouselRef} className="booking-hotel-carousel">
+        <div className="booking-step-heading">
+          <h2>Choose your BCCC event space</h2>
+          <p>
+            Compare venue area, rate, inclusion, and system readiness in one focused carousel.
+          </p>
+        </div>
+
+        <WizardNotice errors={stepErrors} />
+
+        <div className="flex items-center justify-between gap-3">
+          <button type="button" onClick={() => moveVenue('previous')} className="booking-carousel-arrow">
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </button>
+
+          <button type="button" onClick={() => moveVenue('next')} className="booking-carousel-arrow">
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div ref={packageCarouselRef} className="booking-package-carousel">
           {venueItems.map((item) => (
             <VenueCard
               key={item.key}
@@ -1175,36 +1459,38 @@ function previousStep() {
           ))}
         </div>
 
-        <div className="booking-hotel-bottom-panel">
-          <div className="booking-hotel-usage-strip">
-            {(['whole_day', 'half_day', 'additional_hour'] as BookingUsageKey[]).map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setUsage(option)}
-                className={`backend-usage-card ${usage === option ? 'is-selected' : ''}`}
-              >
-                <span className="backend-booking-label">{BOOKING_USAGE_LABELS[option]}</span>
-                <span className="mt-1 block text-xl font-black">
-                  {selectedVenue ? money(selectedVenue.rates[option]) : '₱0.00'}
-                </span>
-              </button>
-            ))}
-          </div>
+        <div className="grid gap-4 xl:grid-cols-[1fr_22rem]">
+          <div>
+            <p className="booking-mini-heading">Usage Type</p>
 
-          <div className="booking-hotel-booking-controls">
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              {(['whole_day', 'half_day', 'additional_hour'] as BookingUsageKey[]).map((option) => (
+                <button
+                  type="button"
+                  key={option}
+                  onClick={() => setUsage(option)}
+                  className={cx('backend-usage-card', usage === option && 'is-selected')}
+                >
+                  <span>{BOOKING_USAGE_LABELS[option]}</span>
+                  <strong>{selectedVenue ? money(selectedVenue.rates[option]) : '₱0.00'}</strong>
+                </button>
+              ))}
+            </div>
+
             {usage === 'additional_hour' ? (
-              <Field label="Hours" required error={stepErrors.duration}>
+              <Field label="Number of Additional Hours" error={fieldError('duration')} required>
                 <input
                   value={durationHours}
                   onChange={(event) => setDurationHours(event.target.value)}
-                  className="backend-booking-input"
+                  className={cx('backend-booking-input mt-3', fieldStatusClass(fieldError('duration')))}
                   inputMode="numeric"
                 />
               </Field>
             ) : null}
+          </div>
 
-            <Field label="Backend Rental Option" required error={errors.service_id || stepErrors.service_id}>
+          <div className="booking-package-side">
+            <Field label="Backend Rental Option" required error={fieldError('service_id')}>
               <select
                 value={data.service_id}
                 onChange={(event) => {
@@ -1214,493 +1500,566 @@ function previousStep() {
                     (item) => String(item.service?.id ?? '') === String(event.target.value),
                   );
 
-                  if (matched) selectVenue(matched);
+                  if (matched) {
+                    setSelectedVenueKey(matched.key);
+                    focusVenueCard(matched.key);
+                  }
                 }}
-                className="backend-booking-input"
+                className={cx('backend-booking-input', fieldStatusClass(fieldError('service_id')))}
               >
                 <option value="">Select configured option</option>
+
                 {venueItems
                   .filter((item) => item.configured && item.service)
                   .map((item) => (
-                    <option key={item.key} value={item.service?.id}>
+                    <option key={item.key} value={String(item.service?.id)}>
                       {item.label}
                     </option>
                   ))}
               </select>
             </Field>
 
-            <label className="booking-check-card">
+            <label className={cx('booking-checkbox-card', fieldError('package_acknowledged') && 'has-error')}>
               <input
                 type="checkbox"
                 checked={data.package_acknowledged}
                 onChange={(event) => setData('package_acknowledged', event.target.checked)}
               />
               <span>
-                <span className="block text-sm font-black">Reviewed package and rates.</span>
-                <span className="block text-xs text-muted-foreground">
-                  Final charges may still be adjusted after BCCC assessment.
-                </span>
+                <strong>Reviewed package and rates.</strong>
+                <small>Final charges may still be adjusted after BCCC assessment.</small>
               </span>
             </label>
+
+            {fieldError('package_acknowledged') ? (
+              <p className="booking-inline-error">{fieldError('package_acknowledged')}</p>
+            ) : null}
           </div>
         </div>
-      </div>
+      </section>
     );
   }
 
   function renderOrganizerStep() {
     return (
-      <div className="booking-step-screen">
-        <Card className="backend-booking-card booking-fit-card">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="backend-booking-icon">
-                <UserRound className="h-5 w-5" />
-              </div>
-              <div>
-                <Badge variant="outline">Organizer</Badge>
-                <CardTitle className="mt-2 text-xl font-black">Event and organizer details</CardTitle>
-                <CardDescription>
-                  This follows the official reservation form fields.
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
+      <section className="booking-step-panel">
+        <div className="booking-step-kicker">
+          <UserRound className="h-4 w-4" />
+          Event and organizer
+        </div>
 
-          <CardContent className="booking-field-carousel">
-            <Field label="Event Title / Type" required error={errors.type_of_event || stepErrors.type_of_event}>
-              <input
-                value={data.type_of_event}
-                onChange={(event) => {
-                  setData('type_of_event', event.target.value);
-                  if (!data.public_calendar_title) setData('public_calendar_title', event.target.value);
-                }}
-                className="backend-booking-input"
-                placeholder="Event title"
-              />
-            </Field>
+        <div className="booking-step-heading">
+          <h2>Tell us who is reserving the venue</h2>
+          <p>Use the exact organization and contact details that should appear on official records.</p>
+        </div>
 
-            <Field label="Name of Organization" required error={errors.company_name || stepErrors.company_name}>
-              <input
-                value={data.company_name}
-                onChange={(event) => setData('company_name', event.target.value)}
-                className="backend-booking-input"
-                placeholder="Organization name"
-              />
-            </Field>
+        <WizardNotice errors={stepErrors} />
 
-            <Field label="Head of Organization" error={errors.head_of_organization}>
-              <input
-                value={data.head_of_organization}
-                onChange={(event) => setData('head_of_organization', event.target.value)}
-                className="backend-booking-input"
-                placeholder="Head of organization"
-              />
-            </Field>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Field label="Event Title / Type" required error={fieldError('type_of_event')}>
+            <input
+              value={data.type_of_event}
+              onChange={(event) => {
+                setData('type_of_event', event.target.value);
 
-            <Field label="Contact Person" required error={errors.client_name || stepErrors.client_name}>
-              <input
-                value={data.client_name}
-                onChange={(event) => setData('client_name', event.target.value)}
-                className="backend-booking-input"
-                placeholder="Contact person"
-              />
-            </Field>
+                if (!data.public_calendar_title) {
+                  setData('public_calendar_title', event.target.value);
+                }
+              }}
+              list="booking-event-types"
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('type_of_event')))}
+              placeholder="Example: Regional Tourism Summit"
+            />
 
-            <Field label="Telephone / Contact Number" required error={errors.client_contact_number || stepErrors.client_contact_number}>
-              <input
-                value={data.client_contact_number}
-                onChange={(event) => setData('client_contact_number', event.target.value)}
-                className="backend-booking-input"
-                placeholder="09XX XXX XXXX"
-              />
-            </Field>
+            <datalist id="booking-event-types">
+              {EVENT_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+          </Field>
 
-            <Field label="Email Address" error={errors.client_email}>
-              <input
-                value={data.client_email}
-                onChange={(event) => {
-                  setData('client_email', event.target.value);
-                  if (!data.survey_email) setData('survey_email', event.target.value);
-                }}
-                className="backend-booking-input"
-                type="email"
-                placeholder="name@example.com"
-                disabled={isClient && editing}
-              />
-            </Field>
+          <Field label="Organization Type" required>
+            <select
+              value={data.organization_type}
+              onChange={(event) => setData('organization_type', event.target.value)}
+              className="backend-booking-input"
+            >
+              {ORGANIZATION_TYPES.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-            <Field label="Organization Type" error={errors.organization_type}>
-              <select
-                value={data.organization_type}
-                onChange={(event) => setData('organization_type', event.target.value)}
-                className="backend-booking-input"
-              >
-                <option value="Private">Private</option>
-                <option value="Government">Government</option>
-                <option value="NGO">NGO</option>
-                <option value="Academe">Academe</option>
-                <option value="Religious">Religious</option>
-                <option value="Others">Others</option>
-              </select>
-            </Field>
-          </CardContent>
-        </Card>
-      </div>
+          <Field label="Name of Organization / Company" required error={fieldError('company_name')}>
+            <input
+              value={data.company_name}
+              onChange={(event) => setData('company_name', event.target.value)}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('company_name')))}
+              placeholder="Organization name"
+            />
+          </Field>
+
+          <Field label="Head of Organization">
+            <input
+              value={data.head_of_organization}
+              onChange={(event) => setData('head_of_organization', event.target.value)}
+              className="backend-booking-input"
+              placeholder="Optional"
+            />
+          </Field>
+
+          <Field label="Contact Person" required error={fieldError('client_name')}>
+            <input
+              value={data.client_name}
+              onChange={(event) => setData('client_name', event.target.value)}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('client_name')))}
+              placeholder="Full name"
+            />
+          </Field>
+
+          <Field label="Contact Number" required error={fieldError('client_contact_number')} helper="Use 09XXXXXXXXX format.">
+            <input
+              value={data.client_contact_number}
+              onChange={(event) => setData('client_contact_number', event.target.value)}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('client_contact_number')))}
+              placeholder="09171234567"
+              inputMode="tel"
+            />
+          </Field>
+
+          <Field label="Email Address" required error={fieldError('client_email')}>
+            <input
+              value={data.client_email}
+              onChange={(event) => {
+                setData('client_email', event.target.value);
+
+                if (!data.survey_email) {
+                  setData('survey_email', event.target.value);
+                }
+              }}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('client_email')))}
+              type="email"
+              placeholder="name@example.com"
+              disabled={isClient && editing}
+            />
+          </Field>
+
+          <Field label="Public Calendar Title">
+            <input
+              value={data.public_calendar_title}
+              onChange={(event) => setData('public_calendar_title', event.target.value)}
+              className="backend-booking-input"
+              placeholder="Optional public-facing title"
+            />
+          </Field>
+        </div>
+      </section>
     );
   }
 
   function renderAddressStep() {
     return (
-      <div className="booking-step-screen">
-        <Card className="backend-booking-card booking-fit-card">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="backend-booking-icon">
-                <MapPin className="h-5 w-5" />
-              </div>
-              <div>
-                <Badge variant="outline">Address</Badge>
-                <CardTitle className="mt-2 text-xl font-black">Organizer address</CardTitle>
-                <CardDescription>Complete the organizer/client address.</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
+      <section className="booking-step-panel">
+        <div className="booking-step-kicker">
+          <MapPin className="h-4 w-4" />
+          Organizer address
+        </div>
 
-          <CardContent className="booking-field-carousel">
-            <Field label="Region" required error={errors.client_region || stepErrors.client_region}>
-              <input value={data.client_region} onChange={(event) => setData('client_region', event.target.value)} className="backend-booking-input" />
-            </Field>
+        <div className="booking-step-heading">
+          <h2>Complete the organizer address</h2>
+          <p>This helps the office validate client records and official correspondence.</p>
+        </div>
 
-            <Field label="Province" required error={errors.client_province || stepErrors.client_province}>
-              <input value={data.client_province} onChange={(event) => setData('client_province', event.target.value)} className="backend-booking-input" />
-            </Field>
+        <WizardNotice errors={stepErrors} />
 
-            <Field label="City / Municipality" required error={errors.client_city_municipality || stepErrors.client_city_municipality}>
-              <input value={data.client_city_municipality} onChange={(event) => setData('client_city_municipality', event.target.value)} className="backend-booking-input" />
-            </Field>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Field label="Region" required error={fieldError('client_region')}>
+            <input
+              value={data.client_region}
+              onChange={(event) => setData('client_region', event.target.value)}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('client_region')))}
+            />
+          </Field>
 
-            <Field label="Barangay" error={errors.client_barangay}>
-              <input value={data.client_barangay} onChange={(event) => setData('client_barangay', event.target.value)} className="backend-booking-input" />
-            </Field>
+          <Field label="Province" required error={fieldError('client_province')}>
+            <input
+              value={data.client_province}
+              onChange={(event) => setData('client_province', event.target.value)}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('client_province')))}
+            />
+          </Field>
 
-            <Field label="ZIP Code" error={errors.client_zip_code}>
-              <input value={data.client_zip_code} onChange={(event) => setData('client_zip_code', event.target.value)} className="backend-booking-input" />
-            </Field>
+          <Field label="City / Municipality" required error={fieldError('client_city_municipality')}>
+            <input
+              value={data.client_city_municipality}
+              onChange={(event) => setData('client_city_municipality', event.target.value)}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('client_city_municipality')))}
+            />
+          </Field>
 
-            <Field label="Street Address" required error={errors.client_street_address || stepErrors.client_street_address}>
-              <input
-                value={data.client_street_address}
-                onChange={(event) => {
-                  setData('client_street_address', event.target.value);
-                  setData('client_address', event.target.value);
-                }}
-                className="backend-booking-input"
-              />
-            </Field>
+          <Field label="Barangay">
+            <input
+              value={data.client_barangay}
+              onChange={(event) => setData('client_barangay', event.target.value)}
+              className="backend-booking-input"
+            />
+          </Field>
 
-            <div className="booking-generated-card">
-              <p className="backend-booking-label">Generated Full Address</p>
-              <p className="mt-2 text-sm font-bold leading-6">
-                {combinedAddress(data) || 'Complete the address fields to generate full address.'}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <Field label="ZIP Code">
+            <input
+              value={data.client_zip_code}
+              onChange={(event) => setData('client_zip_code', event.target.value)}
+              className="backend-booking-input"
+              inputMode="numeric"
+            />
+          </Field>
+
+          <Field label="Street Address" required error={fieldError('client_street_address')}>
+            <input
+              value={data.client_street_address}
+              onChange={(event) => {
+                setData('client_street_address', event.target.value);
+                setData('client_address', event.target.value);
+              }}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('client_street_address')))}
+              placeholder="House / building / street"
+            />
+          </Field>
+        </div>
+
+        <div className="booking-generated-address">
+          <p>Generated Full Address</p>
+          <strong>{combinedAddress(data) || 'Complete the address fields to generate full address.'}</strong>
+        </div>
+      </section>
     );
   }
 
   function renderScheduleStep() {
     return (
-      <div className="booking-step-screen">
-        <Card className="backend-booking-card booking-fit-card">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="backend-booking-icon">
-                <CalendarDays className="h-5 w-5" />
-              </div>
-              <div>
-                <Badge variant="outline">Schedule</Badge>
-                <CardTitle className="mt-2 text-xl font-black">Schedule and charges</CardTitle>
-                <CardDescription>Set the event schedule and estimated charge information.</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
+      <section className="booking-step-panel">
+        <div className="booking-step-kicker">
+          <CalendarDays className="h-4 w-4" />
+          Schedule and estimated charges
+        </div>
 
-          <CardContent className="booking-field-carousel">
-            <Field label="Selected Area / Package">
-              <input value={selectedVenue?.label ?? 'No package selected'} readOnly className="backend-booking-input" />
-            </Field>
+        <div className="booking-step-heading">
+          <h2>Set the reservation schedule</h2>
+          <p>Use the exact event start and end. You may also use quick block buttons for AM, PM, EVE, or whole day.</p>
+        </div>
 
-            <Field label="Usage">
-              <input value={BOOKING_USAGE_LABELS[usage]} readOnly className="backend-booking-input" />
-            </Field>
+        <WizardNotice errors={stepErrors} />
 
-            <Field label="Date/Time From" required error={errors.booking_date_from || stepErrors.booking_date_from}>
-              <input
-                type="datetime-local"
-                value={data.booking_date_from}
-                onChange={(event) => setData('booking_date_from', event.target.value)}
-                className="backend-booking-input"
-              />
-            </Field>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Field label="Start Date and Time" required error={fieldError('booking_date_from')}>
+            <input
+              type="datetime-local"
+              value={data.booking_date_from}
+              onChange={(event) => setData('booking_date_from', event.target.value)}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('booking_date_from')))}
+            />
+          </Field>
 
-            <Field label="Date/Time To" required error={errors.booking_date_to || stepErrors.booking_date_to}>
-              <input
-                type="datetime-local"
-                value={data.booking_date_to}
-                onChange={(event) => setData('booking_date_to', event.target.value)}
-                className="backend-booking-input"
-              />
-            </Field>
+          <Field label="End Date and Time" required error={fieldError('booking_date_to')}>
+            <input
+              type="datetime-local"
+              value={data.booking_date_to}
+              onChange={(event) => setData('booking_date_to', event.target.value)}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('booking_date_to')))}
+            />
+          </Field>
+        </div>
 
-            <Field label="Number of Guests" required error={errors.number_of_guests || stepErrors.number_of_guests}>
-              <input
-                value={data.number_of_guests}
-                onChange={(event) => setData('number_of_guests', event.target.value)}
-                className="backend-booking-input"
-                inputMode="numeric"
-                placeholder="0"
-              />
-            </Field>
+        <div className="grid gap-3 md:grid-cols-4">
+          {(['AM', 'PM', 'EVE', 'DAY'] as const).map((block) => (
+            <button
+              type="button"
+              key={block}
+              onClick={() => setScheduleBlock(block)}
+              className="booking-block-shortcut"
+            >
+              <ClockLabel block={block} />
+            </button>
+          ))}
+        </div>
 
-            <Field label="Other Rentals">
-              <input
-                value={otherRentals}
-                onChange={(event) => setOtherRentals(event.target.value)}
-                className="backend-booking-input"
-                placeholder="Optional"
-              />
-            </Field>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Field label="Number of Guests" required error={fieldError('number_of_guests')}>
+            <input
+              value={data.number_of_guests}
+              onChange={(event) => setData('number_of_guests', event.target.value)}
+              className={cx('backend-booking-input', fieldStatusClass(fieldError('number_of_guests')))}
+              inputMode="numeric"
+              placeholder="0"
+            />
+          </Field>
 
-            <Field label="Additional Charges">
-              <input
-                value={additionalCharges}
-                onChange={(event) => setAdditionalCharges(event.target.value)}
-                className="backend-booking-input"
-                inputMode="decimal"
-                placeholder="0.00"
-              />
-            </Field>
+          <Field label="Other Rentals">
+            <input
+              value={otherRentals}
+              onChange={(event) => setOtherRentals(event.target.value)}
+              className="backend-booking-input"
+              placeholder="Optional"
+            />
+          </Field>
 
-            <Field label="Reservation Notes">
-              <input
-                value={reservationNotes}
-                onChange={(event) => setReservationNotes(event.target.value)}
-                className="backend-booking-input"
-                placeholder="Optional notes"
-              />
-            </Field>
+          <Field label="Additional Charges">
+            <input
+              value={additionalCharges}
+              onChange={(event) => setAdditionalCharges(event.target.value)}
+              className="backend-booking-input"
+              inputMode="decimal"
+              placeholder="0.00"
+            />
+          </Field>
+        </div>
 
-            <div className="booking-generated-card">
-              <p className="backend-booking-label">Estimated Total Charges</p>
-              <p className="mt-2 text-3xl font-black tracking-[-0.05em]">{money(estimatedTotal)}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Additional charges may be imposed after assessment at egress.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <Field label="Reservation Notes">
+          <textarea
+            value={reservationNotes}
+            onChange={(event) => setReservationNotes(event.target.value)}
+            className="backend-booking-input min-h-28 py-3"
+            placeholder="Optional notes"
+          />
+        </Field>
+
+        <div className="booking-charge-card">
+          <div>
+            <p>Estimated Total Charges</p>
+            <strong>{money(estimatedTotal)}</strong>
+          </div>
+
+          <div>
+            <p>Estimated Duration</p>
+            <strong>{rangeHours(data.booking_date_from, data.booking_date_to)} hour(s)</strong>
+          </div>
+
+          <span>Additional charges may be imposed after assessment at egress.</span>
+        </div>
+      </section>
+    );
+  }
+
+  function ClockLabel({ block }: { block: 'AM' | 'PM' | 'EVE' | 'DAY' }) {
+    const copy = {
+      AM: ['AM', '6:00 AM - 12:00 PM'],
+      PM: ['PM', '12:00 PM - 6:00 PM'],
+      EVE: ['EVE', '6:00 PM - 11:59 PM'],
+      DAY: ['Whole Day', '6:00 AM - 11:59 PM'],
+    }[block];
+
+    return (
+      <>
+        <strong>{copy[0]}</strong>
+        <span>{copy[1]}</span>
+      </>
     );
   }
 
   function renderGuidelinesStep() {
     return (
-      <div className="booking-step-screen">
-        <div className="booking-guideline-carousel">
-          {BCCC_BOOKING_GENERAL_GUIDELINES.map((section) => (
-            <Card key={section.title} className="backend-booking-card booking-guideline-card">
-              <CardHeader>
-                <Badge variant="outline">Guideline</Badge>
-                <CardTitle className="mt-2 text-xl font-black">{section.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="list-inside list-disc space-y-2 text-sm leading-6 text-muted-foreground">
-                  {section.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          ))}
-
-          <Card className="backend-booking-card booking-guideline-card">
-            <CardHeader>
-              <Badge variant="outline">Proof and confirmation</Badge>
-              <CardTitle className="mt-2 text-xl font-black">Requirements</CardTitle>
-              <CardDescription>
-                Review the rules and confirm the encoded information.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              <Field label="Survey / Reference Email" error={errors.survey_email}>
-                <input
-                  value={data.survey_email}
-                  onChange={(event) => setData('survey_email', event.target.value)}
-                  className="backend-booking-input"
-                  type="email"
-                  placeholder="Email used for survey/reference proof"
-                />
-              </Field>
-
-              <Field label="Survey Proof Image" error={errors.survey_proof_image}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => setData('survey_proof_image', event.target.files?.[0] ?? null)}
-                  className="backend-booking-file"
-                />
-              </Field>
-
-              <label className="booking-check-card">
-                <input
-                  type="checkbox"
-                  checked={data.policy_acknowledged}
-                  onChange={(event) => setData('policy_acknowledged', event.target.checked)}
-                />
-                <span>
-                  <span className="block text-sm font-black">I reviewed the BCCC guidelines.</span>
-                  <span className="block text-xs text-muted-foreground">
-                    The booking is subject to BCCC review, payment compliance, schedule validation, and house rules.
-                  </span>
-                </span>
-              </label>
-
-              <label className="booking-check-card">
-                <input
-                  type="checkbox"
-                  checked={data.accuracy_acknowledged}
-                  onChange={(event) => setData('accuracy_acknowledged', event.target.checked)}
-                />
-                <span>
-                  <span className="block text-sm font-black">I confirm that all information is accurate.</span>
-                  <span className="block text-xs text-muted-foreground">
-                    Incorrect details may delay assessment and approval.
-                  </span>
-                </span>
-              </label>
-
-              {isStaffLike ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Booking Status" error={errors.booking_status}>
-                    <select
-                      value={data.booking_status}
-                      onChange={(event) => setData('booking_status', event.target.value)}
-                      className="backend-booking-input"
-                      disabled={isManager}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="active">Active</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                      <option value="declined">Declined</option>
-                    </select>
-                  </Field>
-
-                  <Field label="Payment Status" error={errors.payment_status}>
-                    <select
-                      value={data.payment_status}
-                      onChange={(event) => setData('payment_status', event.target.value)}
-                      className="backend-booking-input"
-                      disabled={isManager}
-                    >
-                      <option value="unpaid">Unpaid</option>
-                      <option value="partial">Partial</option>
-                      <option value="paid">Paid</option>
-                      <option value="owing">Owing</option>
-                    </select>
-                  </Field>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
+      <section className="booking-step-panel">
+        <div className="booking-step-kicker">
+          <ShieldCheck className="h-4 w-4" />
+          Guidelines and confirmation
         </div>
-      </div>
+
+        <div className="booking-step-heading">
+          <h2>Review the rules before submitting</h2>
+          <p>These reminders protect your request from delays and clarify payment responsibilities.</p>
+        </div>
+
+        <WizardNotice errors={stepErrors} />
+
+        <div className="booking-guideline-grid">
+          {BCCC_BOOKING_GENERAL_GUIDELINES.map((section) => (
+            <article key={section.title} className="booking-guideline-card">
+              <p>Guideline</p>
+              <h3>{section.title}</h3>
+
+              <ul>
+                {section.items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Field label="Survey / Reference Email">
+            <input
+              value={data.survey_email}
+              onChange={(event) => setData('survey_email', event.target.value)}
+              className="backend-booking-input"
+              type="email"
+              placeholder="Email used for survey/reference proof"
+            />
+          </Field>
+
+          <Field label="Survey Proof Image">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) => setData('survey_proof_image', event.target.files?.[0] ?? null)}
+              className="backend-booking-file"
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-3">
+          <label className={cx('booking-checkbox-card', fieldError('policy_acknowledged') && 'has-error')}>
+            <input
+              type="checkbox"
+              checked={data.policy_acknowledged}
+              onChange={(event) => setData('policy_acknowledged', event.target.checked)}
+            />
+            <span>
+              <strong>I reviewed the BCCC guidelines.</strong>
+              <small>The booking is subject to BCCC review, payment compliance, schedule validation, and house rules.</small>
+            </span>
+          </label>
+
+          {fieldError('policy_acknowledged') ? (
+            <p className="booking-inline-error">{fieldError('policy_acknowledged')}</p>
+          ) : null}
+
+          <label className={cx('booking-checkbox-card', fieldError('accuracy_acknowledged') && 'has-error')}>
+            <input
+              type="checkbox"
+              checked={data.accuracy_acknowledged}
+              onChange={(event) => setData('accuracy_acknowledged', event.target.checked)}
+            />
+            <span>
+              <strong>I confirm that all information is accurate.</strong>
+              <small>Incorrect details may delay assessment and approval.</small>
+            </span>
+          </label>
+
+          {fieldError('accuracy_acknowledged') ? (
+            <p className="booking-inline-error">{fieldError('accuracy_acknowledged')}</p>
+          ) : null}
+        </div>
+
+        {isStaffLike ? (
+          <div className="grid gap-4 border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] p-5 lg:grid-cols-2">
+            <Field label="Booking Status">
+              <select
+                value={data.booking_status}
+                onChange={(event) => setData('booking_status', event.target.value)}
+                className="backend-booking-input"
+                disabled={isManager}
+              >
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="declined">Declined</option>
+              </select>
+            </Field>
+
+            <Field label="Payment Status">
+              <select
+                value={data.payment_status}
+                onChange={(event) => setData('payment_status', event.target.value)}
+                className="backend-booking-input"
+                disabled={isManager}
+              >
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial</option>
+                <option value="paid">Paid</option>
+                <option value="owing">Owing</option>
+              </select>
+            </Field>
+          </div>
+        ) : null}
+      </section>
     );
   }
 
   function renderReviewStep() {
     return (
-      <div className="booking-review-carousel">
-        <ReviewBlock title="Package and Charges" icon={PackageCheck} onEdit={() => goToStep(0)}>
-          <ReviewGrid
-            items={[
-              ['Package', selectedVenue?.displayLabel],
-              ['Backend Rental Option', selectedVenue?.service?.name ?? 'Not configured'],
-              ['Usage', BOOKING_USAGE_LABELS[usage]],
-              ['Duration', usage === 'additional_hour' ? `${durationHours} hour(s)` : 'Fixed rate'],
-              ['Base Charge', money(estimatedBase)],
-              ['Additional Charges', money(additionalCharges || 0)],
-              ['Estimated Total', money(estimatedTotal)],
-              ['Included', selectedVenue?.includes.join(', ')],
-            ]}
-          />
-        </ReviewBlock>
+      <section className="booking-step-panel">
+        <div className="booking-step-kicker">
+          <CheckCircle2 className="h-4 w-4" />
+          Final review
+        </div>
 
-        <ReviewBlock title="Event and Organizer" icon={UserRound} onEdit={() => goToStep(1)}>
-          <ReviewGrid
-            items={[
-              ['Event Title / Type', data.type_of_event],
-              ['Organization', data.company_name],
-              ['Head of Organization', data.head_of_organization],
-              ['Contact Person', data.client_name],
-              ['Telephone / Contact Number', data.client_contact_number],
-              ['Email', data.client_email],
-              ['Organization Type', data.organization_type],
-            ]}
-          />
-        </ReviewBlock>
+        <div className="booking-step-heading">
+          <h2>Check everything before submitting</h2>
+          <p>Use the edit buttons if something needs correction. This is the last screen before submission.</p>
+        </div>
 
-        <ReviewBlock title="Address" icon={MapPin} onEdit={() => goToStep(2)}>
-          <ReviewGrid
-            items={[
-              ['Region', data.client_region],
-              ['Province', data.client_province],
-              ['City / Municipality', data.client_city_municipality],
-              ['Barangay', data.client_barangay],
-              ['ZIP Code', data.client_zip_code],
-              ['Full Address', combinedAddress(data)],
-            ]}
-          />
-        </ReviewBlock>
+        <ServerErrorsBanner errors={errors as Record<string, string>} />
 
-        <ReviewBlock title="Schedule" icon={CalendarDays} onEdit={() => goToStep(3)}>
-          <ReviewGrid
-            items={[
-              ['Date/Time From', data.booking_date_from],
-              ['Date/Time To', data.booking_date_to],
-              ['Guests', data.number_of_guests],
-              ['Other Rentals', otherRentals],
-              ['Notes', reservationNotes],
-              ['Public Calendar Title', data.public_calendar_title],
-            ]}
-          />
-        </ReviewBlock>
+        <div className="grid gap-5">
+          <ReviewBlock title="Package and Venue" icon={PackageCheck} onEdit={() => goToStep(0)}>
+            <ReviewGrid
+              items={[
+                ['Selected Venue', selectedVenue?.displayLabel],
+                ['Rental Option ID', data.service_id],
+                ['Usage', BOOKING_USAGE_LABELS[usage]],
+                ['Estimated Base', money(estimatedBase)],
+                ['Estimated Total', money(estimatedTotal)],
+              ]}
+            />
+          </ReviewBlock>
 
-        <ReviewBlock title="Requirements and Status" icon={ShieldCheck} onEdit={() => goToStep(4)}>
-          <ReviewGrid
-            items={[
-              ['Survey Email', data.survey_email],
-              [
-                'Survey Proof Image',
-                data.survey_proof_image
-                  ? data.survey_proof_image.name
-                  : bookingAny?.survey_proof_image_url
-                    ? 'Existing uploaded proof'
-                    : 'Not uploaded',
-              ],
-              ['Guidelines Reviewed', data.policy_acknowledged ? 'Yes' : 'No'],
-              ['Information Accuracy Confirmed', data.accuracy_acknowledged ? 'Yes' : 'No'],
-              ['Booking Status', <BookingStatusBadge key="booking-status" value={data.booking_status} />],
-              ['Payment Status', <BookingStatusBadge key="payment-status" value={data.payment_status} />],
-            ]}
-          />
-        </ReviewBlock>
-      </div>
+          <ReviewBlock title="Organizer" icon={UserRound} onEdit={() => goToStep(1)}>
+            <ReviewGrid
+              items={[
+                ['Event', data.type_of_event],
+                ['Organization', data.company_name],
+                ['Head', data.head_of_organization],
+                ['Contact', data.client_name],
+                ['Mobile', data.client_contact_number],
+                ['Email', data.client_email],
+              ]}
+            />
+          </ReviewBlock>
+
+          <ReviewBlock title="Address" icon={MapPin} onEdit={() => goToStep(2)}>
+            <ReviewGrid
+              items={[
+                ['Region', data.client_region],
+                ['Province', data.client_province],
+                ['City / Municipality', data.client_city_municipality],
+                ['Barangay', data.client_barangay],
+                ['ZIP', data.client_zip_code],
+                ['Full Address', combinedAddress(data)],
+              ]}
+            />
+          </ReviewBlock>
+
+          <ReviewBlock title="Schedule and Guests" icon={CalendarDays} onEdit={() => goToStep(3)}>
+            <ReviewGrid
+              items={[
+                ['Start', formatDateTime(data.booking_date_from)],
+                ['End', formatDateTime(data.booking_date_to)],
+                ['Duration', `${rangeHours(data.booking_date_from, data.booking_date_to)} hour(s)`],
+                ['Guests', data.number_of_guests],
+                ['Other Rentals', otherRentals],
+                ['Notes', reservationNotes],
+              ]}
+            />
+          </ReviewBlock>
+
+          <ReviewBlock title="Guidelines and Status" icon={ShieldCheck} onEdit={() => goToStep(4)}>
+            <ReviewGrid
+              items={[
+                ['Survey Email', data.survey_email],
+                ['Proof Image', data.survey_proof_image?.name || 'No new file selected'],
+                ['Booking Status', data.booking_status],
+                ['Payment Status', data.payment_status],
+                ['Public Calendar Title', data.public_calendar_title],
+              ]}
+            />
+          </ReviewBlock>
+        </div>
+      </section>
     );
   }
 
@@ -1719,56 +2078,46 @@ function previousStep() {
       role={role}
       title={formTitle(role, editing)}
       description={formDescription(role)}
-      compact
       actions={
-        <Button asChild variant="outline" className="rounded-full">
-          <Link href={backHref}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
+        <>
+          <Link href={backHref} className="booking-ghost-action">
+            <ArrowLeft className="h-4 w-4" />
             Back
           </Link>
-        </Button>
+
+          <button
+            type="button"
+            onClick={() => setShowDigitalForm((current) => !current)}
+            className="booking-secondary-action"
+          >
+            {showDigitalForm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showDigitalForm ? 'Hide Form' : 'View Form'}
+          </button>
+        </>
       }
     >
-      <form onSubmit={handleSubmit} className="booking-wizard-shell booking-hotel-wizard-shell">
-      <BookingFormLoadingLayer
-  visible={processing || stepLoading}
-  label={processing ? 'Submitting reservation' : 'Loading form page'}
-  sublabel={
-    processing
-      ? 'Please wait while the booking request is being saved.'
-      : 'Preparing the next section of the reservation form.'
-  }
-/>
-        <div className="booking-wizard-toolbar">
-          <Stepper activeStep={activeStep} maxStep={maxStep} onStepClick={goToStep} />
+      <form onSubmit={handleSubmit} className="booking-lux-form">
+        <PrefillBanner />
 
-          <Button
-            type="button"
-            variant={showDigitalForm ? 'default' : 'outline'}
-            className="booking-digital-form-button rounded-full"
-            onClick={() => setShowDigitalForm((current) => !current)}
-          >
-            {showDigitalForm ? (
-              <EyeOff className="mr-2 h-4 w-4" />
-            ) : (
-              <Eye className="mr-2 h-4 w-4" />
-            )}
-            {showDigitalForm ? 'Hide Form' : 'View Form'}
-          </Button>
-        </div>
+        <Stepper activeStep={activeStep} maxStep={maxStep} onStepClick={goToStep} />
 
-        <WizardNotice errors={stepErrors} />
-
-        <section className="booking-wizard-stage">
-          {renderActiveStep()}
-        </section>
-
-        <SummaryDrawer />
         <DigitalFormPanel />
+
+        <div className={cx('booking-wizard-stage', stepLoading && 'is-loading')}>
+          {stepLoading ? (
+            <div className="booking-step-loader">
+              <LoaderCircle className="h-8 w-8 animate-spin" />
+              <p>Preparing next page...</p>
+            </div>
+          ) : null}
+
+          {renderActiveStep()}
+        </div>
 
         <StepFooter />
       </form>
 
+      <SummaryDrawer />
     </BookingRolePageShell>
   );
 }

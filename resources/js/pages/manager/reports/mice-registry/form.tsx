@@ -1,1 +1,1 @@
-export { default } from '@/pages/reports/mice-registry-forms';
+export { default } from '../../../admin/reports/mice-registry/form';

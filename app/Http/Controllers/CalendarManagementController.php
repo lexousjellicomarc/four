@@ -5,40 +5,145 @@ namespace App\Http\Controllers;
 use App\Models\Booking;
 use App\Models\CalendarBlock;
 use App\Models\PublicEvent;
-use App\Services\BookingService;
+use App\Services\Contracts\BookingServiceInterface;
+use App\Support\WorkspaceAccess;
+use App\Support\WorkspacePage;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
-use App\Support\WorkspacePage;
 
 class CalendarManagementController extends Controller
 {
-    public function index(Request $request, BookingService $bookingService): Response
+    public function index(Request $request, BookingServiceInterface $bookingService): Response
     {
-        abort_unless($request->user()?->hasAnyRole(['admin', 'manager']), 403);
+        $this->ensureAccess($request);
 
-        $monthParam = (string) $request->query('month', '');
-        $month = preg_match('/^\d{4}-\d{2}$/', $monthParam)
-            ? $monthParam
-            : Carbon::now()->format('Y-m');
-
+        $month = $this->resolveMonth((string) $request->query('month', ''));
         $start = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         $end = $start->copy()->endOfMonth();
 
+        $monthAvailability = $this->buildMonthAvailability($bookingService, $start, $end);
+        $bookingEvents = $this->bookingEvents($start, $end);
+        $publicEvents = $this->publicEvents($start, $end);
+        $publicEventItems = $this->publicEventItems($publicEvents);
+        $blockEvents = $this->calendarBlockEvents($start, $end);
+
+        $events = $bookingEvents
+            ->concat($publicEventItems)
+            ->concat($blockEvents)
+            ->sortBy([
+                ['start', 'asc'],
+                ['kind', 'asc'],
+                ['title', 'asc'],
+            ])
+            ->values();
+
+        $areaOptions = method_exists($bookingService, 'calendarAreaOptions')
+            ? $bookingService->calendarAreaOptions()
+            : $this->fallbackAreaOptions();
+
+        return Inertia::render(WorkspacePage::resolve($request, 'calendar/manage'), [
+            'workspaceRole' => WorkspaceAccess::role($request),
+            'isStaffWorkspace' => WorkspaceAccess::isStaffLike($request),
+            'canManageCalendarBlocks' => $this->canManageCalendarBlocks($request),
+
+            'month' => $month,
+            'monthAvailability' => $monthAvailability,
+            'events' => $events,
+            'counts' => [
+                'all' => $events->count(),
+                'bookings' => $bookingEvents->count(),
+                'blocks' => $blockEvents->count(),
+                'public_events' => $publicEventItems->count(),
+            ],
+            'highlights' => $this->highlights($publicEvents),
+            'areaOptions' => $areaOptions,
+        ]);
+    }
+
+    protected function ensureAccess(Request $request): void
+    {
+        abort_unless($request->user(), 403);
+        abort_unless($this->canManageCalendarBlocks($request), 403);
+    }
+
+    protected function canManageCalendarBlocks(Request $request): bool
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['admin', 'manager'])) {
+            return true;
+        }
+
+        if (method_exists($user, 'hasRole') && ($user->hasRole('admin') || $user->hasRole('manager'))) {
+            return true;
+        }
+
+        $role = (string) ($user->role_name ?? $user->role ?? '');
+
+        if (in_array($role, ['admin', 'manager'], true)) {
+            return true;
+        }
+
+        return in_array(WorkspaceAccess::role($request), ['admin', 'manager'], true);
+    }
+
+    protected function resolveMonth(string $month): string
+    {
+        $month = trim($month);
+
+        if (preg_match('/^\d{4}-\d{2}$/', $month)) {
+            return $month;
+        }
+
+        return Carbon::now()->format('Y-m');
+    }
+
+    protected function buildMonthAvailability(
+        BookingServiceInterface $bookingService,
+        Carbon $start,
+        Carbon $end,
+    ): array {
+        if (method_exists($bookingService, 'getDashboardMonthAvailability')) {
+            $monthAvailability = $bookingService->getDashboardMonthAvailability($start->format('Y-m'));
+
+            if (is_array($monthAvailability) && count($monthAvailability) > 0) {
+                return $monthAvailability;
+            }
+        }
+
         $monthAvailability = [];
+
         for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
             $dateKey = $day->format('Y-m-d');
+
             $monthAvailability[$dateKey] = $bookingService->getDashboardDayStatus($dateKey);
         }
 
-        $bookingEvents = Booking::query()
-            ->whereDate('booking_date_to', '>=', $start)
-            ->whereDate('booking_date_from', '<=', $end)
+        return $monthAvailability;
+    }
+
+    protected function bookingEvents(Carbon $start, Carbon $end): Collection
+    {
+        return Booking::query()
+            ->with([
+                'service.serviceType',
+                'bookingServices.service.serviceType',
+            ])
+            ->whereDate('booking_date_to', '>=', $start->format('Y-m-d'))
+            ->whereDate('booking_date_from', '<=', $end->format('Y-m-d'))
             ->orderBy('booking_date_from')
             ->get([
                 'id',
+                'service_id',
                 'client_name',
                 'client_email',
                 'company_name',
@@ -48,29 +153,59 @@ class CalendarManagementController extends Controller
                 'booking_date_from',
                 'booking_date_to',
                 'number_of_guests',
+                'public_calendar_title',
+                'is_public_calendar_visible',
             ])
             ->map(function (Booking $booking) {
+                $titleBase = trim((string) (
+                    $booking->public_calendar_title
+                    ?: $booking->type_of_event
+                    ?: 'Booking'
+                ));
+
+                $clientBase = trim((string) (
+                    $booking->company_name
+                    ?: $booking->client_name
+                    ?: 'Client'
+                ));
+
+                $area = $this->bookingAreaLabel($booking);
+
                 return [
                     'id' => $booking->id,
                     'kind' => 'booking',
-                    'title' => trim(((string) $booking->type_of_event ? $booking->type_of_event . ' – ' : '') . ((string) ($booking->company_name ?: $booking->client_name ?: 'Booking'))),
-                    'start' => optional($booking->booking_date_from)->format('Y-m-d\TH:i') ?? (string) $booking->booking_date_from,
-                    'end' => optional($booking->booking_date_to)->format('Y-m-d\TH:i') ?? (string) $booking->booking_date_to,
-                    'status' => (string) $booking->booking_status,
+                    'title' => trim($titleBase . ' · ' . $clientBase),
+                    'start' => $this->dateTimeValue($booking->booking_date_from),
+                    'end' => $this->dateTimeValue($booking->booking_date_to),
+                    'dateFrom' => $this->dateValue($booking->booking_date_from),
+                    'dateTo' => $this->dateValue($booking->booking_date_to),
+                    'status' => (string) ($booking->booking_status ?? ''),
                     'payment_status' => (string) ($booking->payment_status ?? ''),
+                    'public_status' => $booking->is_public_calendar_visible ? 'blue' : 'gold',
+                    'area' => $area,
+                    'block' => $this->inferBlockFromDateTimes($booking->booking_date_from, $booking->booking_date_to),
+                    'note' => '',
+                    'notes' => '',
                     'client_name' => (string) ($booking->client_name ?? ''),
                     'client_email' => (string) ($booking->client_email ?? ''),
                     'company_name' => (string) ($booking->company_name ?? ''),
                     'guest_count' => (int) ($booking->number_of_guests ?? 0),
+                    'summary' => $area !== '' ? "Venue area: {$area}" : '',
+                    'description' => '',
+                    'time' => $this->timeRangeLabel($booking->booking_date_from, $booking->booking_date_to),
+                    'image' => '',
                     'groupKey' => substr(hash('sha1', 'booking|' . $booking->id), 0, 16),
                 ];
             })
             ->values();
+    }
 
-        $publicEvents = PublicEvent::query()
+    protected function publicEvents(Carbon $start, Carbon $end): Collection
+    {
+        return PublicEvent::query()
             ->where('is_public', true)
-            ->whereDate('event_date', '>=', $start)
-            ->whereDate('event_date', '<=', $end)
+            ->whereDate('event_date', '>=', $start->format('Y-m-d'))
+            ->whereDate('event_date', '<=', $end->format('Y-m-d'))
             ->orderBy('event_date')
             ->get([
                 'id',
@@ -82,35 +217,46 @@ class CalendarManagementController extends Controller
                 'event_time',
                 'images',
             ]);
+    }
 
-        $publicEventItems = $publicEvents->map(function ($event) {
-            $eventDate = Carbon::parse($event->event_date);
-            $time = trim((string) ($event->event_time ?? ''));
-            $startAt = $eventDate->copy()->startOfDay();
-            $endAt = $eventDate->copy()->endOfDay();
+    protected function publicEventItems(Collection $publicEvents): Collection
+    {
+        return $publicEvents
+            ->map(function (PublicEvent $event) {
+                [$startAt, $endAt] = $this->publicEventDateTimes($event);
 
-            if (preg_match('/^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/', $time, $matches)) {
-                $startAt = Carbon::parse($eventDate->format('Y-m-d') . ' ' . $matches[1]);
-                $endAt = Carbon::parse($eventDate->format('Y-m-d') . ' ' . $matches[2]);
-            }
+                return [
+                    'id' => 'public-event-' . $event->id,
+                    'kind' => 'public_event',
+                    'title' => 'PUBLIC: ' . trim((string) ($event->title ?? 'Public Event')),
+                    'start' => $startAt->format('Y-m-d\TH:i'),
+                    'end' => $endAt->format('Y-m-d\TH:i'),
+                    'dateFrom' => $startAt->format('Y-m-d'),
+                    'dateTo' => $endAt->format('Y-m-d'),
+                    'status' => 'public_booked',
+                    'payment_status' => '',
+                    'public_status' => 'blue',
+                    'area' => (string) ($event->venue ?? ''),
+                    'block' => $this->inferBlockFromDateTimes($startAt, $endAt),
+                    'note' => (string) ($event->note ?? ''),
+                    'notes' => (string) ($event->note ?? ''),
+                    'client_name' => '',
+                    'client_email' => '',
+                    'company_name' => '',
+                    'guest_count' => null,
+                    'summary' => $this->summaryText($event),
+                    'description' => (string) ($event->description ?? ''),
+                    'time' => (string) ($event->event_time ?? ''),
+                    'image' => $this->firstImage($event->images),
+                    'groupKey' => substr(hash('sha1', 'public-event|' . $event->id), 0, 16),
+                ];
+            })
+            ->values();
+    }
 
-            return [
-                'id' => 'public-event-' . $event->id,
-                'kind' => 'public_event',
-                'title' => 'PUBLIC: ' . $event->title,
-                'start' => $startAt->format('Y-m-d\TH:i'),
-                'end' => $endAt->format('Y-m-d\TH:i'),
-                'status' => 'public_booked',
-                'area' => (string) ($event->venue ?? ''),
-                'summary' => (string) (($event->note ?? '') !== '' ? $event->note : Str::limit((string) ($event->description ?? ''), 140)),
-                'description' => (string) ($event->description ?? ''),
-                'time' => (string) ($event->event_time ?? ''),
-                'image' => (string) (is_array($event->images ?? null) && !empty($event->images) ? $event->images[0] : ''),
-                'groupKey' => substr(hash('sha1', 'public-event|' . $event->id), 0, 16),
-            ];
-        })->values();
-
-        $calendarBlocks = CalendarBlock::query()
+    protected function calendarBlockEvents(Carbon $start, Carbon $end): Collection
+    {
+        return CalendarBlock::query()
             ->whereDate('date_to', '>=', $start->format('Y-m-d'))
             ->whereDate('date_from', '<=', $end->format('Y-m-d'))
             ->orderBy('date_from')
@@ -123,99 +269,374 @@ class CalendarManagementController extends Controller
                 'public_status',
                 'date_from',
                 'date_to',
-            ]);
+            ])
+            ->map(function (CalendarBlock $calendarBlock) use ($start, $end) {
+                $block = strtoupper((string) ($calendarBlock->block ?? 'DAY'));
+                $publicStatus = strtolower((string) ($calendarBlock->public_status ?? 'red'));
 
-        $blockEvents = $calendarBlocks->map(function (CalendarBlock $calendarBlock) use ($start, $end) {
-            $rangeStart = Carbon::parse($calendarBlock->date_from)->startOfDay();
-            $rangeEnd = Carbon::parse($calendarBlock->date_to)->startOfDay();
+                $rangeStart = Carbon::parse($calendarBlock->date_from)->startOfDay();
+                $rangeEnd = Carbon::parse($calendarBlock->date_to)->startOfDay();
 
-            if ($rangeStart->lt($start)) {
-                $rangeStart = $start->copy()->startOfDay();
-            }
-            if ($rangeEnd->gt($end)) {
-                $rangeEnd = $end->copy()->startOfDay();
-            }
+                $clippedStart = $rangeStart->lt($start)
+                    ? $start->copy()->startOfDay()
+                    : $rangeStart->copy()->startOfDay();
 
-            $from = '06:00';
-            if ($calendarBlock->block === 'PM') {
-                $from = '12:00';
-            } elseif ($calendarBlock->block === 'EVE') {
-                $from = '18:00';
-            }
+                $clippedEnd = $rangeEnd->gt($end)
+                    ? $end->copy()->startOfDay()
+                    : $rangeEnd->copy()->startOfDay();
 
-            $startDt = $rangeStart->copy()->setTimeFromTimeString($from);
-            $endDt = match (strtoupper((string) $calendarBlock->block)) {
-                'AM' => $rangeEnd->copy()->setTime(12, 0),
-                'PM' => $rangeEnd->copy()->setTime(18, 0),
-                default => $rangeEnd->copy()->addDay()->startOfDay(),
-            };
+                [$startAt, $endAt] = $this->blockDateTimes($clippedStart, $clippedEnd, $block);
 
-            $normalizedStatus = match (strtolower((string) ($calendarBlock->public_status ?? 'red'))) {
-                'blue' => 'public_booked',
-                'gold' => 'private_booked',
-                default => 'blocked',
-            };
+                $status = match ($publicStatus) {
+                    'blue' => 'public_booked',
+                    'gold' => 'private_booked',
+                    default => 'blocked',
+                };
 
-            return [
-                'id' => 'block-' . $calendarBlock->id,
-                'kind' => 'block',
-                'block_id' => $calendarBlock->id,
-                'title' => 'BLOCK: ' . $calendarBlock->title,
-                'start' => $startDt->format('Y-m-d\TH:i'),
-                'end' => $endDt->format('Y-m-d\TH:i'),
-                'status' => $normalizedStatus,
-                'public_status' => strtolower((string) ($calendarBlock->public_status ?? 'red')),
-                'area' => (string) ($calendarBlock->area ?? ''),
-                'note' => (string) ($calendarBlock->notes ?? ''),
-                'block' => strtoupper((string) $calendarBlock->block),
-                'dateFrom' => optional($calendarBlock->date_from)->format('Y-m-d') ?? (string) $calendarBlock->date_from,
-                'dateTo' => optional($calendarBlock->date_to)->format('Y-m-d') ?? (string) $calendarBlock->date_to,
-                'groupKey' => substr(hash('sha1', 'block|' . $calendarBlock->id), 0, 16),
-            ];
-        })->values();
-
-        $highlights = [
-            'bccc' => $publicEvents
-                ->filter(fn ($event) => str_contains(strtolower((string) ($event->venue ?? '')), 'bccc')
-                    || str_contains(strtolower((string) ($event->venue ?? '')), 'convention'))
-                ->values()
-                ->map(fn ($event) => $this->highlightRow($event, 'bccc')),
-            'city' => $publicEvents
-                ->filter(fn ($event) => ! (str_contains(strtolower((string) ($event->venue ?? '')), 'bccc')
-                    || str_contains(strtolower((string) ($event->venue ?? '')), 'convention')))
-                ->values()
-                ->map(fn ($event) => $this->highlightRow($event, 'city')),
-        ];
-
-        return Inertia::render(WorkspacePage::resolve($request, 'calendar/manage'), [
-            'month' => $month,
-            'monthAvailability' => $monthAvailability,
-            'events' => $bookingEvents->concat($publicEventItems)->concat($blockEvents)->values(),
-            'highlights' => $highlights,
-            'areaOptions' => [
-                'FULL HALL',
-                'MAIN HALL',
-                'FOYER & LOBBY AREA',
-                'VIP LOUNGE',
-                'BOARD ROOM',
-                'BASEMENT',
-                'GALLERY2600',
-            ],
-        ]);
+                return [
+                    'id' => 'block-' . $calendarBlock->id,
+                    'kind' => 'block',
+                    'block_id' => $calendarBlock->id,
+                    'title' => 'BLOCK: ' . trim((string) ($calendarBlock->title ?: 'Calendar Block')),
+                    'start' => $startAt->format('Y-m-d\TH:i'),
+                    'end' => $endAt->format('Y-m-d\TH:i'),
+                    'dateFrom' => $this->dateValue($calendarBlock->date_from),
+                    'dateTo' => $this->dateValue($calendarBlock->date_to),
+                    'status' => $status,
+                    'payment_status' => '',
+                    'public_status' => $publicStatus,
+                    'area' => (string) ($calendarBlock->area ?? ''),
+                    'block' => $block,
+                    'note' => (string) ($calendarBlock->notes ?? ''),
+                    'notes' => (string) ($calendarBlock->notes ?? ''),
+                    'client_name' => '',
+                    'client_email' => '',
+                    'company_name' => '',
+                    'guest_count' => null,
+                    'summary' => $this->blockSummary($calendarBlock),
+                    'description' => (string) ($calendarBlock->notes ?? ''),
+                    'time' => $this->blockTimeLabel($block),
+                    'image' => '',
+                    'groupKey' => substr(hash('sha1', 'block|' . $calendarBlock->id), 0, 16),
+                ];
+            })
+            ->values();
     }
 
-    protected function highlightRow($event, string $scope): array
+    protected function highlights(Collection $publicEvents): array
+    {
+        $bcccEvents = $publicEvents
+            ->filter(fn (PublicEvent $event) => $this->isBcccEvent($event))
+            ->values();
+
+        $cityEvents = $publicEvents
+            ->filter(fn (PublicEvent $event) => ! $this->isBcccEvent($event))
+            ->values();
+
+        return [
+            'bccc' => $bcccEvents
+                ->map(fn (PublicEvent $event) => $this->highlightRow($event, 'bccc'))
+                ->values(),
+            'city' => $cityEvents
+                ->map(fn (PublicEvent $event) => $this->highlightRow($event, 'city'))
+                ->values(),
+        ];
+    }
+
+    protected function highlightRow(PublicEvent $event, string $scope): array
     {
         return [
             'id' => (int) $event->id,
             'scope' => $scope,
             'title' => (string) ($event->title ?? ''),
             'venue' => (string) ($event->venue ?? ''),
-            'date' => optional($event->event_date)->format('Y-m-d') ?? (string) ($event->event_date ?? ''),
+            'date' => $this->dateValue($event->event_date),
             'time' => (string) ($event->event_time ?? ''),
-            'summary' => (string) (($event->note ?? '') !== '' ? $event->note : Str::limit((string) ($event->description ?? ''), 140)),
+            'summary' => $this->summaryText($event),
             'description' => (string) ($event->description ?? ''),
-            'image' => (string) (is_array($event->images ?? null) && !empty($event->images) ? $event->images[0] : ''),
+            'image' => $this->firstImage($event->images),
+        ];
+    }
+
+    protected function isBcccEvent(PublicEvent $event): bool
+    {
+        $venue = strtolower((string) ($event->venue ?? ''));
+
+        return str_contains($venue, 'bccc')
+            || str_contains($venue, 'convention')
+            || str_contains($venue, 'cultural center');
+    }
+
+    protected function publicEventDateTimes(PublicEvent $event): array
+    {
+        $eventDate = Carbon::parse($event->event_date)->startOfDay();
+        $time = trim((string) ($event->event_time ?? ''));
+
+        if ($time === '') {
+            return [
+                $eventDate->copy()->setTime(6, 0),
+                $eventDate->copy()->setTime(23, 59),
+            ];
+        }
+
+        $normalized = strtolower($time);
+        $normalized = str_replace(['–', '—'], '-', $normalized);
+
+        if (preg_match('/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*-\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i', $normalized, $matches)) {
+            $startHour = (int) $matches[1];
+            $startMinute = isset($matches[2]) && $matches[2] !== '' ? (int) $matches[2] : 0;
+            $startMeridiem = $matches[3] ?: $matches[6] ?: null;
+
+            $endHour = (int) $matches[4];
+            $endMinute = isset($matches[5]) && $matches[5] !== '' ? (int) $matches[5] : 0;
+            $endMeridiem = $matches[6] ?: $startMeridiem;
+
+            $startAt = $eventDate->copy()->setTime(
+                $this->hour24($startHour, $startMeridiem),
+                $startMinute,
+            );
+
+            $endAt = $eventDate->copy()->setTime(
+                $this->hour24($endHour, $endMeridiem),
+                $endMinute,
+            );
+
+            if ($endAt->lessThanOrEqualTo($startAt)) {
+                $endAt->addDay();
+            }
+
+            return [$startAt, $endAt];
+        }
+
+        try {
+            $startAt = Carbon::parse($eventDate->format('Y-m-d') . ' ' . $time);
+
+            return [
+                $startAt,
+                $startAt->copy()->addHours(2),
+            ];
+        } catch (\Throwable) {
+            return [
+                $eventDate->copy()->setTime(6, 0),
+                $eventDate->copy()->setTime(23, 59),
+            ];
+        }
+    }
+
+    protected function hour24(int $hour, ?string $meridiem): int
+    {
+        $hour = max(1, min(12, $hour));
+        $meridiem = strtolower((string) $meridiem);
+
+        if ($meridiem === 'pm' && $hour !== 12) {
+            return $hour + 12;
+        }
+
+        if ($meridiem === 'am' && $hour === 12) {
+            return 0;
+        }
+
+        return $hour;
+    }
+
+    protected function blockDateTimes(Carbon $rangeStart, Carbon $rangeEnd, string $block): array
+    {
+        $block = strtoupper($block);
+
+        $startAt = match ($block) {
+            'AM' => $rangeStart->copy()->setTime(6, 0),
+            'PM' => $rangeStart->copy()->setTime(12, 0),
+            'EVE' => $rangeStart->copy()->setTime(18, 0),
+            default => $rangeStart->copy()->setTime(6, 0),
+        };
+
+        $endAt = match ($block) {
+            'AM' => $rangeEnd->copy()->setTime(12, 0),
+            'PM' => $rangeEnd->copy()->setTime(18, 0),
+            'EVE' => $rangeEnd->copy()->setTime(23, 59),
+            default => $rangeEnd->copy()->setTime(23, 59),
+        };
+
+        return [$startAt, $endAt];
+    }
+
+    protected function blockTimeLabel(string $block): string
+    {
+        return match (strtoupper($block)) {
+            'AM' => '6:00 AM - 12:00 PM',
+            'PM' => '12:00 PM - 6:00 PM',
+            'EVE' => '6:00 PM - 11:59 PM',
+            default => '6:00 AM - 11:59 PM',
+        };
+    }
+
+    protected function blockSummary(CalendarBlock $calendarBlock): string
+    {
+        $status = strtolower((string) ($calendarBlock->public_status ?? 'red'));
+
+        $prefix = match ($status) {
+            'blue' => 'Public-visible calendar activity',
+            'gold' => 'Private reservation block',
+            default => 'Unavailable calendar block',
+        };
+
+        $area = trim((string) ($calendarBlock->area ?? ''));
+        $notes = trim((string) ($calendarBlock->notes ?? ''));
+
+        return collect([
+            $prefix,
+            $area !== '' ? "Area: {$area}" : null,
+            $notes !== '' ? Str::limit($notes, 120) : null,
+        ])->filter()->implode(' · ');
+    }
+
+    protected function bookingAreaLabel(Booking $booking): string
+    {
+        $booking->loadMissing([
+            'service.serviceType',
+            'bookingServices.service.serviceType',
+        ]);
+
+        $labels = collect();
+
+        foreach ($booking->bookingServices as $bookingService) {
+            if ($bookingService->service?->serviceType?->name) {
+                $labels->push($bookingService->service->serviceType->name);
+            }
+        }
+
+        if ($booking->service?->serviceType?->name) {
+            $labels->push($booking->service->serviceType->name);
+        }
+
+        if ($booking->service?->name) {
+            $labels->push($booking->service->name);
+        }
+
+        return $labels
+            ->filter()
+            ->unique()
+            ->values()
+            ->implode(', ');
+    }
+
+    protected function inferBlockFromDateTimes($from, $to): string
+    {
+        if (! $from || ! $to) {
+            return 'DAY';
+        }
+
+        try {
+            $start = $from instanceof \DateTimeInterface ? Carbon::instance($from) : Carbon::parse($from);
+            $end = $to instanceof \DateTimeInterface ? Carbon::instance($to) : Carbon::parse($to);
+        } catch (\Throwable) {
+            return 'DAY';
+        }
+
+        $startTime = $start->format('H:i');
+        $endTime = $end->format('H:i');
+
+        if ($startTime === '06:00' && $endTime === '12:00') {
+            return 'AM';
+        }
+
+        if ($startTime === '12:00' && $endTime === '18:00') {
+            return 'PM';
+        }
+
+        if ($startTime === '18:00' && in_array($endTime, ['23:59', '00:00'], true)) {
+            return 'EVE';
+        }
+
+        return 'DAY';
+    }
+
+    protected function timeRangeLabel($from, $to): string
+    {
+        if (! $from || ! $to) {
+            return '';
+        }
+
+        try {
+            $start = $from instanceof \DateTimeInterface ? Carbon::instance($from) : Carbon::parse($from);
+            $end = $to instanceof \DateTimeInterface ? Carbon::instance($to) : Carbon::parse($to);
+
+            return $start->format('g:i A') . ' - ' . $end->format('g:i A');
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    protected function dateTimeValue($value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        try {
+            $date = $value instanceof \DateTimeInterface ? Carbon::instance($value) : Carbon::parse($value);
+
+            return $date->format('Y-m-d\TH:i');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    protected function dateValue($value): string
+    {
+        if (! $value) {
+            return '';
+        }
+
+        try {
+            $date = $value instanceof \DateTimeInterface ? Carbon::instance($value) : Carbon::parse($value);
+
+            return $date->format('Y-m-d');
+        } catch (\Throwable) {
+            return (string) $value;
+        }
+    }
+
+    protected function summaryText(PublicEvent $event): string
+    {
+        $note = trim((string) ($event->note ?? ''));
+
+        if ($note !== '') {
+            return $note;
+        }
+
+        return Str::limit((string) ($event->description ?? ''), 140);
+    }
+
+    protected function firstImage($images): string
+    {
+        if (is_array($images)) {
+            return (string) ($images[0] ?? '');
+        }
+
+        if (is_string($images) && $images !== '') {
+            $decoded = json_decode($images, true);
+
+            if (is_array($decoded)) {
+                return (string) ($decoded[0] ?? '');
+            }
+
+            return $images;
+        }
+
+        return '';
+    }
+
+    protected function fallbackAreaOptions(): array
+    {
+        return [
+            'FULL HALL',
+            'MAIN HALL',
+            'FOYER & LOBBY AREA',
+            'VIP LOUNGE',
+            'BOARD ROOM',
+            'BASEMENT',
+            'GALLERY2600',
         ];
     }
 }

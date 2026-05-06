@@ -1,108 +1,112 @@
 import { useEffect } from 'react';
 
 const HORIZONTAL_SCROLL_SELECTORS = [
-  '.booking-hotel-carousel',
-  '.booking-game-carousel',
-  '.booking-guideline-carousel',
-  '.booking-review-carousel',
-  '.booking-field-carousel',
-  '.booking-hotel-usage-strip',
-  '.booking-usage-panel',
-  '.booking-wizard-top-steps',
+    '.booking-hotel-carousel',
+    '.booking-game-carousel',
+    '.booking-guideline-carousel',
+    '.booking-review-carousel',
+    '.booking-field-carousel',
+    '.booking-hotel-usage-strip',
+    '.booking-usage-panel',
+    '.booking-wizard-top-steps',
 ].join(',');
 
-function closestHorizontalScroller(target: EventTarget | null): HTMLElement | null {
-  if (!(target instanceof HTMLElement)) {
-    return null;
-  }
+function closestHorizontalScroller(
+    target: EventTarget | null,
+): HTMLElement | null {
+    if (!(target instanceof HTMLElement)) {
+        return null;
+    }
 
-  return target.closest(HORIZONTAL_SCROLL_SELECTORS) as HTMLElement | null;
+    return target.closest(HORIZONTAL_SCROLL_SELECTORS) as HTMLElement | null;
 }
 
 function hasHorizontalOverflow(element: HTMLElement): boolean {
-  return element.scrollWidth > element.clientWidth + 4;
+    return element.scrollWidth > element.clientWidth + 4;
 }
 
 function markMotion() {
-  document.documentElement.classList.add('booking-scroll-motion-active');
+    document.documentElement.classList.add('booking-scroll-motion-active');
 
-  window.clearTimeout((window as any).__bookingScrollMotionTimer);
+    window.clearTimeout((window as any).__bookingScrollMotionTimer);
 
-  (window as any).__bookingScrollMotionTimer = window.setTimeout(() => {
-    document.documentElement.classList.remove('booking-scroll-motion-active');
-  }, 190);
+    (window as any).__bookingScrollMotionTimer = window.setTimeout(() => {
+        document.documentElement.classList.remove(
+            'booking-scroll-motion-active',
+        );
+    }, 190);
 }
 
 export function useBookingScrollMotion(active = true) {
-  useEffect(() => {
-    if (!active) return;
+    useEffect(() => {
+        if (!active) return;
 
-    document.documentElement.classList.add('booking-scroll-enhanced');
+        document.documentElement.classList.add('booking-scroll-enhanced');
 
-    function handleWheel(event: WheelEvent) {
-      const scroller = closestHorizontalScroller(event.target);
+        function handleWheel(event: WheelEvent) {
+            const scroller = closestHorizontalScroller(event.target);
 
-      if (!scroller || !hasHorizontalOverflow(scroller)) {
-        markMotion();
-        return;
-      }
+            if (!scroller || !hasHorizontalOverflow(scroller)) {
+                markMotion();
+                return;
+            }
 
-      const deltaY = event.deltaY;
-      const deltaX = event.deltaX;
-      const dominantVerticalWheel = Math.abs(deltaY) >= Math.abs(deltaX);
+            const deltaY = event.deltaY;
+            const deltaX = event.deltaX;
+            const dominantVerticalWheel = Math.abs(deltaY) >= Math.abs(deltaX);
 
-      if (dominantVerticalWheel && Math.abs(deltaY) > 0) {
-        event.preventDefault();
-        event.stopPropagation();
+            if (dominantVerticalWheel && Math.abs(deltaY) > 0) {
+                event.preventDefault();
+                event.stopPropagation();
 
-        scroller.scrollBy({
-          left: deltaY,
-          top: 0,
-          behavior: 'smooth',
+                scroller.scrollBy({
+                    left: deltaY,
+                    top: 0,
+                    behavior: 'smooth',
+                });
+
+                markMotion();
+                return;
+            }
+
+            if (Math.abs(deltaX) > 0) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                scroller.scrollBy({
+                    left: deltaX,
+                    top: 0,
+                    behavior: 'smooth',
+                });
+
+                markMotion();
+            }
+        }
+
+        function handleScroll() {
+            markMotion();
+        }
+
+        document.addEventListener('wheel', handleWheel, {
+            passive: false,
+            capture: true,
         });
 
-        markMotion();
-        return;
-      }
-
-      if (Math.abs(deltaX) > 0) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        scroller.scrollBy({
-          left: deltaX,
-          top: 0,
-          behavior: 'smooth',
+        document.addEventListener('scroll', handleScroll, {
+            passive: true,
+            capture: true,
         });
 
-        markMotion();
-      }
-    }
+        return () => {
+            document.documentElement.classList.remove(
+                'booking-scroll-enhanced',
+                'booking-scroll-motion-active',
+            );
 
-    function handleScroll() {
-      markMotion();
-    }
+            document.removeEventListener('wheel', handleWheel, true);
+            document.removeEventListener('scroll', handleScroll, true);
 
-    document.addEventListener('wheel', handleWheel, {
-      passive: false,
-      capture: true,
-    });
-
-    document.addEventListener('scroll', handleScroll, {
-      passive: true,
-      capture: true,
-    });
-
-    return () => {
-      document.documentElement.classList.remove(
-        'booking-scroll-enhanced',
-        'booking-scroll-motion-active',
-      );
-
-      document.removeEventListener('wheel', handleWheel, true);
-      document.removeEventListener('scroll', handleScroll, true);
-
-      window.clearTimeout((window as any).__bookingScrollMotionTimer);
-    };
-  }, [active]);
+            window.clearTimeout((window as any).__bookingScrollMotionTimer);
+        };
+    }, [active]);
 }

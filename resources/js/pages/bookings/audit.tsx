@@ -1,470 +1,675 @@
 import AppLayout from '@/layouts/app-layout';
-import { Head, Link, router } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
-import {
-  Activity,
-  CalendarDays,
-  CreditCard,
-  Download,
-  ExternalLink,
-  Filter,
-  History,
-  Printer,
-  Search,
-  ShieldAlert,
-  Trash2,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination';
 import { type BreadcrumbItem } from '@/types';
+import { Head, Link, router } from '@inertiajs/react';
+import type { LucideIcon } from 'lucide-react';
+import {
+    Activity,
+    CalendarDays,
+    CreditCard,
+    Download,
+    Eye,
+    Filter,
+    History,
+    Printer,
+    Search,
+    ShieldAlert,
+    Trash2,
+    Users,
+    X,
+} from 'lucide-react';
+import { FormEvent, useMemo, useState } from 'react';
 
 type AuditEvent = {
-  id: number;
-  booking_id: number | null;
-  booking_exists: boolean;
-  event_key: string;
-  title: string;
-  from_status?: string | null;
-  to_status?: string | null;
-  from_payment_status?: string | null;
-  to_payment_status?: string | null;
-  reason?: string | null;
-  meta?: Record<string, unknown> | null;
-  event_at?: string | null;
-  created_at?: string | null;
-  actor?: {
     id: number;
-    name: string;
-    email: string;
-  } | null;
+    booking_id: number | null;
+    booking_exists: boolean;
+    event_key: string;
+    title: string;
+    from_status?: string | null;
+    to_status?: string | null;
+    from_payment_status?: string | null;
+    to_payment_status?: string | null;
+    reason?: string | null;
+    meta?: Record<string, unknown> | null;
+    event_at?: string | null;
+    created_at?: string | null;
+    actor?: {
+        id: number;
+        name: string;
+        email: string;
+    } | null;
 };
 
 type Paginated<T> = {
-  data: T[];
-  links?: Array<{ url: string | null; label: string; active: boolean }>;
+    data: T[];
+    links?: Array<{ url: string | null; label: string; active: boolean }>;
 };
 
 type Props = {
-  events: Paginated<AuditEvent>;
-  filters: {
-    q?: string;
-    event_key?: string;
-    status?: string;
-    payment_status?: string;
-    date_from?: string;
-    date_to?: string;
-    booking_id?: string;
-    only_deleted?: boolean;
-  };
-  stats: {
-    total: number;
-    status_changes: number;
-    payment_changes: number;
-    auto_deleted: number;
-    today: number;
-    unique_bookings: number;
-  };
-  eventKeys: string[];
-  statusOptions: string[];
-  paymentStatusOptions: string[];
+    events: Paginated<AuditEvent>;
+    filters: {
+        q?: string;
+        event_key?: string;
+        status?: string;
+        payment_status?: string;
+        date_from?: string;
+        date_to?: string;
+        booking_id?: string;
+        only_deleted?: boolean;
+    };
+    stats: {
+        total: number;
+        status_changes: number;
+        payment_changes: number;
+        auto_deleted: number;
+        today: number;
+        unique_bookings: number;
+    };
+    eventKeys: string[];
+    statusOptions: string[];
+    paymentStatusOptions: string[];
 };
 
-const breadcrumbs: BreadcrumbItem[] = [
-  { title: 'Bookings', href: '/bookings' },
-  { title: 'Audit Trail', href: '/bookings/audit' },
-];
+function currentBookingsBase() {
+    if (window.location.pathname.startsWith('/admin')) return '/admin/bookings';
+    if (window.location.pathname.startsWith('/manager'))
+        return '/manager/bookings';
+
+    return '/bookings';
+}
+
+function breadcrumbs(): BreadcrumbItem[] {
+    return [
+        { title: 'Bookings', href: currentBookingsBase() },
+        { title: 'Audit Trail', href: `${currentBookingsBase()}/audit` },
+    ];
+}
 
 function formatDateTime(value?: string | null) {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en-PH', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
+    if (!value) return '—';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat('en-PH', {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: 'numeric',
+        minute: '2-digit',
+    }).format(date);
 }
 
-function eventKeyLabel(key: string) {
-  return key.replaceAll('_', ' ');
+function cleanLabel(value?: string | null) {
+    return String(value || '—')
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function statusTone(status?: string | null) {
-  const value = String(status ?? '').toLowerCase();
-  const map: Record<string, string> = {
-    pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100',
-    confirmed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100',
-    active: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-100',
-    completed: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-100',
-    declined: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-100',
-    cancelled: 'bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100',
-    deleted: 'bg-red-200 text-red-900 dark:bg-red-900/40 dark:text-red-100',
-    unpaid: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-100',
-    partial: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100',
-    paid: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100',
-    owing: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-100',
-  };
+function statusChip(status?: string | null) {
+    const value = String(status || '').toLowerCase();
 
-  return map[value] ?? 'bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100';
+    if (
+        ['confirmed', 'active', 'completed', 'paid', 'verified'].includes(value)
+    ) {
+        return 'alh-status-chip is-good';
+    }
+
+    if (
+        [
+            'pending',
+            'partial',
+            'unpaid',
+            'for_review',
+            'pencil_booked',
+        ].includes(value)
+    ) {
+        return 'alh-status-chip is-warn';
+    }
+
+    if (
+        ['declined', 'cancelled', 'deleted', 'failed', 'rejected'].includes(
+            value,
+        )
+    ) {
+        return 'alh-status-chip is-bad';
+    }
+
+    if (['payment_status_changed', 'booking_status_changed'].includes(value)) {
+        return 'alh-status-chip is-public';
+    }
+
+    return 'alh-status-chip';
 }
 
-function eventTone(eventKey: string) {
-  if (eventKey === 'booking_auto_deleted') return 'border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-red-950/20';
-  if (eventKey === 'payment_status_changed') return 'border-sky-200 bg-sky-50 dark:border-sky-900/30 dark:bg-sky-950/20';
-  if (eventKey === 'booking_status_changed') return 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/30 dark:bg-emerald-950/20';
-  return 'border-black/5 bg-white dark:border-white/10 dark:bg-white/5';
+function eventRowTone(eventKey: string) {
+    if (eventKey === 'booking_auto_deleted') return 'is-danger';
+    if (eventKey === 'payment_status_changed') return 'is-payment';
+    if (eventKey === 'booking_status_changed') return 'is-status';
+
+    return '';
 }
 
-function isPaginationEllipsis(label: string) {
-  const plain = label.replace(/<[^>]+>/g, '').trim();
-  return plain === '...';
+function stripHtml(label: string) {
+    return String(label || '')
+        .replace(/<[^>]*>/g, '')
+        .replace(/&laquo;|&raquo;/g, '')
+        .trim();
 }
 
 function buildQuery(filters: Props['filters']) {
-  const params = new URLSearchParams();
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === '' || value === false) return;
-    params.set(key, value === true ? '1' : String(value));
-  });
-  return params.toString();
+    const params = new URLSearchParams();
+
+    Object.entries(filters).forEach(([key, value]) => {
+        if (
+            value === undefined ||
+            value === null ||
+            value === '' ||
+            value === false
+        )
+            return;
+
+        params.set(key, value === true ? '1' : String(value));
+    });
+
+    return params.toString();
 }
 
-export default function BookingAuditPage({ events, filters, stats, eventKeys, statusOptions, paymentStatusOptions }: Props) {
-  const [q, setQ] = useState(filters.q ?? '');
-  const [eventKey, setEventKey] = useState(filters.event_key ?? '');
-  const [status, setStatus] = useState(filters.status ?? '');
-  const [paymentStatus, setPaymentStatus] = useState(filters.payment_status ?? '');
-  const [dateFrom, setDateFrom] = useState(filters.date_from ?? '');
-  const [dateTo, setDateTo] = useState(filters.date_to ?? '');
-  const [bookingId, setBookingId] = useState(filters.booking_id ?? '');
-  const [onlyDeleted, setOnlyDeleted] = useState(Boolean(filters.only_deleted));
+function StatCard({
+    label,
+    value,
+    icon: Icon,
+}: {
+    label: string;
+    value: number | string;
+    icon: LucideIcon;
+}) {
+    return (
+        <article className="audit-kpi-card">
+            <div className="alh-admin-kpi-icon">
+                <Icon className="h-5 w-5" />
+            </div>
 
-  const activeFilters = useMemo(
-    () => ({
-      q,
-      event_key: eventKey,
-      status,
-      payment_status: paymentStatus,
-      date_from: dateFrom,
-      date_to: dateTo,
-      booking_id: bookingId,
-      only_deleted: onlyDeleted,
-    }),
-    [q, eventKey, status, paymentStatus, dateFrom, dateTo, bookingId, onlyDeleted],
-  );
-
-  const exportHref = useMemo(() => {
-    const qs = buildQuery(activeFilters);
-    return qs ? `/bookings/audit/export?${qs}` : '/bookings/audit/export';
-  }, [activeFilters]);
-
-  const printHref = useMemo(() => {
-    const qs = buildQuery(activeFilters);
-    return qs ? `/bookings/audit/print?${qs}` : '/bookings/audit/print';
-  }, [activeFilters]);
-
-  const topCards = useMemo(
-    () => [
-      { label: 'Visible events', value: stats.total, icon: History },
-      { label: 'Status changes', value: stats.status_changes, icon: Activity },
-      { label: 'Payment changes', value: stats.payment_changes, icon: CreditCard },
-      { label: 'Auto-deleted', value: stats.auto_deleted, icon: Trash2 },
-      { label: 'Today', value: stats.today, icon: CalendarDays },
-      { label: 'Unique bookings', value: stats.unique_bookings, icon: ShieldAlert },
-    ],
-    [stats],
-  );
-
-  function applyFilters() {
-    router.get(
-      '/bookings/audit',
-      {
-        q: q || undefined,
-        event_key: eventKey || undefined,
-        status: status || undefined,
-        payment_status: paymentStatus || undefined,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-        booking_id: bookingId || undefined,
-        only_deleted: onlyDeleted ? 1 : undefined,
-      },
-      { preserveState: true, preserveScroll: true, replace: true },
+            <div>
+                <p className="backend-booking-label">{label}</p>
+                <strong>{value}</strong>
+            </div>
+        </article>
     );
-  }
+}
 
-  function resetFilters() {
-    setQ('');
-    setEventKey('');
-    setStatus('');
-    setPaymentStatus('');
-    setDateFrom('');
-    setDateTo('');
-    setBookingId('');
-    setOnlyDeleted(false);
-    router.get('/bookings/audit', {}, { preserveState: true, preserveScroll: true, replace: true });
-  }
+function Pagination({
+    links = [],
+}: {
+    links?: Array<{ url: string | null; label: string; active: boolean }>;
+}) {
+    if (!links.length) return null;
 
-  return (
-    <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="Booking Audit Trail" />
+    return (
+        <div className="flex flex-wrap gap-2 border-t border-slate-200 p-5 dark:border-slate-800">
+            {links.map((link, index) => {
+                const label = stripHtml(link.label || '');
 
-      <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-        <Card>
-          <CardHeader className="space-y-4 px-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <CardTitle className="text-2xl">Booking lifecycle audit trail</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Review booking lifecycle changes across the whole system, then export or print the result set for reporting, turnover, and documentation.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button asChild variant="outline" size="sm">
-                  <a href={exportHref}>
-                    <Download className="mr-2 h-4 w-4" /> Export CSV
-                  </a>
-                </Button>
-                <Button asChild variant="outline" size="sm">
-                  <Link href={printHref} target="_blank">
-                    <Printer className="mr-2 h-4 w-4" /> Print report
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/bookings">Back to bookings</Link>
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-              {topCards.map((card) => {
-                const Icon = card.icon;
-                return (
-                  <div key={card.label} className="rounded-2xl border bg-card p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-full bg-primary/10 p-2 text-primary">
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{card.label}</div>
-                        <div className="text-2xl font-semibold">{card.value}</div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <form
-              className="grid grid-cols-1 gap-2 lg:grid-cols-8"
-              onSubmit={(e) => {
-                e.preventDefault();
-                applyFilters();
-              }}
-            >
-              <div className="relative lg:col-span-2">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="pl-9"
-                  placeholder="Search title, reason, actor, booking ID"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                />
-              </div>
-
-              <select className="rounded-md border bg-background px-2 py-1 text-sm" value={eventKey} onChange={(e) => setEventKey(e.target.value)}>
-                <option value="">All event types</option>
-                {eventKeys.map((key) => (
-                  <option key={key} value={key}>{eventKeyLabel(key)}</option>
-                ))}
-              </select>
-
-              <select className="rounded-md border bg-background px-2 py-1 text-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="">Any booking status</option>
-                {statusOptions.map((value) => (
-                  <option key={value} value={value}>{value}</option>
-                ))}
-              </select>
-
-              <select className="rounded-md border bg-background px-2 py-1 text-sm" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
-                <option value="">Any payment status</option>
-                {paymentStatusOptions.map((value) => (
-                  <option key={value} value={value}>{value}</option>
-                ))}
-              </select>
-
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-              <Input placeholder="Booking ID" value={bookingId} onChange={(e) => setBookingId(e.target.value)} />
-
-              <div className="lg:col-span-8 flex flex-wrap items-center gap-2">
-                <label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                  <input type="checkbox" checked={onlyDeleted} onChange={(e) => setOnlyDeleted(e.target.checked)} />
-                  Show only auto-deleted
-                </label>
-
-                <Button type="submit" size="sm"><Filter className="mr-2 h-4 w-4" /> Apply filters</Button>
-                <Button type="button" size="sm" variant="outline" onClick={resetFilters}>Reset</Button>
-                <Button asChild type="button" size="sm" variant="outline">
-                  <Link href={printHref} target="_blank">
-                    <ExternalLink className="mr-2 h-4 w-4" /> Open printable view
-                  </Link>
-                </Button>
-              </div>
-            </form>
-          </CardHeader>
-
-          <CardContent className="space-y-4 px-6 pb-6">
-            {events.data.length === 0 ? (
-              <div className="rounded-2xl border border-dashed px-6 py-12 text-center text-sm text-muted-foreground">
-                No audit events found for the current filter set.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {events.data.map((event) => (
-                  <div key={event.id} className={`rounded-3xl border p-5 shadow-sm ${eventTone(event.event_key)}`}>
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="text-xl font-semibold">{event.title}</div>
-                          <Badge variant="secondary">{eventKeyLabel(event.event_key)}</Badge>
-                          {event.to_status ? <Badge className={statusTone(event.to_status)}>{event.to_status}</Badge> : null}
-                          {event.to_payment_status ? <Badge className={statusTone(event.to_payment_status)}>{event.to_payment_status}</Badge> : null}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                          <span>Audit ID: #{event.id}</span>
-                          {event.booking_id ? <span>Booking ID: #{event.booking_id}</span> : null}
-                          <span>{formatDateTime(event.event_at ?? event.created_at)}</span>
-                        </div>
-
-                        {event.reason ? (
-                          <div className="rounded-2xl border bg-background/70 px-4 py-3 text-sm leading-7">
-                            {event.reason}
-                          </div>
-                        ) : null}
-
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                          <div className="rounded-2xl border bg-background/60 p-4">
-                            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Booking status</div>
-                            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                              {event.from_status ? <Badge className={statusTone(event.from_status)}>From: {event.from_status}</Badge> : <span className="text-muted-foreground">No previous value</span>}
-                              {event.to_status ? <Badge className={statusTone(event.to_status)}>To: {event.to_status}</Badge> : null}
-                            </div>
-                          </div>
-
-                          <div className="rounded-2xl border bg-background/60 p-4">
-                            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Payment status</div>
-                            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                              {event.from_payment_status ? <Badge className={statusTone(event.from_payment_status)}>From: {event.from_payment_status}</Badge> : <span className="text-muted-foreground">No previous value</span>}
-                              {event.to_payment_status ? <Badge className={statusTone(event.to_payment_status)}>To: {event.to_payment_status}</Badge> : null}
-                            </div>
-                          </div>
-
-                          <div className="rounded-2xl border bg-background/60 p-4">
-                            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Actor</div>
-                            <div className="mt-2 text-sm font-medium">{event.actor?.name || 'System automation'}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">{event.actor?.email || 'Console / scheduled maintenance'}</div>
-                          </div>
-
-                          <div className="rounded-2xl border bg-background/60 p-4">
-                            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Linked booking</div>
-                            {event.booking_id ? (
-                              event.booking_exists ? (
-                                <Button asChild variant="outline" size="sm" className="mt-2">
-                                  <Link href={`/bookings/${event.booking_id}`}>Open booking</Link>
-                                </Button>
-                              ) : (
-                                <div className="mt-2 text-sm text-muted-foreground">Record no longer exists in the bookings table.</div>
-                              )
-                            ) : (
-                              <div className="mt-2 text-sm text-muted-foreground">No linked booking ID.</div>
-                            )}
-                          </div>
-                        </div>
-
-                        {event.meta && Object.keys(event.meta).length > 0 ? (
-                          <div className="rounded-2xl border bg-background/60 p-4">
-                            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Meta</div>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {Object.entries(event.meta).map(([key, value]) => (
-                                <Badge key={key} variant="outline">
-                                  {key}: {Array.isArray(value) ? value.join(', ') : String(value)}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {Array.isArray(events.links) && events.links.length > 0 ? (
-              <Pagination>
-                <PaginationContent>
-                  {events.links.map((link, index) => {
-                    if (isPaginationEllipsis(link.label)) {
-                      return (
-                        <PaginationItem key={`ellipsis-${index}`}>
-                          <PaginationEllipsis />
-                        </PaginationItem>
-                      );
-                    }
-
-                    const plain = link.label.replace(/<[^>]+>/g, '').trim().toLowerCase();
-
-                    if (plain === 'previous') {
-                      return (
-                        <PaginationItem key={`prev-${index}`}>
-                          <PaginationPrevious href={link.url ?? '#'} onClick={(e) => {
-                            if (!link.url) e.preventDefault();
-                          }} />
-                        </PaginationItem>
-                      );
-                    }
-
-                    if (plain === 'next') {
-                      return (
-                        <PaginationItem key={`next-${index}`}>
-                          <PaginationNext href={link.url ?? '#'} onClick={(e) => {
-                            if (!link.url) e.preventDefault();
-                          }} />
-                        </PaginationItem>
-                      );
-                    }
-
+                if (!link.url) {
                     return (
-                      <PaginationItem key={`page-${index}`}>
-                        <PaginationLink href={link.url ?? '#'} isActive={link.active} onClick={(e) => {
-                          if (!link.url) e.preventDefault();
-                        }}>
-                          {link.label.replace(/<[^>]+>/g, '').trim()}
-                        </PaginationLink>
-                      </PaginationItem>
+                        <span
+                            key={`${link.label}-${index}`}
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-400 dark:border-slate-800 dark:bg-slate-900/60"
+                            dangerouslySetInnerHTML={{
+                                __html: link.label || '',
+                            }}
+                        />
                     );
-                  })}
-                </PaginationContent>
-              </Pagination>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
-    </AppLayout>
-  );
+                }
+
+                return (
+                    <Link
+                        key={`${link.label}-${index}`}
+                        href={link.url}
+                        preserveScroll
+                        className={`rounded-lg border px-3 py-2 text-xs font-bold ${
+                            link.active
+                                ? 'border-[#20242b] bg-[#20242b] text-white dark:border-white dark:bg-white dark:text-slate-950'
+                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                        }`}
+                        aria-label={label || 'Pagination link'}
+                        dangerouslySetInnerHTML={{ __html: link.label || '' }}
+                    />
+                );
+            })}
+        </div>
+    );
+}
+
+export default function BookingAuditPage({
+    events,
+    filters,
+    stats,
+    eventKeys = [],
+    statusOptions = [],
+    paymentStatusOptions = [],
+}: Props) {
+    const basePath = currentBookingsBase();
+    const auditPath = `${basePath}/audit`;
+
+    const [q, setQ] = useState(filters.q ?? '');
+    const [eventKey, setEventKey] = useState(filters.event_key ?? '');
+    const [status, setStatus] = useState(filters.status ?? '');
+    const [paymentStatus, setPaymentStatus] = useState(
+        filters.payment_status ?? '',
+    );
+    const [dateFrom, setDateFrom] = useState(filters.date_from ?? '');
+    const [dateTo, setDateTo] = useState(filters.date_to ?? '');
+    const [bookingId, setBookingId] = useState(filters.booking_id ?? '');
+    const [onlyDeleted, setOnlyDeleted] = useState(
+        Boolean(filters.only_deleted),
+    );
+
+    const activeFilters = useMemo(
+        () => ({
+            q,
+            event_key: eventKey,
+            status,
+            payment_status: paymentStatus,
+            date_from: dateFrom,
+            date_to: dateTo,
+            booking_id: bookingId,
+            only_deleted: onlyDeleted,
+        }),
+        [
+            q,
+            eventKey,
+            status,
+            paymentStatus,
+            dateFrom,
+            dateTo,
+            bookingId,
+            onlyDeleted,
+        ],
+    );
+
+    const query = buildQuery(activeFilters);
+    const exportHref = query
+        ? `${auditPath}/export?${query}`
+        : `${auditPath}/export`;
+    const printHref = query
+        ? `${auditPath}/print?${query}`
+        : `${auditPath}/print`;
+
+    const topCards = [
+        { label: 'Visible Events', value: stats.total, icon: History },
+        {
+            label: 'Status Changes',
+            value: stats.status_changes,
+            icon: Activity,
+        },
+        {
+            label: 'Payment Changes',
+            value: stats.payment_changes,
+            icon: CreditCard,
+        },
+        { label: 'Auto Deleted', value: stats.auto_deleted, icon: Trash2 },
+        { label: 'Today', value: stats.today, icon: CalendarDays },
+        { label: 'Unique Bookings', value: stats.unique_bookings, icon: Users },
+    ];
+
+    function applyFilters(event?: FormEvent<HTMLFormElement>) {
+        event?.preventDefault();
+
+        router.get(
+            auditPath,
+            {
+                q: q || undefined,
+                event_key: eventKey || undefined,
+                status: status || undefined,
+                payment_status: paymentStatus || undefined,
+                date_from: dateFrom || undefined,
+                date_to: dateTo || undefined,
+                booking_id: bookingId || undefined,
+                only_deleted: onlyDeleted ? 1 : undefined,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            },
+        );
+    }
+
+    function resetFilters() {
+        setQ('');
+        setEventKey('');
+        setStatus('');
+        setPaymentStatus('');
+        setDateFrom('');
+        setDateTo('');
+        setBookingId('');
+        setOnlyDeleted(false);
+
+        router.get(
+            auditPath,
+            {},
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            },
+        );
+    }
+
+    return (
+        <AppLayout breadcrumbs={breadcrumbs()}>
+            <Head title="Booking Audit Trail" />
+
+            <div className="backend-admin-page space-y-5">
+                <section className="audit-hero">
+                    <div>
+                        <p className="backend-booking-label">Lifecycle Audit</p>
+                        <h1>
+                            Booking lifecycle, payment, and automation history.
+                        </h1>
+                        <span>
+                            Review system movement, status transitions, payment
+                            changes, deleted booking traces, automation actions,
+                            and actor details.
+                        </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                        <a href={exportHref} className="alh-secondary-button">
+                            <Download className="h-4 w-4" />
+                            Export CSV
+                        </a>
+
+                        <Link
+                            href={printHref}
+                            target="_blank"
+                            className="alh-primary-button"
+                        >
+                            <Printer className="h-4 w-4" />
+                            Print Report
+                        </Link>
+
+                        <Link href={basePath} className="alh-secondary-button">
+                            Back to Bookings
+                        </Link>
+                    </div>
+                </section>
+
+                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+                    {topCards.map((card) => (
+                        <StatCard key={card.label} {...card} />
+                    ))}
+                </section>
+
+                <section className="audit-filter-panel">
+                    <form onSubmit={applyFilters} className="audit-filter-grid">
+                        <div className="relative lg:col-span-2">
+                            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                value={q}
+                                onChange={(event) => setQ(event.target.value)}
+                                className="backend-booking-input pl-10"
+                                placeholder="Search title, reason, event key, actor..."
+                            />
+                        </div>
+
+                        <select
+                            value={eventKey}
+                            onChange={(event) =>
+                                setEventKey(event.target.value)
+                            }
+                            className="backend-booking-input"
+                        >
+                            <option value="">All event keys</option>
+                            {eventKeys.map((key) => (
+                                <option key={key} value={key}>
+                                    {cleanLabel(key)}
+                                </option>
+                            ))}
+                        </select>
+
+                        <select
+                            value={status}
+                            onChange={(event) => setStatus(event.target.value)}
+                            className="backend-booking-input"
+                        >
+                            <option value="">All booking statuses</option>
+                            {statusOptions.map((item) => (
+                                <option key={item} value={item}>
+                                    {cleanLabel(item)}
+                                </option>
+                            ))}
+                        </select>
+
+                        <select
+                            value={paymentStatus}
+                            onChange={(event) =>
+                                setPaymentStatus(event.target.value)
+                            }
+                            className="backend-booking-input"
+                        >
+                            <option value="">All payment statuses</option>
+                            {paymentStatusOptions.map((item) => (
+                                <option key={item} value={item}>
+                                    {cleanLabel(item)}
+                                </option>
+                            ))}
+                        </select>
+
+                        <input
+                            value={bookingId}
+                            onChange={(event) =>
+                                setBookingId(event.target.value)
+                            }
+                            className="backend-booking-input"
+                            placeholder="Booking ID"
+                            inputMode="numeric"
+                        />
+
+                        <input
+                            value={dateFrom}
+                            onChange={(event) =>
+                                setDateFrom(event.target.value)
+                            }
+                            className="backend-booking-input"
+                            type="date"
+                            aria-label="Date from"
+                        />
+
+                        <input
+                            value={dateTo}
+                            onChange={(event) => setDateTo(event.target.value)}
+                            className="backend-booking-input"
+                            type="date"
+                            aria-label="Date to"
+                        />
+
+                        <label className="audit-toggle">
+                            <input
+                                type="checkbox"
+                                checked={onlyDeleted}
+                                onChange={(event) =>
+                                    setOnlyDeleted(event.target.checked)
+                                }
+                            />
+                            <span>Deleted only</span>
+                        </label>
+
+                        <button
+                            type="submit"
+                            className="alh-primary-button justify-center"
+                        >
+                            <Filter className="h-4 w-4" />
+                            Apply
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={resetFilters}
+                            className="alh-secondary-button justify-center"
+                        >
+                            <X className="h-4 w-4" />
+                            Reset
+                        </button>
+                    </form>
+                </section>
+
+                <section className="audit-panel overflow-hidden">
+                    <div className="audit-panel-header">
+                        <div>
+                            <p className="backend-booking-label">
+                                Audit Records
+                            </p>
+                            <h2>
+                                {events.data.length} loaded event
+                                {events.data.length === 1 ? '' : 's'}
+                            </h2>
+                            <span>
+                                Rows are compressed for faster review. Open the
+                                booking when the source record still exists.
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {events.data.length > 0 ? (
+                            events.data.map((event) => (
+                                <article
+                                    key={event.id}
+                                    className={`audit-event-row ${eventRowTone(event.event_key)}`}
+                                >
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap gap-2">
+                                            <span
+                                                className={statusChip(
+                                                    event.event_key,
+                                                )}
+                                            >
+                                                {cleanLabel(event.event_key)}
+                                            </span>
+
+                                            {event.to_status ? (
+                                                <span
+                                                    className={statusChip(
+                                                        event.to_status,
+                                                    )}
+                                                >
+                                                    Booking:{' '}
+                                                    {cleanLabel(
+                                                        event.to_status,
+                                                    )}
+                                                </span>
+                                            ) : null}
+
+                                            {event.to_payment_status ? (
+                                                <span
+                                                    className={statusChip(
+                                                        event.to_payment_status,
+                                                    )}
+                                                >
+                                                    Payment:{' '}
+                                                    {cleanLabel(
+                                                        event.to_payment_status,
+                                                    )}
+                                                </span>
+                                            ) : null}
+
+                                            {!event.booking_exists ? (
+                                                <span className="alh-status-chip is-bad">
+                                                    Source deleted
+                                                </span>
+                                            ) : null}
+                                        </div>
+
+                                        <h3>
+                                            {event.title ||
+                                                cleanLabel(event.event_key)}
+                                        </h3>
+
+                                        <p>
+                                            Booking #{event.booking_id || '—'} ·{' '}
+                                            {event.actor?.name ||
+                                                'System / automation'}{' '}
+                                            ·{' '}
+                                            {formatDateTime(
+                                                event.event_at ||
+                                                    event.created_at,
+                                            )}
+                                        </p>
+
+                                        {event.reason ? (
+                                            <small>{event.reason}</small>
+                                        ) : null}
+
+                                        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                            <div className="alh-admin-mini-box">
+                                                <span>
+                                                    Booking Status Movement
+                                                </span>
+                                                <strong>
+                                                    {cleanLabel(
+                                                        event.from_status,
+                                                    )}{' '}
+                                                    →{' '}
+                                                    {cleanLabel(
+                                                        event.to_status,
+                                                    )}
+                                                </strong>
+                                            </div>
+
+                                            <div className="alh-admin-mini-box">
+                                                <span>
+                                                    Payment Status Movement
+                                                </span>
+                                                <strong>
+                                                    {cleanLabel(
+                                                        event.from_payment_status,
+                                                    )}{' '}
+                                                    →{' '}
+                                                    {cleanLabel(
+                                                        event.to_payment_status,
+                                                    )}
+                                                </strong>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                                        {event.booking_exists &&
+                                        event.booking_id ? (
+                                            <Link
+                                                href={`${basePath}/${event.booking_id}`}
+                                                className="alh-primary-button"
+                                            >
+                                                <Eye className="h-4 w-4" />
+                                                Booking
+                                            </Link>
+                                        ) : (
+                                            <span className="alh-admin-neutral-button opacity-60">
+                                                No Source
+                                            </span>
+                                        )}
+                                    </div>
+                                </article>
+                            ))
+                        ) : (
+                            <div className="analytics-empty-state">
+                                <ShieldAlert className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-700" />
+                                <h3>No audit rows found</h3>
+                                <p>
+                                    Adjust filters to review more lifecycle and
+                                    automation records.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    <Pagination links={events.links} />
+                </section>
+            </div>
+        </AppLayout>
+    );
 }

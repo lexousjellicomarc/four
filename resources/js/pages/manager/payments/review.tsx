@@ -1,1 +1,5 @@
-export { default } from '../../payments/review';
+import { PaymentReviewPage } from '@/components/payments/payment-review-page';
+
+export default function ManagerPaymentReview() {
+  return <PaymentReviewPage />;
+}

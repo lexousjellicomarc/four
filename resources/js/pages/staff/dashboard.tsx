@@ -3,8 +3,8 @@ import { usePage } from '@inertiajs/react';
 
 type PageProps = {
   workspaceStats?: Record<string, number>;
-  recentBookings?: Array<Record<string, unknown>>;
-  todaySchedule?: Array<Record<string, unknown>>;
+  recentBookings?: Array<Record<string, any>>;
+  todaySchedule?: Array<Record<string, any>>;
   workspaceSummary?: {
     eyebrow?: string;
     title?: string;
@@ -19,8 +19,8 @@ export default function StaffDashboard() {
     <RoleDashboardTemplate
       role="staff"
       workspaceStats={props.workspaceStats}
-      recentBookings={props.recentBookings as any}
-      todaySchedule={props.todaySchedule as any}
+      recentBookings={props.recentBookings}
+      todaySchedule={props.todaySchedule}
       workspaceSummary={props.workspaceSummary}
     />
   );

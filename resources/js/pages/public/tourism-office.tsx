@@ -1,8 +1,16 @@
 import { Head, usePage } from '@inertiajs/react';
-import { CalendarDays, Clock3, Mail, MapPin, Phone, Users2 } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import {
+  CalendarDays,
+  Clock3,
+  Mail,
+  MapPin,
+  Phone,
+  Sparkles,
+  UserRound,
+  Users2,
+} from 'lucide-react';
 import { useMemo } from 'react';
-import PageHero from '@/components/public/page-hero';
-import SafeImage from '@/components/ui/safe-image';
 import PublicLayout, { type SiteSettings } from '@/layouts/public-layout';
 import type { PublicEventItem, PublicSpaceItem } from '@/types/public-content';
 
@@ -29,6 +37,8 @@ type Props = {
   members?: TourismMember[];
 };
 
+const easeLuxury = [0.22, 1, 0.36, 1] as const;
+
 function groupBySection(members: TourismMember[]) {
   const grouped = new Map<string, TourismMember[]>();
 
@@ -40,172 +50,319 @@ function groupBySection(members: TourismMember[]) {
   return Array.from(grouped.entries());
 }
 
+function getOfficeImage(officeSpace?: PublicSpaceItem | null, dark = false) {
+  if (!officeSpace) {
+    return dark ? '/marketing/images/hero/night2.png' : '/marketing/images/hero/noon2.jpg';
+  }
+
+  if (dark) {
+    return officeSpace.darkImage || officeSpace.image || officeSpace.lightImage || '/marketing/images/hero/night2.png';
+  }
+
+  return officeSpace.lightImage || officeSpace.image || officeSpace.darkImage || '/marketing/images/hero/noon2.jpg';
+}
+
 export default function TourismOfficePage({ officeSpace, events = [], members = [] }: Props) {
+  const reduceMotion = useReducedMotion();
   const page = usePage<{ siteSettings?: SiteSettings }>();
   const settings = page.props.siteSettings;
   const groupedMembers = useMemo(() => groupBySection(members), [members]);
+
+  const officeDetails = officeSpace?.details?.length
+    ? officeSpace.details
+    : [
+        'Visitor information and tourism guidance',
+        'Public assistance for general venue and city tourism questions',
+        'Basic event-related support and coordination',
+      ];
 
   return (
     <PublicLayout>
       <Head title="Tourism Office" />
 
-      <PageHero
-        eyebrow="Tourism Office"
-        title="Tourism support, public assistance, and CTCAO team visibility."
-        description="A clearer public presentation of the Tourism Office, selected CTCAO team members, and public-facing coordination details."
-        backgroundImages={[
-          officeSpace?.lightImage || '/marketing/images/branding/noon.jpg',
-          officeSpace?.darkImage || '/marketing/images/hero/night.png',
-        ]}
-        actions={[
-          { label: 'Contact the Office', href: '/contact' },
-          { label: 'View Public Events', href: '/events', variant: 'secondary' },
-        ]}
-      />
+      <section className="relative min-h-[78svh] overflow-hidden bg-[#080806] pt-32 text-white lg:pt-36">
+        <img
+          src={getOfficeImage(officeSpace, false)}
+          alt="Baguio Tourism Office"
+          className="absolute inset-0 h-full w-full object-cover opacity-70 dark:hidden"
+          draggable={false}
+        />
 
-      <section className="public-container mt-10 space-y-8 pb-12">
-        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
-            <h2 className="text-3xl font-semibold text-slate-900 dark:text-white">About the Office</h2>
-            <p className="mt-4 text-sm leading-8 text-slate-600 dark:text-slate-300">
+        <img
+          src={getOfficeImage(officeSpace, true)}
+          alt="Baguio Tourism Office"
+          className="absolute inset-0 hidden h-full w-full object-cover opacity-70 dark:block"
+          draggable={false}
+        />
+
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.18)_38%,rgba(0,0,0,0.86)_100%)]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#080806] via-[#080806]/58 to-black/24" />
+
+        <div className="public-container relative z-10 grid min-h-[calc(78svh-9rem)] gap-8 pb-12 lg:grid-cols-[1fr_0.8fr] lg:items-end">
+          <motion.div
+            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 30, filter: 'blur(12px)' }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.78, ease: easeLuxury }}
+          >
+            <div className="inline-flex items-center gap-2 border border-[#f4dfad]/26 bg-[#f4dfad]/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.28em] text-[#f4dfad]">
+              <Users2 className="h-3.5 w-3.5" />
+              Tourism Office
+            </div>
+
+            <h1 className="mt-5 max-w-5xl text-[clamp(3rem,8vw,7.5rem)] font-medium leading-[0.88] tracking-[-0.085em] text-white">
+              Visitor support, cultural guidance, and city event coordination.
+            </h1>
+          </motion.div>
+
+          <motion.aside
+            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 24, filter: 'blur(10px)' }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.78, ease: easeLuxury, delay: 0.12 }}
+            className="border border-white/12 bg-white/[0.075] p-5 shadow-[0_28px_90px_rgba(0,0,0,0.28)] backdrop-blur-2xl"
+          >
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#f4dfad]">
+              About the Office
+            </p>
+
+            <p className="mt-4 text-sm leading-8 text-white/68">
               {officeSpace?.summary ||
                 'The Tourism Office supports visitors, public information, tourism assistance, and event-linked coordination for Baguio City.'}
             </p>
 
-            <div className="mt-6 grid gap-3">
-              {(officeSpace?.details || [
-                'Visitor information and tourism guidance',
-                'Public assistance for general venue and city tourism questions',
-                'Basic event-related support and coordination',
-              ]).map((detail, index) => (
-                <div key={`${detail}-${index}`} className="rounded-[1.3rem] bg-[#f8f4ea] px-4 py-3 text-sm leading-7 text-slate-600 dark:bg-slate-900/70 dark:text-slate-300">
+            <div className="mt-5 grid gap-2">
+              {officeDetails.slice(0, 4).map((detail, index) => (
+                <div
+                  key={`office-detail-${index}`}
+                  className="flex items-start gap-3 border border-white/10 bg-white/[0.055] p-3 text-sm leading-7 text-white/68"
+                >
+                  <Sparkles className="mt-1 h-3.5 w-3.5 shrink-0 text-[#f4dfad]" />
                   {detail}
                 </div>
               ))}
             </div>
+          </motion.aside>
+        </div>
+      </section>
+
+      <section className="public-section-tight relative overflow-hidden">
+        <div className="public-container grid gap-4 lg:grid-cols-4">
+          <div className="border border-[var(--bccc-line)] bg-[var(--bccc-surface)] p-5 shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl">
+            <MapPin className="h-5 w-5 text-[var(--bccc-gold-700)]" />
+            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.24em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
+              Address
+            </p>
+            <p className="mt-2 text-sm leading-7 text-[var(--bccc-text-muted)]">
+              {settings?.address || 'CH3X+RRW, Baguio, Benguet, Philippines'}
+            </p>
           </div>
 
-          <div className="space-y-4 rounded-[2rem] border border-black/5 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
-            <h2 className="text-3xl font-semibold text-slate-900 dark:text-white">Office Details</h2>
-            <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300">
-              <div className="flex items-start gap-3 rounded-[1.3rem] bg-[#f8f4ea] p-4 dark:bg-slate-900/70">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{settings?.address || 'CH3X+RRW, Baguio, Benguet, Philippines'}</span>
-              </div>
-              <div className="flex items-center gap-3 rounded-[1.3rem] bg-[#f8f4ea] p-4 dark:bg-slate-900/70">
-                <Phone className="h-4 w-4 shrink-0" />
-                <span>{settings?.phone || '(074) 446 2009'}</span>
-              </div>
-              <div className="flex items-center gap-3 rounded-[1.3rem] bg-[#f8f4ea] p-4 dark:bg-slate-900/70">
-                <Mail className="h-4 w-4 shrink-0" />
-                <span>{settings?.email || 'info@bccc-ease.com'}</span>
-              </div>
-              <div className="flex items-center gap-3 rounded-[1.3rem] bg-[#f8f4ea] p-4 dark:bg-slate-900/70">
-                <Clock3 className="h-4 w-4 shrink-0" />
-                <span>Monday to Friday, 8:00 AM to 5:00 PM</span>
-              </div>
-            </div>
+          <div className="border border-[var(--bccc-line)] bg-[var(--bccc-surface)] p-5 shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl">
+            <Phone className="h-5 w-5 text-[var(--bccc-gold-700)]" />
+            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.24em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
+              Phone
+            </p>
+            <p className="mt-2 text-sm leading-7 text-[var(--bccc-text-muted)]">
+              {settings?.phone || '(074) 446 2009'}
+            </p>
+          </div>
+
+          <div className="border border-[var(--bccc-line)] bg-[var(--bccc-surface)] p-5 shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl">
+            <Mail className="h-5 w-5 text-[var(--bccc-gold-700)]" />
+            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.24em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
+              Email
+            </p>
+            <p className="mt-2 break-words text-sm leading-7 text-[var(--bccc-text-muted)]">
+              {settings?.email || 'info@bccc-ease.com'}
+            </p>
+          </div>
+
+          <div className="border border-[var(--bccc-line)] bg-[var(--bccc-surface)] p-5 shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl">
+            <Clock3 className="h-5 w-5 text-[var(--bccc-gold-700)]" />
+            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.24em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
+              Office Hours
+            </p>
+            <p className="mt-2 text-sm leading-7 text-[var(--bccc-text-muted)]">
+              Monday to Friday, 8:00 AM to 5:00 PM
+            </p>
           </div>
         </div>
+      </section>
 
-        {groupedMembers.length > 0 ? (
-          <div className="space-y-5">
-            <div className="flex items-center gap-3">
-              <Users2 className="h-6 w-6 text-[#0f8b6d] dark:text-[#b6c6ff]" />
-              <h3 className="text-3xl font-semibold text-slate-900 dark:text-white">Office Team</h3>
+      {groupedMembers.length > 0 ? (
+        <section className="public-section relative overflow-hidden">
+          <div className="public-container">
+            <div className="mb-8 grid gap-5 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
+              <div>
+                <div className="bccc-section-kicker">
+                  <Users2 className="h-3.5 w-3.5" />
+                  Office Team
+                </div>
+
+                <h2 className="mt-4 bccc-section-title-sm">
+                  Public-facing tourism and coordination profiles.
+                </h2>
+              </div>
+
+              <p className="bccc-section-copy lg:justify-self-end">
+                Members are grouped by office section or team so public visitors can better understand the office structure.
+              </p>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-8">
               {groupedMembers.map(([section, sectionMembers]) => (
-                <div key={section} className="rounded-[2rem] border border-black/5 bg-white/86 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/5">
-                  <div className="inline-flex rounded-full border border-[#0f8b6d]/20 bg-[#0f8b6d]/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#0f8b6d] dark:border-[#8ea3ff]/20 dark:bg-[#8ea3ff]/10 dark:text-[#b6c6ff]">
+                <section key={section}>
+                  <h3 className="mb-4 border-b border-[var(--bccc-line)] pb-3 text-[11px] font-black uppercase tracking-[0.26em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
                     {section}
-                  </div>
+                  </h3>
 
-                  <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                    {sectionMembers.map((member) => (
-                      <article key={member.id} className="overflow-hidden rounded-[1.9rem] border border-black/5 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/5">
-                        <div className="h-72 overflow-hidden bg-[#eaf4f1] dark:bg-slate-900/60">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {sectionMembers.map((member, index) => (
+                      <motion.article
+                        key={member.id}
+                        initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 18, filter: 'blur(8px)' }}
+                        whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+                        viewport={{ once: true, amount: 0.18 }}
+                        transition={{ duration: 0.48, ease: easeLuxury, delay: Math.min(index * 0.05, 0.24) }}
+                        className="group overflow-hidden border border-[var(--bccc-line)] bg-[var(--bccc-surface)] shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl transition duration-500 hover:-translate-y-1 hover:border-[var(--bccc-line-gold)] hover:shadow-[var(--bccc-shadow-medium)]"
+                      >
+                        <div className="relative h-72 overflow-hidden bg-[#080806]">
                           {member.photo ? (
-                            <SafeImage src={member.photo} fallbackSrc="/marketing/images/branding/noon.jpg" alt={member.fullName} className="h-full w-full" imgClassName="h-full w-full object-cover" />
+                            <img
+                              src={member.photo}
+                              alt={member.fullName}
+                              className="absolute inset-0 h-full w-full object-cover transition duration-[1100ms] group-hover:scale-[1.055]"
+                              draggable={false}
+                            />
                           ) : (
-                            <div className="flex h-full items-center justify-center text-6xl font-semibold text-[#0f8b6d] dark:text-[#b6c6ff]">
-                              {member.fullName?.charAt(0) || '?'}
+                            <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(169,132,67,0.18),transparent_42%),linear-gradient(135deg,#17382d,#080906)]">
+                              <UserRound className="h-20 w-20 text-white/24" />
                             </div>
                           )}
-                        </div>
-                        <div className="p-5">
+
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/16 to-transparent" />
+
                           {member.unitName ? (
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
+                            <div className="absolute left-4 top-4 border border-white/14 bg-black/28 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-[#f4dfad] backdrop-blur-xl">
                               {member.unitName}
                             </div>
                           ) : null}
-                          <h4 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{member.fullName}</h4>
-                          <p className="mt-1 text-sm font-medium text-[#0f8b6d] dark:text-[#b6c6ff]">{member.designation}</p>
-                          <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                        </div>
+
+                        <div className="p-5">
+                          <h4 className="text-2xl font-semibold tracking-[-0.045em] text-[var(--bccc-text)]">
+                            {member.fullName}
+                          </h4>
+
+                          <p className="mt-2 text-[11px] font-black uppercase tracking-[0.2em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
+                            {member.designation}
+                          </p>
+
+                          <p className="mt-4 text-sm leading-7 text-[var(--bccc-text-muted)]">
                             {member.shortBio || 'Public profile details may be maintained from the admin content area.'}
                           </p>
 
                           {member.details && member.details.length > 0 ? (
-                            <ul className="mt-4 space-y-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                              {member.details.slice(0, 4).map((detail, index) => (
-                                <li key={`${member.id}-${index}`}>• {detail}</li>
+                            <ul className="mt-4 space-y-2 border-t border-[var(--bccc-line)] pt-4">
+                              {member.details.slice(0, 4).map((detail, detailIndex) => (
+                                <li
+                                  key={`${member.id}-detail-${detailIndex}`}
+                                  className="text-xs leading-6 text-[var(--bccc-text-muted)]"
+                                >
+                                  • {detail}
+                                </li>
                               ))}
                             </ul>
                           ) : null}
 
-                          <div className="mt-4 space-y-2 text-sm text-slate-500 dark:text-slate-400">
-                            {member.email ? <div>Email: {member.email}</div> : null}
-                            {member.phone ? <div>Phone: {member.phone}</div> : null}
+                          <div className="mt-5 flex flex-wrap gap-2">
+                            {member.email ? (
+                              <a
+                                href={`mailto:${member.email}`}
+                                className="inline-flex items-center gap-2 border border-[var(--bccc-line)] px-3 py-2 text-xs text-[var(--bccc-text-muted)] transition hover:border-[var(--bccc-line-gold)]"
+                              >
+                                <Mail className="h-3.5 w-3.5" />
+                                Email
+                              </a>
+                            ) : null}
+
+                            {member.phone ? (
+                              <a
+                                href={`tel:${member.phone}`}
+                                className="inline-flex items-center gap-2 border border-[var(--bccc-line)] px-3 py-2 text-xs text-[var(--bccc-text-muted)] transition hover:border-[var(--bccc-line-gold)]"
+                              >
+                                <Phone className="h-3.5 w-3.5" />
+                                Phone
+                              </a>
+                            ) : null}
                           </div>
                         </div>
-                      </article>
+                      </motion.article>
                     ))}
                   </div>
-                </div>
+                </section>
               ))}
             </div>
           </div>
-        ) : null}
+        </section>
+      ) : null}
 
-        {events.length > 0 ? (
-          <div className="space-y-4">
-            <h3 className="text-3xl font-semibold text-slate-900 dark:text-white">Public Event Picks</h3>
-            <div className="scrollbar-hide flex gap-4 overflow-x-auto pb-2">
-              {events.slice(0, 4).map((event) => (
-                <article key={String(event.id)} className="min-w-[300px] overflow-hidden rounded-[1.7rem] border border-black/5 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/5">
-                  <div className="h-44 overflow-hidden">
-                    <SafeImage src={event.images?.[0] || event.image} fallbackSrc="/marketing/images/events/1.JPG" alt={event.title} className="h-full w-full" imgClassName="h-full w-full object-cover" />
-                  </div>
-                  <div className="p-5">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
-                      {event.scope === 'city' ? 'City Event' : 'BCCC Event'}
-                    </div>
-                    <div className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">{event.title}</div>
-                    <div className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                      <div className="inline-flex items-center gap-2">
-                        <CalendarDays className="h-4 w-4" />
-                        {event.date}
-                      </div>
-                      {event.time ? (
-                        <div className="inline-flex items-center gap-2">
-                          <Clock3 className="h-4 w-4" />
-                          {event.time}
-                        </div>
-                      ) : null}
-                      <div className="inline-flex items-center gap-2">
-                        <MapPin className="h-4 w-4" />
-                        {event.venue}
-                      </div>
-                    </div>
-                    <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">{event.summary}</p>
-                  </div>
-                </article>
+      {events.length > 0 ? (
+        <section className="public-section-tight relative overflow-hidden bg-[#080906] text-white">
+          <div className="public-container">
+            <div className="mb-7 grid gap-5 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
+              <div>
+                <div className="inline-flex items-center gap-2 border border-[#f4dfad]/26 bg-[#f4dfad]/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.28em] text-[#f4dfad]">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  Public Event Picks
+                </div>
+
+                <h2 className="mt-4 text-4xl font-semibold tracking-[-0.06em] text-white sm:text-5xl">
+                  Events connected to public activity.
+                </h2>
+              </div>
+
+              <p className="max-w-2xl text-sm leading-7 text-white/62 lg:justify-self-end">
+                Selected BCCC and Baguio City events may appear here for public awareness.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {events.slice(0, 4).map((event, index) => (
+                <motion.article
+                  key={event.id}
+                  initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 18, filter: 'blur(8px)' }}
+                  whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  viewport={{ once: true, amount: 0.18 }}
+                  transition={{ duration: 0.48, ease: easeLuxury, delay: Math.min(index * 0.055, 0.22) }}
+                  className="border border-white/10 bg-white/[0.055] p-5 backdrop-blur-xl"
+                >
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#f4dfad]">
+                    {event.scope === 'city' ? 'City Event' : 'BCCC Event'}
+                  </p>
+
+                  <h3 className="mt-3 text-xl font-semibold tracking-[-0.04em] text-white">
+                    {event.title}
+                  </h3>
+
+                  <p className="mt-4 text-sm text-white/58">{event.date}</p>
+
+                  {event.time ? (
+                    <p className="mt-2 text-sm text-white/58">{event.time}</p>
+                  ) : null}
+
+                  <p className="mt-2 text-sm text-white/58">
+                    {event.venue || 'Baguio Convention and Cultural Center'}
+                  </p>
+
+                  <p className="mt-4 text-sm leading-7 text-white/62">
+                    {event.summary || event.description}
+                  </p>
+                </motion.article>
               ))}
             </div>
           </div>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
     </PublicLayout>
   );
 }

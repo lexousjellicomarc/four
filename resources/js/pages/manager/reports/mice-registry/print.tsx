@@ -1,1 +1,1 @@
-export { default } from '../../../reports/mice-registry-print';
+export { default } from '../../../admin/reports/mice-registry/print';

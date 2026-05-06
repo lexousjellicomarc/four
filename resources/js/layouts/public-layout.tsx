@@ -1,7 +1,8 @@
-import { usePage } from '@inertiajs/react';
-import type { ReactNode } from 'react';
+import FloatingQuickLinks from '@/components/public/floating-quick-links';
 import PublicFooter from '@/components/public/public-footer';
 import PublicHeader from '@/components/public/public-header';
+import { usePage } from '@inertiajs/react';
+import type { ReactNode } from 'react';
 
 export type SiteSettings = {
   mapEmbedUrl?: string | null;
@@ -24,10 +25,13 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
   const siteSettings = page.props.siteSettings;
 
   return (
-    <div className="public-shell min-h-screen overflow-x-clip text-slate-900 dark:text-white">
+    <div className="bccc-public-shell relative min-h-screen overflow-x-clip bg-[var(--bccc-bg)] text-[var(--bccc-text)]">
       <PublicHeader />
-      <main className="relative z-10 ">{children}</main>
+
+      <main className="relative z-10 min-h-screen">{children}</main>
+
       <PublicFooter siteSettings={siteSettings} />
+      <FloatingQuickLinks siteSettings={siteSettings} />
     </div>
   );
 }

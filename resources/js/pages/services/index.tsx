@@ -1,20 +1,11 @@
 import AppLayout from '@/layouts/app-layout';
-import { Head } from '@inertiajs/react';
-import { useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
 import { Service, type BreadcrumbItem, type ServiceTypeOption } from '@/types';
+import { Head } from '@inertiajs/react';
+import { Pencil, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
-import {
-    Table,
-    TableBody,
-    TableCaption,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Pagination,
     PaginationContent,
@@ -24,10 +15,19 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from '@/components/ui/pagination';
+import {
+    Table,
+    TableBody,
+    TableCaption,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 
-import ServiceFormModal from './ServiceFormModal';
-import DeleteServiceDialog from './DeleteServiceDialog';
 import servicesRoutes from '@/routes/services';
+import DeleteServiceDialog from './DeleteServiceDialog';
+import ServiceFormModal from './ServiceFormModal';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Services', href: servicesRoutes.index.url() },
@@ -70,7 +70,10 @@ function guestLimitLabel(service: Service) {
     return 'No limit';
 }
 
-export default function Services({ services, serviceTypes }: ServicesPageProps) {
+export default function Services({
+    services,
+    serviceTypes,
+}: ServicesPageProps) {
     const [modalOpen, setModalOpen] = useState(false);
     const [mode, setMode] = useState<'create' | 'edit'>('create');
     const [selected, setSelected] = useState<Service | null>(null);
@@ -103,7 +106,9 @@ export default function Services({ services, serviceTypes }: ServicesPageProps) 
                         <div>
                             <CardTitle>Services</CardTitle>
                             <p className="mt-1 text-sm text-muted-foreground">
-                                Manage booking options, prices, and guest-capacity rules. Stock and quantity are fixed to one booking option per schedule.
+                                Manage booking options, prices, and
+                                guest-capacity rules. Stock and quantity are
+                                fixed to one booking option per schedule.
                             </p>
                         </div>
 
@@ -112,25 +117,35 @@ export default function Services({ services, serviceTypes }: ServicesPageProps) 
 
                     <CardContent>
                         <Table>
-                            <TableCaption>A list of services offered.</TableCaption>
+                            <TableCaption>
+                                A list of services offered.
+                            </TableCaption>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Name</TableHead>
                                     <TableHead>Type</TableHead>
                                     <TableHead>Description</TableHead>
                                     <TableHead>UoM</TableHead>
-                                    <TableHead className="text-right">Price</TableHead>
+                                    <TableHead className="text-right">
+                                        Price
+                                    </TableHead>
                                     <TableHead>Guest Limit</TableHead>
                                     <TableHead>Capacity Note</TableHead>
-                                    <TableHead className="w-[120px] text-right">Actions</TableHead>
+                                    <TableHead className="w-[120px] text-right">
+                                        Actions
+                                    </TableHead>
                                 </TableRow>
                             </TableHeader>
 
                             <TableBody>
                                 {services.data.map((service) => (
                                     <TableRow key={service.id}>
-                                        <TableCell className="font-medium">{service.name}</TableCell>
-                                        <TableCell>{service.service_type ?? '-'}</TableCell>
+                                        <TableCell className="font-medium">
+                                            {service.name}
+                                        </TableCell>
+                                        <TableCell>
+                                            {service.service_type ?? '-'}
+                                        </TableCell>
                                         <TableCell className="max-w-[260px] whitespace-normal">
                                             {service.description}
                                         </TableCell>
@@ -138,7 +153,9 @@ export default function Services({ services, serviceTypes }: ServicesPageProps) 
                                         <TableCell className="text-right">
                                             {Number(service.price).toFixed(2)}
                                         </TableCell>
-                                        <TableCell>{guestLimitLabel(service)}</TableCell>
+                                        <TableCell>
+                                            {guestLimitLabel(service)}
+                                        </TableCell>
                                         <TableCell className="max-w-[240px] whitespace-normal">
                                             {service.capacity_note ?? '-'}
                                         </TableCell>
@@ -147,14 +164,18 @@ export default function Services({ services, serviceTypes }: ServicesPageProps) 
                                                 <Button
                                                     variant="outline"
                                                     size="icon"
-                                                    onClick={() => openEdit(service)}
+                                                    onClick={() =>
+                                                        openEdit(service)
+                                                    }
                                                 >
                                                     <Pencil className="h-4 w-4" />
                                                 </Button>
                                                 <Button
                                                     variant="destructive"
                                                     size="icon"
-                                                    onClick={() => openDelete(service)}
+                                                    onClick={() =>
+                                                        openDelete(service)
+                                                    }
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>
@@ -169,16 +190,26 @@ export default function Services({ services, serviceTypes }: ServicesPageProps) 
                             <Pagination>
                                 <PaginationContent>
                                     {services.meta.links.map((link, i) => (
-                                        <PaginationItem key={`${link.label}-${i}`}>
+                                        <PaginationItem
+                                            key={`${link.label}-${i}`}
+                                        >
                                             {link.label.includes('Previous') ? (
                                                 <PaginationPrevious
                                                     href={link.url ?? '#'}
-                                                    className={!link.url ? 'pointer-events-none opacity-50' : ''}
+                                                    className={
+                                                        !link.url
+                                                            ? 'pointer-events-none opacity-50'
+                                                            : ''
+                                                    }
                                                 />
                                             ) : link.label.includes('Next') ? (
                                                 <PaginationNext
                                                     href={link.url ?? '#'}
-                                                    className={!link.url ? 'pointer-events-none opacity-50' : ''}
+                                                    className={
+                                                        !link.url
+                                                            ? 'pointer-events-none opacity-50'
+                                                            : ''
+                                                    }
                                                 />
                                             ) : link.label === '...' ? (
                                                 <PaginationEllipsis />
@@ -186,7 +217,11 @@ export default function Services({ services, serviceTypes }: ServicesPageProps) 
                                                 <PaginationLink
                                                     href={link.url ?? '#'}
                                                     isActive={link.active}
-                                                    className={!link.url ? 'pointer-events-none opacity-50' : ''}
+                                                    className={
+                                                        !link.url
+                                                            ? 'pointer-events-none opacity-50'
+                                                            : ''
+                                                    }
                                                 >
                                                     {link.label}
                                                 </PaginationLink>

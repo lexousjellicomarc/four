@@ -2,76 +2,34 @@
 
 namespace App\Models;
 
-use App\Services\NotificationService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Booking extends Model
 {
     use HasFactory;
 
-    protected $table = 'bookings';
-
-    protected $fillable = [
-        'created_by_user_id',
-        'service_id',
-        'company_name',
-        'client_name',
-        'client_contact_number',
-        'client_email',
-        'client_address',
-        'head_of_organization',
-        'type_of_event',
-        'booking_date_from',
-        'booking_date_to',
-        'flexible_date_from',
-        'flexible_date_to',
-        'number_of_guests',
-        'booking_status',
-        'payment_status',
-        'survey_email',
-        'survey_proof_image_path',
-        'survey_proof_image',
-        'survey_proof_image_mime',
-        'survey_proof_image_name',
-        'is_public_calendar_visible',
-        'public_calendar_title',
-    ];
-
-    protected $hidden = [
-        'survey_proof_image',
-    ];
-
-    protected $appends = [
-        'survey_proof_image_url',
-    ];
+    protected $guarded = [];
 
     protected $casts = [
         'booking_date_from' => 'datetime',
         'booking_date_to' => 'datetime',
-        'flexible_date_from' => 'datetime',
-        'flexible_date_to' => 'datetime',
-        'number_of_guests' => 'integer',
         'is_public_calendar_visible' => 'boolean',
+        'number_of_guests' => 'integer',
+        'payment_meta' => 'array',
     ];
-
-    public function getSurveyProofImageUrlAttribute(): ?string
-    {
-        if (empty($this->survey_proof_image_path) && empty($this->survey_proof_image_name)) {
-            return null;
-        }
-
-        $version = $this->updated_at?->timestamp ?? $this->created_at?->timestamp ?? time();
-
-        return url("/bookings/{$this->id}/survey-proof-image") . '?v=' . $version;
-    }
 
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);
+    }
+
+    public function miceRecord(): HasOne
+    {
+    return $this->hasOne(MiceRecord::class);
     }
 
     public function bookingServices(): HasMany
@@ -81,7 +39,7 @@ class Booking extends Model
 
     public function payments(): HasMany
     {
-        return $this->hasMany(BookingPayment::class, 'booking_id');
+        return $this->hasMany(BookingPayment::class);
     }
 
     public function createdBy(): BelongsTo
@@ -89,75 +47,44 @@ class Booking extends Model
         return $this->belongsTo(User::class, 'created_by_user_id');
     }
 
-    public function views(): HasMany
-    {
-        return $this->hasMany(BookingView::class, 'booking_id');
-    }
-
     public function lifecycleEvents(): HasMany
     {
-        return $this->hasMany(BookingLifecycleEvent::class, 'booking_id')
-            ->orderBy('event_at')
-            ->orderBy('id');
+        return $this->hasMany(BookingLifecycleEvent::class);
     }
 
-    public array $notificationChanges = [];
-
-    protected static function booted(): void
+    public function views(): HasMany
     {
-        static::created(function (Booking $booking) {
-            if (app()->runningInConsole()) {
-                return;
-            }
+        return $this->hasMany(BookingView::class);
+    }
 
-            try {
-                app(NotificationService::class)->bookingCreated($booking, Auth::user());
-            } catch (\Throwable $e) {
-                report($e);
-            }
-        });
+    public function getDisplayTitleAttribute(): string
+    {
+        return trim((string) (
+            $this->public_calendar_title
+            ?: $this->type_of_event
+            ?: $this->company_name
+            ?: $this->client_name
+            ?: 'Booking'
+        ));
+    }
 
-        static::updating(function (Booking $booking) {
-            $changes = [];
+    public function getDisplayClientAttribute(): string
+    {
+        return trim((string) (
+            $this->company_name
+            ?: $this->client_name
+            ?: $this->client_email
+            ?: 'Client'
+        ));
+    }
 
-            foreach ($booking->getDirty() as $field => $newValue) {
-                if ($field === 'updated_at') {
-                    continue;
-                }
+    public function scopeActiveForCalendar($query)
+    {
+        return $query->whereIn('booking_status', ['active', 'confirmed', 'approved']);
+    }
 
-                $changes[$field] = [$booking->getOriginal($field), $newValue];
-            }
-
-            $booking->notificationChanges = $changes;
-        });
-
-        static::updated(function (Booking $booking) {
-            if (app()->runningInConsole()) {
-                return;
-            }
-
-            $changes = $booking->notificationChanges ?? [];
-            if (empty($changes)) {
-                return;
-            }
-
-            try {
-                app(NotificationService::class)->bookingUpdated($booking, Auth::user(), $changes);
-            } catch (\Throwable $e) {
-                report($e);
-            }
-        });
-
-        static::deleted(function (Booking $booking) {
-            if (app()->runningInConsole()) {
-                return;
-            }
-
-            try {
-                app(NotificationService::class)->bookingDeleted($booking, Auth::user());
-            } catch (\Throwable $e) {
-                report($e);
-            }
-        });
+    public function scopePublicVisible($query)
+    {
+        return $query->where('is_public_calendar_visible', true);
     }
 }

@@ -1,1 +1,1 @@
-export { default } from '../../calendar/analytics';
+export { default } from '../../bookings/analytics';

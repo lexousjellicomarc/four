@@ -1,8 +1,6 @@
-import { RoleWorkspaceShell } from '@/components/role/role-workspace-shell';
+import { BookingRolePageShell } from '@/components/bookings/booking-role-page-shell';
 import {
   addMonths,
-  availabilityLabel,
-  availabilityTone,
   blockLabel,
   buildMonthGrid,
   calendarRoleCopy,
@@ -20,18 +18,7 @@ import {
   type CalendarDayCell,
   type CalendarEventItem,
 } from '@/lib/calendar-role-ui';
-import { getRoleTheme, roleDashboardHref, type RoleThemeKey } from '@/lib/role-theme';
-import type { BreadcrumbItem } from '@/types';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
+import type { RoleThemeKey } from '@/lib/role-theme';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
   ArrowLeft,
@@ -41,41 +28,98 @@ import {
   Clock3,
   ExternalLink,
   ListFilter,
+  MapPin,
   Plus,
   ShieldCheck,
-  SlidersHorizontal,
+  Sparkles,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+
+type CalendarAvailabilityDay = {
+  AM?: boolean;
+  PM?: boolean;
+  EVE?: boolean;
+  is_fully_booked?: boolean;
+  day_status?: string;
+};
 
 type RoleCalendarPageProps = {
   workspaceRole?: string;
   counts?: Record<string, number>;
   events?: CalendarEventItem[];
   month?: string;
-  monthAvailability?: Record<string, any>;
+  monthAvailability?: Record<string, CalendarAvailabilityDay>;
   areaOptions?: string[];
 };
 
 const weekLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-function calendarBreadcrumbs(role: RoleThemeKey): BreadcrumbItem[] {
-  return [
-    {
-      title:
-        role === 'admin'
-          ? 'Admin'
-          : role === 'manager'
-            ? 'Manager'
-            : role === 'staff'
-              ? 'Staff'
-              : 'Account',
-      href: roleDashboardHref(role),
-    },
-    {
-      title: 'Calendar',
-      href: roleCalendarBasePath(role),
-    },
-  ];
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(' ');
+}
+
+function availabilityLabel(day?: CalendarAvailabilityDay): string {
+  const status = String(day?.day_status || '').toLowerCase();
+
+  if (!day) return 'No Data';
+  if (status === 'blocked') return 'Blocked';
+  if (status === 'public_booked') return 'Public Event';
+  if (status === 'private_booked') return 'Private / Reserved';
+  if (status === 'limited' || status === 'partial' || status === 'partially_booked') return 'Limited';
+  if (day.is_fully_booked) return 'Fully Booked';
+
+  return 'Available';
+}
+
+function availabilityTone(day?: CalendarAvailabilityDay): string {
+  const status = String(day?.day_status || '').toLowerCase();
+
+  if (!day) {
+    return 'border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)]';
+  }
+
+  if (status === 'blocked' || day.is_fully_booked) {
+    return 'border-rose-300/32 bg-rose-400/10';
+  }
+
+  if (status === 'public_booked') {
+    return 'border-sky-300/32 bg-sky-400/10';
+  }
+
+  if (status === 'private_booked') {
+    return 'border-amber-300/40 bg-amber-400/10';
+  }
+
+  if (status === 'limited' || status === 'partial' || status === 'partially_booked') {
+    return 'border-blue-300/32 bg-blue-400/10';
+  }
+
+  return 'border-emerald-300/32 bg-emerald-400/10';
+}
+
+function statusDot(day?: CalendarAvailabilityDay): string {
+  const status = String(day?.day_status || '').toLowerCase();
+
+  if (status === 'blocked' || day?.is_fully_booked) return 'bg-rose-500';
+  if (status === 'public_booked') return 'bg-sky-500';
+  if (status === 'private_booked') return 'bg-amber-500';
+  if (status === 'limited' || status === 'partial' || status === 'partially_booked') return 'bg-blue-500';
+
+  return 'bg-emerald-500';
+}
+
+function blockOpen(day: CalendarAvailabilityDay | undefined, block: CalendarBlockKey): boolean {
+  if (!day) return true;
+
+  return day[block] !== false;
+}
+
+function calendarActionPaths(role: RoleThemeKey, dateKey: string) {
+  return {
+    booking: roleBookingCreatePath(role, dateKey),
+    manage: roleCalendarManagePath(role, dateKey),
+    month: roleCalendarBasePath(role),
+  };
 }
 
 function eventHref(role: RoleThemeKey, event: CalendarEventItem): string | null {
@@ -90,6 +134,35 @@ function eventHref(role: RoleThemeKey, event: CalendarEventItem): string | null 
   return null;
 }
 
+function CountCard({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: number | string;
+  icon: typeof CalendarDays;
+}) {
+  return (
+    <article className="border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] p-5 shadow-[var(--bccc-backend-shadow-soft)] backdrop-blur-xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--bccc-backend-muted)]">
+            {label}
+          </p>
+          <p className="mt-3 text-3xl font-semibold tracking-[-0.065em] text-[var(--bccc-backend-text)]">
+            {value}
+          </p>
+        </div>
+
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center border border-[var(--bccc-backend-gold-line)] bg-[rgba(169,132,67,0.11)] text-[var(--bccc-backend-gold)]">
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+    </article>
+  );
+}
+
 function AvailabilityPill({
   block,
   open,
@@ -98,35 +171,16 @@ function AvailabilityPill({
   open?: boolean;
 }) {
   return (
-    <Badge
-      variant="outline"
-      className={
+    <span
+      className={cx(
+        'inline-flex min-h-6 items-center justify-center border px-2 text-[9px] font-black uppercase tracking-[0.14em]',
         open
-          ? 'border-emerald-500/25 bg-emerald-500/10 text-[10px] font-black text-emerald-700 dark:text-emerald-200'
-          : 'border-red-500/25 bg-red-500/10 text-[10px] font-black text-red-700 dark:text-red-200'
-      }
+          ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200'
+          : 'border-rose-300/35 bg-rose-400/10 text-rose-700 dark:text-rose-200',
+      )}
     >
       {blockLabel(block)}
-    </Badge>
-  );
-}
-
-function CountCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: number | string;
-}) {
-  return (
-    <Card className="backend-admin-card">
-      <CardContent className="p-5">
-        <p className="backend-admin-label">{label}</p>
-        <p className="mt-3 text-3xl font-black tracking-[-0.04em]">
-          {value}
-        </p>
-      </CardContent>
-    </Card>
+    </span>
   );
 }
 
@@ -150,65 +204,69 @@ function CalendarDay({
     <button
       type="button"
       onClick={() => onSelect(day)}
-      className={`backend-calendar-day ${selected ? 'is-selected' : ''} ${
-        day.isCurrentMonth ? '' : 'opacity-45'
-      } ${availabilityTone(day.availability)}`}
+      className={cx(
+        'group relative min-h-[9.5rem] border-b border-r border-[var(--bccc-backend-line)] p-2 text-left transition duration-500 hover:z-10 hover:border-[var(--bccc-backend-gold-line)] hover:bg-[var(--bccc-backend-hover)]',
+        day.isCurrentMonth ? '' : 'opacity-45',
+        availabilityTone(day.availability),
+        selected && 'z-20 ring-2 ring-inset ring-[var(--bccc-backend-gold)]',
+      )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-2xl font-black tracking-[-0.04em]">
-            {day.dayNumber}
-          </p>
-          <p className="backend-admin-label">
-            {availabilityLabel(day.availability)}
-          </p>
-        </div>
+      <div className="flex items-start justify-between gap-2">
+        <span
+          className={cx(
+            'flex h-8 w-8 items-center justify-center text-sm font-black',
+            day.isToday
+              ? 'bg-[var(--bccc-green-800)] text-white'
+              : 'bg-[var(--bccc-backend-panel)] text-[var(--bccc-backend-text)]',
+          )}
+        >
+          {day.dayNumber}
+        </span>
 
-        {day.isToday ? (
-          <Badge
-            variant="outline"
-            className="border-[#c9a96a]/30 bg-[#c9a96a]/10 text-[#7a5c21] dark:text-[#e8d8b5]"
-          >
-            Today
-          </Badge>
-        ) : null}
+        <span className="hidden items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-[var(--bccc-backend-muted)] sm:inline-flex">
+          <span className={cx('h-2 w-2 rounded-full', statusDot(day.availability))} />
+          {availabilityLabel(day.availability)}
+        </span>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-1">
-        <AvailabilityPill block="AM" open={day.availability?.AM} />
-        <AvailabilityPill block="PM" open={day.availability?.PM} />
-        <AvailabilityPill block="EVE" open={day.availability?.EVE} />
+      <div className="mt-2 flex flex-wrap gap-1">
+        {(['AM', 'PM', 'EVE'] as CalendarBlockKey[]).map((block) => (
+          <AvailabilityPill key={block} block={block} open={blockOpen(day.availability, block)} />
+        ))}
       </div>
 
-      <div className="mt-3 space-y-1.5">
+      <div className="mt-2 grid gap-1.5">
         {visibleEvents.map((event) => (
-          <div
+          <span
             key={`${event.kind}-${event.id}-${event.start}`}
-            className={`truncate rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${eventTone(event)}`}
+            className={cx(
+              'block truncate border px-2 py-1 text-[10px] font-semibold',
+              eventTone(event),
+            )}
           >
             {cleanCalendarLabel(event.title)}
-          </div>
+          </span>
         ))}
 
         {overflow > 0 ? (
-          <div className="rounded-full border bg-muted/40 px-2.5 py-1 text-[10px] font-black text-muted-foreground">
+          <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--bccc-backend-muted)]">
             +{overflow} more
-          </div>
+          </span>
         ) : null}
 
         {day.events.length === 0 ? (
-          <p className="text-xs font-bold text-muted-foreground">
+          <span className="text-[10px] text-[var(--bccc-backend-muted)]">
             No scheduled item
-          </p>
+          </span>
         ) : null}
       </div>
 
-      <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
+      <div className="absolute bottom-2 left-2 right-2 hidden gap-1 group-hover:flex">
         {canCreate ? (
           <Link
-            href={roleBookingCreatePath(role, day.key)}
+            href={calendarActionPaths(role, day.key).booking}
             onClick={(event) => event.stopPropagation()}
-            className="backend-calendar-mini-action"
+            className="flex-1 border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] px-2 py-1.5 text-center text-[9px] font-black uppercase tracking-[0.12em] text-[var(--bccc-backend-text)] hover:border-[var(--bccc-backend-gold-line)]"
           >
             Book
           </Link>
@@ -216,9 +274,9 @@ function CalendarDay({
 
         {canBlock ? (
           <Link
-            href={roleCalendarManagePath(role, day.key)}
+            href={calendarActionPaths(role, day.key).manage}
             onClick={(event) => event.stopPropagation()}
-            className="backend-calendar-mini-action"
+            className="flex-1 border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] px-2 py-1.5 text-center text-[9px] font-black uppercase tracking-[0.12em] text-[var(--bccc-backend-text)] hover:border-[var(--bccc-backend-gold-line)]"
           >
             Block
           </Link>
@@ -237,13 +295,11 @@ function SelectedDayPanel({
 }) {
   if (!day) {
     return (
-      <Card className="backend-admin-card">
-        <CardContent className="p-6">
-          <p className="text-sm text-muted-foreground">
-            Select a date to view details.
-          </p>
-        </CardContent>
-      </Card>
+      <aside className="border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] p-6 shadow-[var(--bccc-backend-shadow-soft)] backdrop-blur-xl">
+        <p className="text-sm text-[var(--bccc-backend-muted)]">
+          Select a date to view details.
+        </p>
+      </aside>
     );
   }
 
@@ -258,118 +314,129 @@ function SelectedDayPanel({
   const canBlock = role === 'admin' || role === 'manager';
 
   return (
-    <Card className="backend-admin-card sticky top-24">
-      <CardHeader>
-        <Badge
-          variant="outline"
-          className="w-fit border-[#c9a96a]/30 bg-[#c9a96a]/10 text-[#7a5c21] dark:text-[#e8d8b5]"
-        >
+    <aside className="sticky top-28 space-y-4 self-start">
+      <section className="border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] p-5 shadow-[var(--bccc-backend-shadow-soft)] backdrop-blur-xl">
+        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--bccc-backend-gold)]">
           Selected Date
-        </Badge>
+        </p>
 
-        <CardTitle className="mt-3 text-2xl font-black tracking-[-0.04em]">
+        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-[var(--bccc-backend-text)]">
           {formattedDate}
-        </CardTitle>
+        </h2>
 
-        <CardDescription>
-          Availability, blocks, bookings, and public event items for this day.
-        </CardDescription>
-      </CardHeader>
+        <p className="mt-2 text-sm leading-7 text-[var(--bccc-backend-muted)]">
+          Availability, blocks, bookings, and public events attached to this day.
+        </p>
 
-      <CardContent className="space-y-5">
-        <div className="flex flex-wrap gap-2">
-          <AvailabilityPill block="AM" open={day.availability?.AM} />
-          <AvailabilityPill block="PM" open={day.availability?.PM} />
-          <AvailabilityPill block="EVE" open={day.availability?.EVE} />
-        </div>
-
-        <div className="rounded-2xl border bg-muted/35 p-4">
-          <p className="backend-admin-label">Day Status</p>
-          <p className="mt-2 text-sm font-black">
-            {availabilityLabel(day.availability)}
+        <div className="mt-5 border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--bccc-backend-muted)]">
+            Day Status
           </p>
+
+          <div className="mt-3 inline-flex items-center gap-2 border border-[var(--bccc-backend-gold-line)] bg-[rgba(169,132,67,0.10)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--bccc-backend-gold)]">
+            <span className={cx('h-2 w-2 rounded-full', statusDot(day.availability))} />
+            {availabilityLabel(day.availability)}
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(['AM', 'PM', 'EVE'] as CalendarBlockKey[]).map((block) => (
+              <AvailabilityPill key={block} block={block} open={blockOpen(day.availability, block)} />
+            ))}
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="mt-5 grid gap-2">
           {canCreate ? (
-            <Button asChild className="rounded-full">
-              <Link href={roleBookingCreatePath(role, day.key)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Booking
-              </Link>
-            </Button>
+            <Link
+              href={calendarActionPaths(role, day.key).booking}
+              className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--bccc-backend-gold-line)] bg-[var(--bccc-green-800)] px-4 text-[11px] font-black uppercase tracking-[0.18em] text-white transition hover:-translate-y-0.5 hover:bg-[var(--bccc-green-900)]"
+            >
+              <Plus className="h-4 w-4" />
+              Create Booking
+            </Link>
           ) : null}
 
           {canBlock ? (
-            <Button asChild variant="outline" className="rounded-full">
-              <Link href={roleCalendarManagePath(role, day.key)}>
-                <ShieldCheck className="mr-2 h-4 w-4" />
-                Manage Blocks
-              </Link>
-            </Button>
+            <Link
+              href={calendarActionPaths(role, day.key).manage}
+              className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] px-4 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--bccc-backend-text)] transition hover:-translate-y-0.5 hover:border-[var(--bccc-backend-gold-line)]"
+            >
+              <ShieldCheck className="h-4 w-4 text-[var(--bccc-backend-gold)]" />
+              Manage Blocks
+            </Link>
           ) : null}
         </div>
+      </section>
 
-        <Separator />
+      <section className="border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] shadow-[var(--bccc-backend-shadow-soft)] backdrop-blur-xl">
+        <div className="border-b border-[var(--bccc-backend-line)] p-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--bccc-backend-gold)]">
+            Schedule Items
+          </p>
 
-        <div>
-          <p className="backend-admin-label">Schedule Items</p>
-          <h4 className="mt-1 text-lg font-black">
+          <h3 className="mt-2 text-xl font-semibold tracking-[-0.04em] text-[var(--bccc-backend-text)]">
             {day.events.length} item{day.events.length === 1 ? '' : 's'}
-          </h4>
+          </h3>
+        </div>
 
-          <div className="mt-4 grid gap-2">
-            {day.events.length > 0 ? (
-              day.events.map((event) => {
-                const href = eventHref(role, event);
+        {day.events.length > 0 ? (
+          <div className="divide-y divide-[var(--bccc-backend-line)]">
+            {day.events.map((event) => {
+              const href = eventHref(role, event);
 
-                const content = (
-                  <div className={`rounded-2xl border p-3 ${eventTone(event)}`}>
-                    <p className="text-sm font-black">
+              const content = (
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[var(--bccc-backend-text)]">
                       {cleanCalendarLabel(event.title)}
                     </p>
-                    <p className="mt-1 text-xs opacity-70">
+
+                    <p className="mt-1 text-xs leading-6 text-[var(--bccc-backend-muted)]">
                       {event.area || event.block || event.kind || 'Calendar item'}
                     </p>
-                    {href ? (
-                      <span className="mt-2 inline-flex items-center text-xs font-black">
-                        Open <ExternalLink className="ml-1 h-3 w-3" />
-                      </span>
-                    ) : null}
                   </div>
-                );
 
-                return href ? (
-                  <Link key={`${event.kind}-${event.id}-${event.start}`} href={href}>
-                    {content}
-                  </Link>
-                ) : (
-                  <div key={`${event.kind}-${event.id}-${event.start}`}>
-                    {content}
-                  </div>
-                );
-              })
-            ) : (
-              <p className="rounded-2xl border border-dashed bg-muted/25 p-4 text-sm leading-6 text-muted-foreground">
-                No booking, block, or public event is attached to this date.
-              </p>
-            )}
+                  {href ? (
+                    <ExternalLink className="h-4 w-4 shrink-0 text-[var(--bccc-backend-gold)]" />
+                  ) : null}
+                </div>
+              );
+
+              return href ? (
+                <Link
+                  key={`${event.kind}-${event.id}-${event.start}`}
+                  href={href}
+                  className="block p-4 transition hover:bg-[var(--bccc-backend-hover)]"
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div key={`${event.kind}-${event.id}-${event.start}`} className="p-4">
+                  {content}
+                </div>
+              );
+            })}
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        ) : (
+          <div className="p-6 text-center text-sm leading-7 text-[var(--bccc-backend-muted)]">
+            No booking, block, or public event is attached to this date.
+          </div>
+        )}
+      </section>
+    </aside>
   );
 }
 
 export function RoleCalendarPage() {
   const { props } = usePage<RoleCalendarPageProps>();
   const role = normalizeCalendarRole(props.workspaceRole) as RoleThemeKey;
-  const theme = getRoleTheme(role);
   const copy = calendarRoleCopy(role);
+
   const month = props.month || formatDateKey(new Date()).slice(0, 7);
   const availability = props.monthAvailability || {};
   const events = Array.isArray(props.events) ? props.events : [];
   const counts = props.counts || {};
+
   const [selectedKey, setSelectedKey] = useState(() => formatDateKey(new Date()));
 
   const grid = useMemo(
@@ -399,156 +466,146 @@ export function RoleCalendarPage() {
   }
 
   return (
-    <RoleWorkspaceShell
+    <BookingRolePageShell
       role={role}
       title={copy.title}
-      eyebrow={copy.eyebrow}
       description={copy.description}
-      breadcrumbs={calendarBreadcrumbs(role)}
       actions={
-        <div className="flex flex-wrap gap-2">
-          <Button asChild className="rounded-full">
-            <Link href={copy.manageHref}>
-              <SlidersHorizontal className="mr-2 h-4 w-4" />
-              {copy.primaryAction}
-            </Link>
-          </Button>
+        <>
+          <Link
+            href={copy.manageHref}
+            className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--bccc-backend-gold-line)] bg-[var(--bccc-green-800)] px-4 text-[11px] font-black uppercase tracking-[0.2em] text-white transition hover:-translate-y-0.5 hover:bg-[var(--bccc-green-900)]"
+          >
+            <CalendarDays className="h-4 w-4" />
+            {copy.primaryAction}
+          </Link>
 
-          <Button asChild variant="outline" className="rounded-full">
-            <Link href={copy.createHref}>
-              <Plus className="mr-2 h-4 w-4" />
-              {copy.secondaryAction}
-            </Link>
-          </Button>
+          <Link
+            href={copy.createHref}
+            className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] px-4 text-[11px] font-black uppercase tracking-[0.2em] text-[var(--bccc-backend-text)] transition hover:-translate-y-0.5 hover:border-[var(--bccc-backend-gold-line)]"
+          >
+            <Plus className="h-4 w-4 text-[var(--bccc-backend-gold)]" />
+            {copy.secondaryAction}
+          </Link>
 
-          <Button asChild variant="outline" className="rounded-full">
-            <Link href={copy.analyticsHref}>
-              <BarChart3 className="mr-2 h-4 w-4" />
-              {copy.tertiaryAction}
-            </Link>
-          </Button>
-        </div>
+          <Link
+            href={copy.analyticsHref}
+            className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] px-4 text-[11px] font-black uppercase tracking-[0.2em] text-[var(--bccc-backend-text)] transition hover:-translate-y-0.5 hover:border-[var(--bccc-backend-gold-line)]"
+          >
+            <BarChart3 className="h-4 w-4 text-[var(--bccc-backend-gold)]" />
+            {copy.tertiaryAction}
+          </Link>
+        </>
       }
     >
-      <div className="backend-admin-page">
-        <section className="grid gap-4 md:grid-cols-4">
-          <CountCard label="Pending" value={counts.pending ?? 0} />
-          <CountCard label="Confirmed" value={counts.confirmed ?? 0} />
-          <CountCard label="Active" value={counts.active ?? 0} />
-          <CountCard label="Completed" value={counts.completed ?? 0} />
-        </section>
+      <section className="grid gap-5">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <CountCard label="Calendar Items" value={events.length} icon={ListFilter} />
+          <CountCard label="Bookings" value={counts.bookings ?? events.filter((event) => event.kind === 'booking').length} icon={CalendarDays} />
+          <CountCard label="Blocks" value={counts.blocks ?? events.filter((event) => event.kind === 'block').length} icon={ShieldCheck} />
+          <CountCard label="Public Events" value={counts.public_events ?? events.filter((event) => event.kind === 'public_event').length} icon={Sparkles} />
+        </div>
 
-        <section className="grid gap-6 xl:grid-cols-[1fr_420px]">
-          <div className="space-y-6">
-            <Card className="backend-admin-card">
-              <CardHeader className="gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="grid gap-5 xl:grid-cols-[1fr_24rem]">
+          <main className="min-w-0">
+            <section className="overflow-hidden border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] shadow-[var(--bccc-backend-shadow-soft)] backdrop-blur-xl">
+              <div className="flex flex-col gap-4 border-b border-[var(--bccc-backend-line)] p-5 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <Badge
-                    variant="outline"
-                    className="border-[#c9a96a]/30 bg-[#c9a96a]/10 text-[#7a5c21] dark:text-[#e8d8b5]"
-                  >
+                  <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--bccc-backend-gold)]">
                     Calendar Month
-                  </Badge>
+                  </p>
 
-                  <CardTitle className="mt-3 text-3xl font-black tracking-[-0.05em]">
+                  <h2 className="mt-2 text-3xl font-semibold tracking-[-0.06em] text-[var(--bccc-backend-text)]">
                     {monthLabel(month)}
-                  </CardTitle>
+                  </h2>
 
-                  <CardDescription>
-                    View bookings, public events, blocked dates, and time-block availability.
-                  </CardDescription>
+                  <p className="mt-2 text-sm leading-7 text-[var(--bccc-backend-muted)]">
+                    View bookings, public events, blocked dates, and AM / PM / EVE availability.
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button
+                  <button
                     type="button"
-                    variant="outline"
-                    className="rounded-full"
                     onClick={() => goToMonth(previousMonth)}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] px-4 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--bccc-backend-text)] transition hover:-translate-y-0.5 hover:border-[var(--bccc-backend-gold-line)]"
                   >
-                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    <ArrowLeft className="h-4 w-4" />
                     Previous
-                  </Button>
+                  </button>
 
-                  <Button
+                  <button
                     type="button"
-                    variant="outline"
-                    className="rounded-full"
                     onClick={() => goToMonth(formatDateKey(new Date()).slice(0, 7))}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--bccc-backend-gold-line)] bg-[rgba(169,132,67,0.12)] px-4 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--bccc-backend-gold)] transition hover:-translate-y-0.5"
                   >
-                    <Clock3 className="mr-2 h-4 w-4" />
+                    <Clock3 className="h-4 w-4" />
                     Today
-                  </Button>
+                  </button>
 
-                  <Button
+                  <button
                     type="button"
-                    variant="outline"
-                    className="rounded-full"
                     onClick={() => goToMonth(nextMonth)}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] px-4 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--bccc-backend-text)] transition hover:-translate-y-0.5 hover:border-[var(--bccc-backend-gold-line)]"
                   >
                     Next
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
                 </div>
-              </CardHeader>
-            </Card>
+              </div>
 
-            <Card className="backend-admin-card overflow-hidden">
-              <CardContent className="p-4">
-                <div className="grid grid-cols-7 gap-2">
-                  {weekLabels.map((label) => (
-                    <div
-                      key={label}
-                      className="rounded-2xl border bg-muted/35 py-3 text-center text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground"
-                    >
-                      {label}
-                    </div>
-                  ))}
-
-                  {grid.map((day) => (
-                    <CalendarDay
-                      key={day.key}
-                      role={role}
-                      day={day}
-                      selected={selectedDay?.key === day.key}
-                      onSelect={(nextDay) => setSelectedKey(nextDay.key)}
-                    />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="backend-admin-card">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <ListFilter className="h-5 w-5 text-[#8a6b2e] dark:text-[#e8d8b5]" />
-                  <div>
-                    <CardTitle className="text-xl font-black">Legend</CardTitle>
-                    <CardDescription>Calendar color meanings</CardDescription>
+              <div className="grid grid-cols-7 border-b border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)]">
+                {weekLabels.map((label) => (
+                  <div
+                    key={label}
+                    className="px-2 py-3 text-center text-[10px] font-black uppercase tracking-[0.22em] text-[var(--bccc-backend-gold)]"
+                  >
+                    {label}
                   </div>
-                </div>
-              </CardHeader>
+                ))}
+              </div>
 
-              <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-sm font-bold text-emerald-700 dark:text-emerald-200">
-                  Confirmed / Active Booking
+              <div className="grid grid-cols-7">
+                {grid.map((day) => (
+                  <CalendarDay
+                    key={day.key}
+                    role={role}
+                    day={day}
+                    selected={selectedDay?.key === day.key}
+                    onSelect={(nextDay) => setSelectedKey(nextDay.key)}
+                  />
+                ))}
+              </div>
+            </section>
+
+            <section className="mt-5 grid gap-4 md:grid-cols-4">
+              {[
+                ['Available', 'Open or mostly open date', 'bg-emerald-500'],
+                ['Limited', 'Some blocks occupied', 'bg-blue-500'],
+                ['Private / Reserved', 'Private booking or reserved block', 'bg-amber-500'],
+                ['Blocked', 'Unavailable for requests', 'bg-rose-500'],
+              ].map(([label, description, dot]) => (
+                <div
+                  key={label}
+                  className="border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] p-4 shadow-[var(--bccc-backend-shadow-soft)]"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={cx('h-2.5 w-2.5 rounded-full', dot)} />
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--bccc-backend-text)]">
+                      {label}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-xs leading-6 text-[var(--bccc-backend-muted)]">
+                    {description}
+                  </p>
                 </div>
-                <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm font-bold text-amber-700 dark:text-amber-200">
-                  Pending / Partial
-                </div>
-                <div className="rounded-2xl border border-red-500/25 bg-red-500/10 p-3 text-sm font-bold text-red-700 dark:text-red-200">
-                  Blocked / Unavailable
-                </div>
-                <div className="rounded-2xl border border-sky-500/25 bg-sky-500/10 p-3 text-sm font-bold text-sky-700 dark:text-sky-200">
-                  Public Event
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              ))}
+            </section>
+          </main>
 
           <SelectedDayPanel role={role} day={selectedDay} />
-        </section>
-      </div>
-    </RoleWorkspaceShell>
+        </div>
+      </section>
+    </BookingRolePageShell>
   );
 }

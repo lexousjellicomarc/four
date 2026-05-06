@@ -1,9 +1,18 @@
+import ConfigDropdown from '@/components/admin/config-dropdown';
+import ConfirmActionDialog from '@/components/confirm-action-dialog';
+import { Link, router, usePage } from '@inertiajs/react';
+import {
+    CalendarDays,
+    Home,
+    LayoutGrid,
+    LogOut,
+    Mail,
+    Menu,
+    ShieldCheck,
+    X,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { Link, router, usePage } from '@inertiajs/react';
-import { CalendarDays, Home, LayoutGrid, LogOut, Mail, Menu, ShieldCheck, X } from 'lucide-react';
-import ConfirmActionDialog from '@/components/confirm-action-dialog';
-import ConfigDropdown from '@/components/admin/config-dropdown';
 
 type AdminLayoutProps = {
     children: ReactNode;
@@ -31,9 +40,11 @@ const navItems = [
     { label: 'Contact Us', href: '#footer-config', icon: Mail },
 ];
 
-
-
-export default function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
+export default function AdminLayout({
+    children,
+    title,
+    subtitle,
+}: AdminLayoutProps) {
     const page = usePage<SharedProps>();
     const user = page.props.auth?.user;
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -53,16 +64,15 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
     }, [mobileOpen]);
 
     const handleLogout = () => {
-    setLogoutProcessing(true);
+        setLogoutProcessing(true);
 
-    router.post('/logout', undefined, {
-        onFinish: () => {
-            setLogoutProcessing(false);
-            setConfirmLogoutOpen(false);
-        },
-    });
-};
-
+        router.post('/logout', undefined, {
+            onFinish: () => {
+                setLogoutProcessing(false);
+                setConfirmLogoutOpen(false);
+            },
+        });
+    };
 
     return (
         <div className="min-h-screen bg-[#f5f1e8] text-[#1f1f1c] dark:bg-[#101114] dark:text-white">
@@ -71,13 +81,16 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
             <header className="sticky top-0 z-50 border-b border-black/10 bg-[#f5f1e8]/92 backdrop-blur dark:border-white/10 dark:bg-[#101114]/92">
                 <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 lg:px-6">
                     <div className="flex items-center gap-3">
-                        <Link href="/admin/home" className="flex items-center gap-3">
+                        <Link
+                            href="/admin/home"
+                            className="flex items-center gap-3"
+                        >
                             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#174f40] text-sm font-black text-white dark:bg-[#2d47ff]">
                                 AD
                             </div>
 
                             <div>
-                                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#174f40] dark:text-[#9dc0ff]">
+                                <p className="text-sm font-black tracking-[0.18em] text-[#174f40] uppercase dark:text-[#9dc0ff]">
                                     BCCC Admin
                                 </p>
                                 <p className="text-xs text-[#5f5c56] dark:text-[#c0c0c8]">
@@ -103,7 +116,9 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
 
                     <div className="hidden items-center gap-3 xl:flex">
                         <div className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm dark:border-white/10 dark:bg-[#17181c]">
-                            <span className="font-semibold">{user?.name ?? 'Admin User'}</span>
+                            <span className="font-semibold">
+                                {user?.name ?? 'Admin User'}
+                            </span>
                         </div>
 
                         <button
@@ -122,19 +137,26 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
                         className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-white text-[#1f1f1c] xl:hidden dark:border-white/10 dark:bg-[#17181c] dark:text-white"
                         aria-label="Toggle admin menu"
                     >
-                        {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                        {mobileOpen ? (
+                            <X className="h-5 w-5" />
+                        ) : (
+                            <Menu className="h-5 w-5" />
+                        )}
                     </button>
                 </div>
             </header>
 
             {mobileOpen && (
                 <div className="fixed inset-0 z-[60] xl:hidden">
-                    <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
+                    <div
+                        className="absolute inset-0 bg-black/50"
+                        onClick={() => setMobileOpen(false)}
+                    />
 
-                    <div className="absolute right-0 top-0 h-full w-full max-w-sm overflow-y-auto bg-[#f5f1e8] p-5 dark:bg-[#111216]">
+                    <div className="absolute top-0 right-0 h-full w-full max-w-sm overflow-y-auto bg-[#f5f1e8] p-5 dark:bg-[#111216]">
                         <div className="mb-6 flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#174f40] dark:text-[#9dc0ff]">
+                                <p className="text-sm font-black tracking-[0.18em] text-[#174f40] uppercase dark:text-[#9dc0ff]">
                                     BCCC Admin
                                 </p>
                                 <p className="text-xs text-[#5f5c56] dark:text-[#c0c0c8]">
@@ -145,10 +167,9 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
                             <button
                                 type="button"
                                 onClick={() => {
-                                setMobileOpen(false);
-                                setConfirmLogoutOpen(true);
-                            }}
-
+                                    setMobileOpen(false);
+                                    setConfirmLogoutOpen(true);
+                                }}
                                 className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white dark:border-white/10 dark:bg-[#17181c]"
                             >
                                 <X className="h-5 w-5" />
@@ -177,7 +198,9 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
                         </div>
 
                         <div className="mt-6 rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#17181c]">
-                            <p className="text-sm font-bold">{user?.name ?? 'Admin User'}</p>
+                            <p className="text-sm font-bold">
+                                {user?.name ?? 'Admin User'}
+                            </p>
                             <p className="mt-1 text-xs text-[#66625c] dark:text-[#c0c0c8]">
                                 Logged in administrator
                             </p>
@@ -198,11 +221,15 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
                 {(title || subtitle) && (
                     <section className="mb-6 rounded-[2rem] border border-black/10 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#16171b]">
                         {title && (
-                            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#174f40] dark:text-[#9dc0ff]">
+                            <p className="text-xs font-black tracking-[0.18em] text-[#174f40] uppercase dark:text-[#9dc0ff]">
                                 Admin Home
                             </p>
                         )}
-                        {title && <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">{title}</h1>}
+                        {title && (
+                            <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
+                                {title}
+                            </h1>
+                        )}
                         {subtitle && (
                             <p className="mt-3 max-w-4xl text-sm leading-7 text-[#595651] dark:text-[#c8c8ce]">
                                 {subtitle}

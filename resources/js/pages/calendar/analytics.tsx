@@ -1,342 +1,674 @@
 import AppLayout from '@/layouts/app-layout';
+import type { BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { type BreadcrumbItem } from '@/types';
-import { useMemo, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CalendarDays, Download, Printer, TrendingUp } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import {
+    Activity,
+    BarChart3,
+    CalendarDays,
+    Download,
+    FileText,
+    Layers3,
+    Search,
+    TrendingUp,
+} from 'lucide-react';
+import type { FormEvent } from 'react';
 
-type MetricRow = { [key: string]: any };
-
-type Props = {
-  filters: {
-    start_date: string;
-    end_date: string;
-  };
-  generated_at: string;
-  summary: Record<string, number | string>;
-  block_usage: Array<{ block: string; count: number }>;
-  block_status_mix: Array<{ status: string; count: number }>;
-  weekday_usage: Array<{ weekday: string; count: number }>;
-  area_usage: Array<{ area: string; bookings: number; calendar_blocks: number; public_events: number; total: number }>;
-  busiest_dates: Array<{ date: string; occupied_blocks: number; bookings: number; calendar_blocks: number; public_events: number; total_activity: number }>;
-  date_series: Array<{ date: string; occupied_blocks: number; bookings: number; calendar_blocks: number; public_events: number; total_activity: number }>;
-  upcoming_window: Array<{ date: string; occupied_blocks: number; bookings: number; calendar_blocks: number; public_events: number; total_activity: number }>;
+type CountRow = {
+    block?: string;
+    status?: string;
+    weekday?: string;
+    count?: number;
+    label?: string;
+    value?: number;
 };
 
-const breadcrumbs: BreadcrumbItem[] = [
-  { title: 'Dashboard', href: '/dashboard' },
-  { title: 'Calendar Analytics', href: '/calendar/analytics' },
-];
+type AreaRow = {
+    area: string;
+    bookings: number;
+    calendar_blocks: number;
+    public_events: number;
+    total: number;
+};
 
-function formatNumber(value: unknown) {
-  return Number(value ?? 0).toLocaleString();
+type DateRow = {
+    date: string;
+    occupied_blocks: number;
+    bookings: number;
+    calendar_blocks: number;
+    public_events: number;
+    total_activity: number;
+};
+
+type Props = {
+    filters: {
+        start_date?: string;
+        end_date?: string;
+    };
+    generated_at?: string;
+    summary: Record<string, unknown>;
+    block_usage: CountRow[];
+    block_status_mix: CountRow[];
+    weekday_usage: CountRow[];
+    area_usage: AreaRow[];
+    busiest_dates: DateRow[];
+    date_series: DateRow[];
+};
+
+function currentCalendarBase() {
+    if (window.location.pathname.startsWith('/admin')) return '/admin/calendar';
+    if (window.location.pathname.startsWith('/manager'))
+        return '/manager/calendar';
+
+    return '/calendar';
 }
 
-function prettyLabel(value: string) {
-  return value
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (match) => match.toUpperCase());
-}
+function breadcrumbs(): BreadcrumbItem[] {
+    const base = currentCalendarBase();
 
-function maxValue(rows: MetricRow[], key: string) {
-  return Math.max(1, ...rows.map((row) => Number(row[key] ?? 0)));
-}
-
-function MiniBars({ rows, labelKey, valueKey, tone = 'bg-sky-600' }: { rows: MetricRow[]; labelKey: string; valueKey: string; tone?: string }) {
-  const max = maxValue(rows, valueKey);
-
-  return (
-    <div className="space-y-3">
-      {rows.map((row, index) => {
-        const value = Number(row[valueKey] ?? 0);
-        const width = `${Math.max(5, (value / max) * 100)}%`;
-
-        return (
-          <div key={`${row[labelKey]}-${index}`} className="space-y-1">
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <div className="font-medium text-slate-700 dark:text-slate-200">{String(row[labelKey])}</div>
-              <div className="text-slate-500 dark:text-slate-300">{formatNumber(value)}</div>
-            </div>
-            <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800">
-              <div className={`h-2.5 rounded-full ${tone}`} style={{ width }} />
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function DateSeriesBars({ rows }: { rows: Props['date_series'] }) {
-  const subset = rows.slice(-31);
-  const max = Math.max(1, ...subset.map((row) => Number(row.total_activity ?? 0)));
-
-  return (
-    <div className="overflow-x-auto">
-      <div className="flex min-w-[780px] items-end gap-2">
-        {subset.map((row) => {
-          const h = `${Math.max(10, (Number(row.total_activity ?? 0) / max) * 180)}px`;
-          return (
-            <div key={row.date} className="flex w-6 flex-col items-center gap-2">
-              <div
-                className="w-full rounded-t-md bg-emerald-600/85"
-                style={{ height: h }}
-                title={`${row.date} • total ${row.total_activity} • blocks ${row.occupied_blocks} • public events ${row.public_events}`}
-              />
-              <div className="-rotate-45 text-[10px] text-slate-500 dark:text-slate-400">{row.date.slice(5)}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function buildExportHref(filters: Props['filters']) {
-  const qs = new URLSearchParams({
-    start_date: filters.start_date,
-    end_date: filters.end_date,
-  });
-
-  return `/calendar/analytics/export?${qs.toString()}`;
-}
-
-function buildPrintHref(filters: Props['filters']) {
-  const qs = new URLSearchParams({
-    start_date: filters.start_date,
-    end_date: filters.end_date,
-  });
-
-  return `/calendar/analytics/print?${qs.toString()}`;
-}
-
-export default function CalendarAnalyticsPage(props: Props) {
-  const [startDate, setStartDate] = useState(props.filters.start_date ?? '');
-  const [endDate, setEndDate] = useState(props.filters.end_date ?? '');
-
-  const summaryCards = useMemo(() => {
     return [
-      { label: 'Bookings in Range', value: props.summary.bookings_in_range, tone: 'bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-200' },
-      { label: 'Occupied Block Days', value: props.summary.occupied_block_days, tone: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200' },
-      { label: 'Public Events', value: props.summary.public_events_in_range, tone: 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-200' },
-      { label: 'Calendar Blocks', value: props.summary.calendar_blocks_in_range, tone: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-200' },
-      { label: 'Guest Volume', value: props.summary.booked_guest_volume, tone: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-200' },
-      { label: 'Peak Daily Activity', value: props.summary.peak_daily_activity, tone: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' },
+        { title: 'Calendar', href: base },
+        { title: 'Analytics', href: `${base}/analytics` },
     ];
-  }, [props.summary]);
+}
 
-  const applyFilters = () => {
-    router.get('/calendar/analytics', {
-      start_date: startDate || undefined,
-      end_date: endDate || undefined,
-    }, {
-      preserveState: true,
-      preserveScroll: true,
-      replace: true,
-    });
-  };
+function numberValue(value: unknown): number {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
 
-  return (
-    <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="Calendar Analytics" />
+function cleanLabel(value: unknown): string {
+    return String(value || '—')
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
-      <div className="space-y-6 p-4 md:p-6">
-        <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#121318]">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200">
-                <CalendarDays className="h-3.5 w-3.5" /> Calendar Analytics
-              </div>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                Venue utilization and AM / PM / EVE activity dashboard
-              </h1>
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300">
-                This view combines bookings, admin calendar blocks, and public events so you can see busiest dates, most used areas, and block-level utilization in one place.
-              </p>
+function formatDate(value?: string | null) {
+    if (!value) return '—';
+
+    const date = new Date(`${value}T00:00:00`);
+
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat('en-PH', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+    }).format(date);
+}
+
+function formatDateTime(value?: string | null) {
+    if (!value) return '—';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat('en-PH', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    }).format(date);
+}
+
+function getSummary(summary: Record<string, unknown>, keys: string[]) {
+    for (const key of keys) {
+        if (summary[key] !== undefined && summary[key] !== null) {
+            return numberValue(summary[key]);
+        }
+    }
+
+    return 0;
+}
+
+function maxValue<T>(items: T[], getter: (item: T) => number) {
+    return Math.max(1, ...items.map((item) => getter(item)));
+}
+
+function countLabel(row: CountRow) {
+    return row.block || row.status || row.weekday || row.label || '—';
+}
+
+function countValue(row: CountRow) {
+    return numberValue(row.count ?? row.value);
+}
+
+function StatCard({
+    label,
+    value,
+    helper,
+    icon: Icon,
+}: {
+    label: string;
+    value: string | number;
+    helper: string;
+    icon: LucideIcon;
+}) {
+    return (
+        <article className="calendar-analytics-kpi">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <p className="backend-booking-label">{label}</p>
+                    <strong>{value}</strong>
+                </div>
+
+                <div className="alh-admin-kpi-icon">
+                    <Icon className="h-5 w-5" />
+                </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button asChild variant="outline">
-                <a href={buildExportHref(props.filters)}>
-                  <Download className="mr-2 h-4 w-4" /> Export CSV
-                </a>
-              </Button>
-              <Button asChild variant="outline">
-                <a href={buildPrintHref(props.filters)} target="_blank" rel="noreferrer">
-                  <Printer className="mr-2 h-4 w-4" /> Print Report
-                </a>
-              </Button>
-              <Button asChild>
-                <Link href="/dashboard">
-                  <TrendingUp className="mr-2 h-4 w-4" /> Back to Dashboard
-                </Link>
-              </Button>
-            </div>
-          </div>
+            <p>{helper}</p>
+        </article>
+    );
+}
 
-          <div className="mt-6 grid gap-3 md:grid-cols-4">
-            <div>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Start date</div>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+function MiniBar({
+    label,
+    value,
+    max,
+}: {
+    label: string;
+    value: number;
+    max: number;
+}) {
+    const width = Math.max(4, Math.min(100, (value / Math.max(max, 1)) * 100));
+
+    return (
+        <div className="calendar-analytics-mini-bar">
+            <div className="flex items-center justify-between gap-3">
+                <span>{label}</span>
+                <strong>{value}</strong>
             </div>
-            <div>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">End date</div>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+
+            <div className="calendar-analytics-bar-track">
+                <div style={{ width: `${width}%` }} />
             </div>
-            <div className="flex items-end gap-2 md:col-span-2">
-              <Button onClick={applyFilters}>Apply Range</Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setStartDate('');
-                  setEndDate('');
-                  router.get('/calendar/analytics', {}, { preserveState: true, preserveScroll: true, replace: true });
-                }}
-              >
-                Reset
-              </Button>
-            </div>
-          </div>
         </div>
+    );
+}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {summaryCards.map((card) => (
-            <div key={card.label} className={`rounded-[1.6rem] border p-5 ${card.tone}`}>
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] opacity-80">{card.label}</div>
-              <div className="mt-2 text-3xl font-semibold">{formatNumber(card.value)}</div>
-            </div>
-          ))}
+function EmptyState({
+    title,
+    description,
+}: {
+    title: string;
+    description: string;
+}) {
+    return (
+        <div className="calendar-analytics-empty">
+            <CalendarDays className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-700" />
+            <h3>{title}</h3>
+            <p>{description}</p>
         </div>
+    );
+}
 
-        <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-          <Card className="rounded-[2rem]">
-            <CardHeader>
-              <CardTitle>Last 31 days of activity inside the selected range</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DateSeriesBars rows={props.date_series} />
-            </CardContent>
-          </Card>
+export default function CalendarAnalytics({
+    filters,
+    generated_at,
+    summary = {},
+    block_usage = [],
+    block_status_mix = [],
+    weekday_usage = [],
+    area_usage = [],
+    busiest_dates = [],
+    date_series = [],
+}: Props) {
+    const base = currentCalendarBase();
+    const analyticsPath = `${base}/analytics`;
 
-          <Card className="rounded-[2rem]">
-            <CardHeader>
-              <CardTitle>AM / PM / EVE usage</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MiniBars rows={props.block_usage} labelKey="block" valueKey="count" tone="bg-blue-600" />
-            </CardContent>
-          </Card>
-        </div>
+    const startDate = filters.start_date || '';
+    const endDate = filters.end_date || '';
 
-        <div className="grid gap-6 xl:grid-cols-3">
-          <Card className="rounded-[2rem] xl:col-span-1">
-            <CardHeader>
-              <CardTitle>Calendar block status mix</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MiniBars rows={props.block_status_mix.map((row) => ({ ...row, status: prettyLabel(row.status) }))} labelKey="status" valueKey="count" tone="bg-violet-600" />
-            </CardContent>
-          </Card>
+    const query = new URLSearchParams();
 
-          <Card className="rounded-[2rem] xl:col-span-1">
-            <CardHeader>
-              <CardTitle>Weekday utilization</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MiniBars rows={props.weekday_usage} labelKey="weekday" valueKey="count" tone="bg-emerald-600" />
-            </CardContent>
-          </Card>
+    if (startDate) query.set('start_date', startDate);
+    if (endDate) query.set('end_date', endDate);
 
-          <Card className="rounded-[2rem] xl:col-span-1">
-            <CardHeader>
-              <CardTitle>Upcoming 30-day workload</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {props.upcoming_window.slice(0, 10).map((row) => (
-                  <div key={row.date} className="rounded-2xl border border-black/5 p-4 dark:border-white/10">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="font-medium text-slate-800 dark:text-slate-200">{row.date}</div>
-                      <div className="text-sm text-slate-500 dark:text-slate-300">{formatNumber(row.total_activity)} total</div>
+    const queryString = query.toString();
+    const exportHref = queryString
+        ? `${analyticsPath}/export?${queryString}`
+        : `${analyticsPath}/export`;
+    const printHref = queryString
+        ? `${analyticsPath}/print?${queryString}`
+        : `${analyticsPath}/print`;
+
+    const totalActivity = getSummary(summary, [
+        'total_activity',
+        'activity_total',
+    ]);
+    const occupiedBlocks = getSummary(summary, [
+        'occupied_blocks',
+        'occupied_block_days',
+    ]);
+    const bookings = getSummary(summary, [
+        'bookings',
+        'booking_count',
+        'total_bookings',
+    ]);
+    const calendarBlocks = getSummary(summary, [
+        'calendar_blocks',
+        'block_count',
+    ]);
+    const publicEvents = getSummary(summary, [
+        'public_events',
+        'public_event_count',
+    ]);
+    const rangeDays = getSummary(summary, ['range_days', 'total_days', 'days']);
+
+    const maxBlockUsage = maxValue(block_usage, countValue);
+    const maxStatusMix = maxValue(block_status_mix, countValue);
+    const maxWeekday = maxValue(weekday_usage, countValue);
+    const maxArea = maxValue(area_usage, (item) => numberValue(item.total));
+    const maxDateActivity = maxValue(date_series, (item) =>
+        numberValue(item.total_activity),
+    );
+
+    function applyFilters(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+
+        const form = new FormData(event.currentTarget);
+
+        router.get(
+            analyticsPath,
+            {
+                start_date: String(form.get('start_date') || '') || undefined,
+                end_date: String(form.get('end_date') || '') || undefined,
+            },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                replace: true,
+            },
+        );
+    }
+
+    return (
+        <AppLayout breadcrumbs={breadcrumbs()}>
+            <Head title="Calendar Analytics" />
+
+            <div className="backend-admin-page space-y-5">
+                <section className="calendar-analytics-hero">
+                    <div>
+                        <p className="backend-booking-label">
+                            Calendar Analytics
+                        </p>
+                        <h1>
+                            Calendar activity, venue use, and occupancy
+                            patterns.
+                        </h1>
+                        <span>
+                            Review occupied time blocks, busiest dates, weekday
+                            demand, area usage, public events, bookings, and
+                            internal calendar blocks in one clean report.
+                        </span>
                     </div>
-                    <div className="mt-2 grid grid-cols-4 gap-2 text-xs text-slate-600 dark:text-slate-300">
-                      <div>Blocks: {row.occupied_blocks}</div>
-                      <div>Bookings: {row.bookings}</div>
-                      <div>Admin blocks: {row.calendar_blocks}</div>
-                      <div>Public: {row.public_events}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-          <Card className="rounded-[2rem]">
-            <CardHeader>
-              <CardTitle>Top utilized areas / venues</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-black/5 text-left dark:border-white/10">
-                      <th className="px-3 py-3 font-semibold">Area / Venue</th>
-                      <th className="px-3 py-3 font-semibold">Bookings</th>
-                      <th className="px-3 py-3 font-semibold">Calendar Blocks</th>
-                      <th className="px-3 py-3 font-semibold">Public Events</th>
-                      <th className="px-3 py-3 font-semibold">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {props.area_usage.map((row) => (
-                      <tr key={row.area} className="border-b border-black/5 dark:border-white/10">
-                        <td className="px-3 py-3">{row.area}</td>
-                        <td className="px-3 py-3">{formatNumber(row.bookings)}</td>
-                        <td className="px-3 py-3">{formatNumber(row.calendar_blocks)}</td>
-                        <td className="px-3 py-3">{formatNumber(row.public_events)}</td>
-                        <td className="px-3 py-3 font-semibold">{formatNumber(row.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+                    <div className="flex flex-wrap gap-2">
+                        <Link href={base} className="alh-secondary-button">
+                            Calendar
+                        </Link>
 
-          <Card className="rounded-[2rem]">
-            <CardHeader>
-              <CardTitle>Busiest dates</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {props.busiest_dates.map((row) => (
-                  <div key={row.date} className="rounded-2xl border border-black/5 p-4 dark:border-white/10">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="font-medium text-slate-800 dark:text-slate-200">{row.date}</div>
-                      <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">{formatNumber(row.total_activity)} total activity</div>
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-300 md:grid-cols-4">
-                      <div>Occupied blocks: {formatNumber(row.occupied_blocks)}</div>
-                      <div>Bookings: {formatNumber(row.bookings)}</div>
-                      <div>Calendar blocks: {formatNumber(row.calendar_blocks)}</div>
-                      <div>Public events: {formatNumber(row.public_events)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                        <Link
+                            href={`${base}/manage`}
+                            className="alh-secondary-button"
+                        >
+                            Manage
+                        </Link>
 
-        <div className="text-xs text-slate-500 dark:text-slate-400">
-          Generated at: {new Date(props.generated_at).toLocaleString()}
-        </div>
-      </div>
-    </AppLayout>
-  );
+                        <a href={exportHref} className="alh-secondary-button">
+                            <Download className="h-4 w-4" />
+                            Export
+                        </a>
+
+                        <a
+                            href={printHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="alh-primary-button"
+                        >
+                            <FileText className="h-4 w-4" />
+                            Print
+                        </a>
+                    </div>
+                </section>
+
+                <section className="calendar-analytics-filter">
+                    <form
+                        onSubmit={applyFilters}
+                        className="calendar-analytics-filter-grid"
+                    >
+                        <label>
+                            <span className="backend-booking-label">
+                                Start Date
+                            </span>
+                            <input
+                                type="date"
+                                name="start_date"
+                                defaultValue={startDate}
+                                className="backend-booking-input"
+                            />
+                        </label>
+
+                        <label>
+                            <span className="backend-booking-label">
+                                End Date
+                            </span>
+                            <input
+                                type="date"
+                                name="end_date"
+                                defaultValue={endDate}
+                                className="backend-booking-input"
+                            />
+                        </label>
+
+                        <button
+                            type="submit"
+                            className="alh-primary-button justify-center"
+                        >
+                            <Search className="h-4 w-4" />
+                            Apply Range
+                        </button>
+
+                        <Link
+                            href={analyticsPath}
+                            className="alh-secondary-button justify-center"
+                        >
+                            Reset
+                        </Link>
+                    </form>
+                </section>
+
+                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <StatCard
+                        label="Total Activity"
+                        value={totalActivity}
+                        helper={`${rangeDays || 'Selected'} day range. Generated ${formatDateTime(generated_at)}.`}
+                        icon={Activity}
+                    />
+
+                    <StatCard
+                        label="Occupied Blocks"
+                        value={occupiedBlocks}
+                        helper="AM, PM, and EVE block-day usage from bookings and blocks."
+                        icon={Layers3}
+                    />
+
+                    <StatCard
+                        label="Bookings"
+                        value={bookings}
+                        helper="Booking records touching the selected date range."
+                        icon={CalendarDays}
+                    />
+
+                    <StatCard
+                        label="Public + Internal"
+                        value={publicEvents + calendarBlocks}
+                        helper={`${publicEvents} public events · ${calendarBlocks} internal blocks.`}
+                        icon={BarChart3}
+                    />
+                </section>
+
+                <section className="grid gap-5 xl:grid-cols-3">
+                    <div className="calendar-analytics-panel">
+                        <div className="calendar-analytics-panel-header">
+                            <div>
+                                <p className="backend-booking-label">
+                                    Block Usage
+                                </p>
+                                <h2>AM / PM / EVE</h2>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-3 p-5">
+                            {block_usage.length > 0 ? (
+                                block_usage.map((row) => (
+                                    <MiniBar
+                                        key={countLabel(row)}
+                                        label={cleanLabel(countLabel(row))}
+                                        value={countValue(row)}
+                                        max={maxBlockUsage}
+                                    />
+                                ))
+                            ) : (
+                                <EmptyState
+                                    title="No block usage"
+                                    description="Occupied block data will appear here."
+                                />
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="calendar-analytics-panel">
+                        <div className="calendar-analytics-panel-header">
+                            <div>
+                                <p className="backend-booking-label">
+                                    Status Mix
+                                </p>
+                                <h2>Calendar status</h2>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-3 p-5">
+                            {block_status_mix.length > 0 ? (
+                                block_status_mix.map((row) => (
+                                    <MiniBar
+                                        key={countLabel(row)}
+                                        label={cleanLabel(countLabel(row))}
+                                        value={countValue(row)}
+                                        max={maxStatusMix}
+                                    />
+                                ))
+                            ) : (
+                                <EmptyState
+                                    title="No status mix"
+                                    description="Blocked/private/public status mix will appear here."
+                                />
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="calendar-analytics-panel">
+                        <div className="calendar-analytics-panel-header">
+                            <div>
+                                <p className="backend-booking-label">
+                                    Weekday Demand
+                                </p>
+                                <h2>Activity by day</h2>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-3 p-5">
+                            {weekday_usage.length > 0 ? (
+                                weekday_usage.map((row) => (
+                                    <MiniBar
+                                        key={countLabel(row)}
+                                        label={cleanLabel(countLabel(row))}
+                                        value={countValue(row)}
+                                        max={maxWeekday}
+                                    />
+                                ))
+                            ) : (
+                                <EmptyState
+                                    title="No weekday usage"
+                                    description="Activity by weekday will appear here."
+                                />
+                            )}
+                        </div>
+                    </div>
+                </section>
+
+                <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+                    <main className="calendar-analytics-panel overflow-hidden">
+                        <div className="calendar-analytics-panel-header">
+                            <div>
+                                <p className="backend-booking-label">
+                                    Area Utilization
+                                </p>
+                                <h2>Venue/area use</h2>
+                                <span>
+                                    Combines booking services, calendar blocks,
+                                    and public event activity by area.
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                            {area_usage.length > 0 ? (
+                                area_usage.map((row) => {
+                                    const width = Math.max(
+                                        4,
+                                        Math.min(
+                                            100,
+                                            (numberValue(row.total) / maxArea) *
+                                                100,
+                                        ),
+                                    );
+
+                                    return (
+                                        <article
+                                            key={row.area}
+                                            className="calendar-area-row"
+                                        >
+                                            <div className="min-w-0">
+                                                <h3>{row.area}</h3>
+                                                <p>
+                                                    {row.bookings} booking
+                                                    services ·{' '}
+                                                    {row.calendar_blocks} blocks
+                                                    · {row.public_events} public
+                                                    events
+                                                </p>
+                                            </div>
+
+                                            <div className="calendar-analytics-bar-track">
+                                                <div
+                                                    style={{
+                                                        width: `${width}%`,
+                                                    }}
+                                                />
+                                            </div>
+
+                                            <strong>{row.total}</strong>
+                                        </article>
+                                    );
+                                })
+                            ) : (
+                                <EmptyState
+                                    title="No area utilization"
+                                    description="Area usage will appear here when calendar data exists."
+                                />
+                            )}
+                        </div>
+                    </main>
+
+                    <aside className="calendar-analytics-panel overflow-hidden">
+                        <div className="calendar-analytics-panel-header">
+                            <div>
+                                <p className="backend-booking-label">
+                                    Busiest Dates
+                                </p>
+                                <h2>Top activity days</h2>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-3 p-5">
+                            {busiest_dates.length > 0 ? (
+                                busiest_dates.slice(0, 10).map((row) => (
+                                    <div
+                                        key={row.date}
+                                        className="calendar-busy-date-card"
+                                    >
+                                        <div>
+                                            <strong>
+                                                {formatDate(row.date)}
+                                            </strong>
+                                            <span>
+                                                {row.bookings} bookings ·{' '}
+                                                {row.calendar_blocks} blocks ·{' '}
+                                                {row.public_events} public
+                                                events
+                                            </span>
+                                        </div>
+
+                                        <p>{row.total_activity}</p>
+                                    </div>
+                                ))
+                            ) : (
+                                <EmptyState
+                                    title="No busy date data"
+                                    description="The busiest calendar days will appear here."
+                                />
+                            )}
+                        </div>
+                    </aside>
+                </section>
+
+                <section className="calendar-analytics-panel overflow-hidden">
+                    <div className="calendar-analytics-panel-header">
+                        <div>
+                            <p className="backend-booking-label">Date Series</p>
+                            <h2>Daily activity timeline</h2>
+                            <span>
+                                Compact daily bars show how calendar load is
+                                distributed across the selected range.
+                            </span>
+                        </div>
+
+                        <TrendingUp className="h-5 w-5 text-slate-400" />
+                    </div>
+
+                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {date_series.length > 0 ? (
+                            date_series.map((row) => {
+                                const width = Math.max(
+                                    4,
+                                    Math.min(
+                                        100,
+                                        (numberValue(row.total_activity) /
+                                            maxDateActivity) *
+                                            100,
+                                    ),
+                                );
+
+                                return (
+                                    <article
+                                        key={row.date}
+                                        className="calendar-date-row"
+                                    >
+                                        <div>
+                                            <h3>{formatDate(row.date)}</h3>
+                                            <p>
+                                                {row.occupied_blocks} occupied
+                                                blocks · {row.bookings} bookings
+                                                · {row.calendar_blocks} blocks ·{' '}
+                                                {row.public_events} public
+                                                events
+                                            </p>
+                                        </div>
+
+                                        <div className="calendar-analytics-bar-track">
+                                            <div
+                                                style={{ width: `${width}%` }}
+                                            />
+                                        </div>
+
+                                        <strong>{row.total_activity}</strong>
+                                    </article>
+                                );
+                            })
+                        ) : (
+                            <EmptyState
+                                title="No date series"
+                                description="Daily activity rows will appear here after the report loads."
+                            />
+                        )}
+                    </div>
+                </section>
+            </div>
+        </AppLayout>
+    );
 }

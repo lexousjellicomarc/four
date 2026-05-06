@@ -13,6 +13,7 @@ export default function RouteLoadingOverlay() {
         window.clearTimeout(showTimer.current);
         showTimer.current = null;
       }
+
       if (hideTimer.current) {
         window.clearTimeout(hideTimer.current);
         hideTimer.current = null;
@@ -21,6 +22,7 @@ export default function RouteLoadingOverlay() {
 
     const reveal = () => {
       clearTimers();
+
       showTimer.current = window.setTimeout(() => {
         setVisible(true);
       }, 120);
@@ -28,9 +30,10 @@ export default function RouteLoadingOverlay() {
 
     const conceal = () => {
       clearTimers();
+
       hideTimer.current = window.setTimeout(() => {
         setVisible(false);
-      }, 180);
+      }, 220);
     };
 
     const offStart = router.on('start', reveal);
@@ -42,6 +45,7 @@ export default function RouteLoadingOverlay() {
 
     return () => {
       clearTimers();
+
       offStart();
       offFinish();
       offError();
@@ -54,21 +58,21 @@ export default function RouteLoadingOverlay() {
   return (
     <>
       <div
-        className={`pointer-events-none fixed inset-x-0 top-0 z-[9999] h-1 origin-left bg-[#0f8b6d] shadow transition-transform duration-300 dark:bg-[#8ea3ff] ${
+        className={`pointer-events-none fixed inset-x-0 top-0 z-[9999] h-[3px] origin-left bg-gradient-to-r from-[#17382d] via-[#a98443] to-[#f4dfad] shadow-[0_0_28px_rgba(169,132,67,0.42)] transition-all duration-500 ease-out dark:from-[#f7e7b3] dark:via-[#a98443] dark:to-[#17382d] ${
           visible ? 'scale-x-100 opacity-100' : 'scale-x-0 opacity-0'
         }`}
       />
 
       <div
-        className={`pointer-events-none fixed bottom-5 right-5 z-[9998] transition duration-200 ${
-          visible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+        className={`pointer-events-none fixed bottom-5 right-5 z-[9998] transition-all duration-300 ease-out ${
+          visible ? 'translate-y-0 opacity-100 blur-0' : 'translate-y-2 opacity-0 blur-[2px]'
         }`}
         aria-live="polite"
         aria-hidden={!visible}
       >
-        <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/95 px-4 py-2 text-xs font-semibold text-slate-700 shadow-[0_16px_45px_rgba(15,23,42,0.12)] backdrop-blur dark:border-white/10 dark:bg-[#17181c]/95 dark:text-slate-100">
+        <div className="inline-flex items-center gap-3 border border-[#a98443]/30 bg-[#fbf7ef]/92 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#17382d] shadow-[0_22px_60px_rgba(27,23,18,0.16)] backdrop-blur-xl dark:border-white/10 dark:bg-[#10110f]/92 dark:text-[#f4dfad]">
           <LoaderCircle className="h-4 w-4 animate-spin" />
-          Loading page...
+          Opening
         </div>
       </div>
     </>

@@ -1,29 +1,5 @@
-import { RoleWorkspaceShell } from '@/components/role/role-workspace-shell';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
-import { Link, usePage } from '@inertiajs/react';
-import {
-  BarChart3,
-  CalendarDays,
-  ClipboardList,
-  CreditCard,
-  FileBarChart,
-  Globe2,
-  LayoutDashboard,
-  Megaphone,
-  PanelsTopLeft,
-  Settings2,
-  Sparkles,
-  UsersRound,
-} from 'lucide-react';
 import type { ReactNode } from 'react';
 
 type AdminLayoutProps = {
@@ -38,189 +14,51 @@ type AdminLayoutProps = {
   breadcrumbs?: BreadcrumbItem[];
 };
 
-type PageProps = {
-  auth?: {
-    user?: {
-      name?: string;
-      email?: string;
-    };
-  };
-};
-
-const contentLinks = [
-  {
-    label: 'Content Manager',
-    href: '/admin/content',
-    icon: PanelsTopLeft,
-  },
-  {
-    label: 'Homepage',
-    href: '/admin/content?section=homepage',
-    icon: Globe2,
-  },
-  {
-    label: 'Events',
-    href: '/admin/content?section=events',
-    icon: Megaphone,
-  },
-  {
-    label: 'Facilities',
-    href: '/admin/content?section=facilities',
-    icon: Sparkles,
-  },
-  {
-    label: 'Tourism Office',
-    href: '/admin/content?section=tourism',
-    icon: UsersRound,
-  },
-];
-
-const operationsLinks = [
-  {
-    label: 'Dashboard',
-    href: '/admin/dashboard',
-    icon: LayoutDashboard,
-  },
-  {
-    label: 'Calendar',
-    href: '/admin/calendar',
-    icon: CalendarDays,
-  },
-  {
-    label: 'Manage Calendar',
-    href: '/admin/calendar/manage',
-    icon: Settings2,
-  },
-  {
-    label: 'Bookings',
-    href: '/admin/bookings',
-    icon: ClipboardList,
-  },
-  {
-    label: 'Payments',
-    href: '/admin/payments/review',
-    icon: CreditCard,
-  },
-  {
-    label: 'MICE Registry',
-    href: '/admin/reports/mice-registry',
-    icon: FileBarChart,
-  },
-  {
-    label: 'Analytics',
-    href: '/admin/bookings/analytics',
-    icon: BarChart3,
-  },
-];
-
-function ShortcutButton({
-  label,
-  href,
-  icon: Icon,
-}: {
-  label: string;
-  href: string;
-  icon: typeof PanelsTopLeft;
-}) {
-  return (
-    <Button
-      asChild
-      variant="outline"
-      size="sm"
-      className="backend-admin-shortcut rounded-full"
-    >
-      <Link href={href}>
-        <Icon className="mr-2 h-4 w-4" />
-        {label}
-      </Link>
-    </Button>
-  );
-}
-
 export default function AdminLayout({
   children,
-  title = 'Public Content Manager',
+  title = 'Admin Workspace',
   subtitle,
-  description = 'Manage public-facing content while staying inside the same BCCC backend workspace.',
-  eyebrow = 'Content Configuration',
+  description,
+  eyebrow = 'Backend Operations',
   actions,
-  breadcrumbs = [
-    { title: 'Admin', href: '/admin/dashboard' },
-    { title: 'Content', href: '/admin/content' },
-  ],
+  breadcrumbs = [{ title: 'Admin', href: '/admin/dashboard' }],
 }: AdminLayoutProps) {
-  const { props } = usePage() as unknown as { props: PageProps };
-  const userName = props.auth?.user?.name || 'BCCC Admin';
+  const resolvedBreadcrumbs =
+    breadcrumbs.length > 0
+      ? breadcrumbs
+      : [{ title: 'Admin', href: '/admin/dashboard' }, { title, href: '#' }];
 
   return (
-    <RoleWorkspaceShell
-      role="admin"
-      title={title}
-      eyebrow={eyebrow}
-      description={subtitle || description}
-      breadcrumbs={breadcrumbs}
-      actions={actions}
-      compact
-    >
-      <div className="backend-admin-page">
-        <Card className="backend-admin-card overflow-hidden">
-          <CardHeader className="gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <Badge
-                variant="outline"
-                className="border-[#c9a96a]/30 bg-[#c9a96a]/10 text-[#7a5c21] dark:text-[#e8d8b5]"
-              >
-                Unified Admin Workspace
-              </Badge>
+    <AppLayout breadcrumbs={resolvedBreadcrumbs}>
+      <section className="mb-5 overflow-hidden border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] p-5 shadow-[var(--bccc-backend-shadow-soft)] backdrop-blur-xl sm:p-6">
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--bccc-backend-gold)]">
+              {eyebrow}
+            </p>
 
-              <CardTitle className="mt-3 text-2xl font-black tracking-[-0.04em]">
-                Public content and backend tools now share one interface
-              </CardTitle>
+            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.055em] text-[var(--bccc-backend-text)] sm:text-4xl">
+              {title}
+            </h1>
 
-              <CardDescription className="mt-2 max-w-4xl">
-                Signed in as {userName}. Use these shortcuts without switching into a different-looking admin page.
-              </CardDescription>
-            </div>
-
-            <Badge
-              variant="outline"
-              className="w-fit border-[#c9a96a]/30 bg-[#c9a96a]/10 text-[#7a5c21] dark:text-[#e8d8b5]"
-            >
-              Same admin shell
-            </Badge>
-          </CardHeader>
-
-          <CardContent className="grid gap-4 xl:grid-cols-2">
-            <div className="rounded-2xl border bg-muted/30 p-4">
-              <p className="backend-admin-label mb-3">
-                Public Website Content
+            {subtitle ? (
+              <p className="mt-2 text-sm font-semibold text-[var(--bccc-backend-text)]">
+                {subtitle}
               </p>
+            ) : null}
 
-              <div className="flex flex-wrap gap-2">
-                {contentLinks.map((item) => (
-                  <ShortcutButton key={item.href} {...item} />
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border bg-muted/30 p-4">
-              <p className="backend-admin-label mb-3">
-                Booking Operations
+            {description ? (
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--bccc-backend-muted)]">
+                {description}
               </p>
+            ) : null}
+          </div>
 
-              <div className="flex flex-wrap gap-2">
-                {operationsLinks.map((item) => (
-                  <ShortcutButton key={item.href} {...item} />
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          {actions ? <div className="flex flex-wrap gap-2 lg:justify-end">{actions}</div> : null}
+        </div>
+      </section>
 
-        <section className="backend-admin-content-normalizer min-w-0">
-          {children}
-        </section>
-      </div>
-    </RoleWorkspaceShell>
+      {children}
+    </AppLayout>
   );
 }

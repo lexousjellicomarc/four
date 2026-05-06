@@ -1,9 +1,4 @@
-import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from '@/components/ui/card';
+import { motion, useReducedMotion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 
 type RoleKpiCardProps = {
@@ -12,14 +7,16 @@ type RoleKpiCardProps = {
   description?: string;
   icon: LucideIcon;
   tone?: 'admin' | 'manager' | 'staff' | 'user' | 'neutral';
+  index?: number;
 };
 
-function trendLabel(tone?: RoleKpiCardProps['tone']): string {
+const easeLuxury = [0.22, 1, 0.36, 1] as const;
+
+function toneLabel(tone?: RoleKpiCardProps['tone']) {
   if (tone === 'admin') return 'Executive';
   if (tone === 'manager') return 'Review';
   if (tone === 'staff') return 'Ops';
   if (tone === 'user') return 'Client';
-
   return 'Workspace';
 }
 
@@ -29,43 +26,44 @@ export function RoleKpiCard({
   description,
   icon: Icon,
   tone = 'neutral',
+  index = 0,
 }: RoleKpiCardProps) {
-  return (
-    <Card className="backend-kpi-card group overflow-hidden">
-      <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-[#c9a96a]/10 blur-2xl transition duration-500 group-hover:scale-125" />
+  const reduceMotion = useReducedMotion();
 
-      <CardHeader className="relative flex flex-row items-start justify-between space-y-0 p-5 pb-2">
+  return (
+    <motion.article
+      initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 18, scale: 0.985, filter: 'blur(8px)' }}
+      animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+      transition={{ duration: 0.5, ease: easeLuxury, delay: Math.min(index * 0.055, 0.22) }}
+      className="group relative overflow-hidden border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] p-5 shadow-[var(--bccc-backend-shadow-soft)] backdrop-blur-xl transition duration-500 hover:-translate-y-1 hover:border-[var(--bccc-backend-gold-line)] hover:shadow-[var(--bccc-backend-shadow-medium)]"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(169,132,67,0.10),transparent_42%)] opacity-0 transition duration-500 group-hover:opacity-100" />
+
+      <div className="relative flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--bccc-backend-muted)]">
             {title}
           </p>
-        </div>
 
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#c9a96a]/20 bg-[#c9a96a]/10 text-[#8a6b2e] dark:text-[#e8d8b5]">
-          <Icon className="h-5 w-5" />
-        </div>
-      </CardHeader>
-
-      <CardContent className="relative p-5 pt-0">
-        <div className="flex items-end justify-between gap-3">
-          <p className="text-3xl font-black tracking-[-0.05em] text-foreground sm:text-4xl">
+          <p className="mt-4 text-4xl font-semibold tracking-[-0.075em] text-[var(--bccc-backend-text)] sm:text-5xl">
             {value}
           </p>
-
-          <Badge
-            variant="outline"
-            className="border-[#c9a96a]/25 bg-[#c9a96a]/10 text-[10px] font-black uppercase tracking-[0.14em] text-[#8a6b2e] dark:text-[#e8d8b5]"
-          >
-            {trendLabel(tone)}
-          </Badge>
         </div>
 
-        {description ? (
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            {description}
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center border border-[var(--bccc-backend-gold-line)] bg-[rgba(169,132,67,0.11)] text-[var(--bccc-backend-gold)] transition duration-500 group-hover:bg-[var(--bccc-backend-gold)] group-hover:text-white dark:group-hover:text-[#17120a]">
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+
+      <div className="relative mt-5 flex items-end justify-between gap-3 border-t border-[var(--bccc-backend-line)] pt-4">
+        <p className="text-sm leading-6 text-[var(--bccc-backend-muted)]">
+          {description || 'Workspace metric'}
+        </p>
+
+        <span className="shrink-0 border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[var(--bccc-backend-gold)]">
+          {toneLabel(tone)}
+        </span>
+      </div>
+    </motion.article>
   );
 }

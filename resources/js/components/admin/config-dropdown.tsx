@@ -120,7 +120,9 @@ export default function ConfigDropdown({
                 className={buttonClass}
             >
                 <span>Config</span>
-                <ChevronDown className={`h-4 w-4 transition ${open ? 'rotate-180' : ''}`} />
+                <ChevronDown
+                    className={`h-4 w-4 transition ${open ? 'rotate-180' : ''}`}
+                />
             </button>
 
             {open && (
@@ -128,15 +130,16 @@ export default function ConfigDropdown({
                     className={`z-50 overflow-hidden rounded-[1.6rem] border border-black/10 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.14)] dark:border-white/10 dark:bg-[#16171b] ${
                         fullWidth
                             ? 'mt-3 w-full'
-                            : 'absolute right-0 top-[calc(100%+0.75rem)] w-[23rem]'
+                            : 'absolute top-[calc(100%+0.75rem)] right-0 w-[23rem]'
                     }`}
                 >
                     <div className="border-b border-black/10 px-4 py-4 dark:border-white/10">
-                        <p className="text-xs font-black uppercase tracking-[0.16em] text-[#174f40] dark:text-[#9dc0ff]">
+                        <p className="text-xs font-black tracking-[0.16em] text-[#174f40] uppercase dark:text-[#9dc0ff]">
                             Config Menu
                         </p>
                         <p className="mt-1 text-sm text-[#5a5650] dark:text-[#c8c8ce]">
-                            Open one editor at a time while keeping the admin page in preview mode.
+                            Open one editor at a time while keeping the admin
+                            page in preview mode.
                         </p>
                     </div>
 

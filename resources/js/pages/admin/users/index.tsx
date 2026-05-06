@@ -1,5 +1,3 @@
-import { UserManagementPage } from '@/components/admin-resource/user-management-page';
+import { UsersIndexPage } from '@/components/admin-resource/system-setup-pages';
 
-export default function AdminUsersIndex() {
-  return <UserManagementPage />;
-}
+export default UsersIndexPage;

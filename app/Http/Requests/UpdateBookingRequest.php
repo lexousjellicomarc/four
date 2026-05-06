@@ -3,138 +3,128 @@
 namespace App\Http\Requests;
 
 use App\Models\Booking;
+use App\Models\MiceRecord;
 use Carbon\Carbon;
-use DateTimeInterface;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateBookingRequest extends FormRequest
 {
     protected function prepareForValidation(): void
-{
-    $payload = $this->all();
+    {
+        $payload = $this->all();
 
-    $trimmedStrings = [
-        'company_name',
-        'client_name',
-        'client_contact_number',
-        'client_address',
-        'head_of_organization',
-        'type_of_event',
-        'public_calendar_title',
-    ];
-
-    foreach ($trimmedStrings as $field) {
-        if (array_key_exists($field, $payload) && is_string($payload[$field])) {
-            $payload[$field] = trim($payload[$field]);
-        }
-    }
-
-    foreach (['client_email', 'survey_email'] as $field) {
-        if (array_key_exists($field, $payload) && is_string($payload[$field])) {
-            $value = strtolower(trim($payload[$field]));
-            $payload[$field] = $value !== '' ? $value : null;
-        }
-    }
-
-    if (array_key_exists('number_of_guests', $payload)) {
-        $payload['number_of_guests'] = is_numeric($payload['number_of_guests'])
-            ? (int) $payload['number_of_guests']
-            : $payload['number_of_guests'];
-    }
-
-    if (array_key_exists('booking_status', $payload) && is_string($payload['booking_status'])) {
-        $payload['booking_status'] = strtolower(trim($payload['booking_status']));
-    }
-
-    if (array_key_exists('payment_status', $payload) && is_string($payload['payment_status'])) {
-        $payload['payment_status'] = strtolower(trim($payload['payment_status']));
-    }
-
-    if (array_key_exists('is_public_calendar_visible', $payload)) {
-        $payload['is_public_calendar_visible'] = filter_var($payload['is_public_calendar_visible'], FILTER_VALIDATE_BOOL);
-    }
-
-    [$fromN, $toN] = $this->normalizeSchedulePair(
-        $payload['booking_date_from'] ?? null,
-        $payload['booking_date_to'] ?? null
-    );
-
-    $payload['booking_date_from'] = $fromN;
-    $payload['booking_date_to'] = $toN;
-
-    if (isset($payload['extra_schedules']) && is_array($payload['extra_schedules'])) {
-        foreach ($payload['extra_schedules'] as $i => $row) {
-            if (!is_array($row)) {
-                continue;
+        foreach ([
+            'organization_type',
+            'company_name',
+            'client_name',
+            'client_address',
+            'client_region',
+            'client_province',
+            'client_city_municipality',
+            'client_barangay',
+            'client_zip_code',
+            'client_street_address',
+            'head_of_organization',
+            'type_of_event',
+            'booking_status',
+            'payment_status',
+            'public_calendar_title',
+        ] as $field) {
+            if (array_key_exists($field, $payload) && is_string($payload[$field])) {
+                $payload[$field] = trim($payload[$field]);
             }
+        }
 
-            [$ef, $et] = $this->normalizeSchedulePair(
-                $row['from'] ?? null,
-                $row['to'] ?? null
+        if (array_key_exists('client_contact_number', $payload) && is_string($payload['client_contact_number'])) {
+            $payload['client_contact_number'] = preg_replace('/\D+/', '', $payload['client_contact_number']);
+        }
+
+        if (array_key_exists('client_email', $payload) && is_string($payload['client_email'])) {
+            $value = strtolower(trim($payload['client_email']));
+            $payload['client_email'] = $value !== '' ? $value : null;
+        }
+
+        if (array_key_exists('number_of_guests', $payload)) {
+            $payload['number_of_guests'] = is_numeric($payload['number_of_guests'])
+                ? (int) $payload['number_of_guests']
+                : $payload['number_of_guests'];
+        }
+
+        if (array_key_exists('booking_status', $payload) && is_string($payload['booking_status'])) {
+            $payload['booking_status'] = strtolower($payload['booking_status']);
+        }
+
+        if (array_key_exists('payment_status', $payload) && is_string($payload['payment_status'])) {
+            $payload['payment_status'] = strtolower($payload['payment_status']);
+        }
+
+        if (array_key_exists('is_public_calendar_visible', $payload)) {
+            $payload['is_public_calendar_visible'] = filter_var(
+                $payload['is_public_calendar_visible'],
+                FILTER_VALIDATE_BOOL,
+            );
+        }
+
+        if (empty($payload['client_address'])) {
+            $payload['client_address'] = $this->buildClientAddress($payload);
+        }
+
+        $payload['booking_date_from'] = $payload['booking_date_from']
+            ?? $payload['date_from']
+            ?? $payload['from']
+            ?? null;
+
+        $payload['booking_date_to'] = $payload['booking_date_to']
+            ?? $payload['date_to']
+            ?? $payload['to']
+            ?? null;
+
+        [$from, $to] = $this->normalizeSchedulePair(
+            $payload['booking_date_from'] ?? null,
+            $payload['booking_date_to'] ?? null,
+        );
+
+        $payload['booking_date_from'] = $from;
+        $payload['booking_date_to'] = $to;
+
+        if (isset($payload['extra_schedules']) && is_array($payload['extra_schedules'])) {
+            foreach ($payload['extra_schedules'] as $index => $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                [$extraFrom, $extraTo] = $this->normalizeSchedulePair(
+                    $row['from'] ?? null,
+                    $row['to'] ?? null,
+                );
+
+                $payload['extra_schedules'][$index]['from'] = $extraFrom;
+                $payload['extra_schedules'][$index]['to'] = $extraTo;
+            }
+        }
+
+        if (array_key_exists('items', $payload) || array_key_exists('service_id', $payload)) {
+            $payload['items'] = $this->normalizeItems(
+                $payload['items'] ?? [],
+                $payload['service_id'] ?? null,
             );
 
-            $payload['extra_schedules'][$i]['from'] = $ef;
-            $payload['extra_schedules'][$i]['to'] = $et;
-        }
-    }
-
-    if (isset($payload['items']) && is_array($payload['items'])) {
-        $seen = [];
-        $normalizedItems = [];
-
-        foreach ($payload['items'] as $row) {
-            if (!is_array($row)) {
-                continue;
+            if (empty($payload['service_id']) && ! empty($payload['items'][0]['service_id'])) {
+                $payload['service_id'] = $payload['items'][0]['service_id'];
             }
-
-            $serviceId = (int) ($row['service_id'] ?? 0);
-            if ($serviceId < 1) {
-                continue;
-            }
-
-            if (isset($seen[$serviceId])) {
-                continue;
-            }
-
-            $seen[$serviceId] = true;
-
-            $normalizedItems[] = [
-                'service_id' => $serviceId,
-                'quantity' => max(1, (int) ($row['quantity'] ?? 1)),
-            ];
         }
 
-        $payload['items'] = $normalizedItems;
+        $this->merge($payload);
     }
-
-    $this->merge($payload);
-}
-
 
     public function authorize(): bool
     {
-        return true;
+        return (bool) $this->user();
     }
 
     public function rules(): array
     {
-        /** @var Booking|null $booking */
-        $booking = $this->route('booking');
-        if (!$booking instanceof Booking) {
-            $booking = null;
-        }
-
-        // ✅ Proof required only if there is NO existing proof yet (disk OR blob)
-        $proofRequired = !$booking || (
-            empty($booking->survey_proof_image_path)
-            && empty($booking->survey_proof_image_name)
-            && empty($booking->survey_proof_image)
-        );
-
-        $proofRule = $proofRequired
-            ? ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120']
-            : ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'];
-
         return [
             'service_id' => ['nullable', 'integer', 'exists:services,id'],
 
@@ -142,234 +132,362 @@ class UpdateBookingRequest extends FormRequest
             'items.*.service_id' => ['required', 'integer', 'exists:services,id'],
             'items.*.quantity' => ['nullable', 'integer', 'min:1'],
 
+            'organization_type' => ['nullable', 'string', 'max:255'],
             'company_name' => ['nullable', 'string', 'max:255'],
             'client_name' => ['required', 'string', 'max:255'],
             'client_contact_number' => ['required', 'regex:/^09\d{9}$/'],
             'client_email' => ['required', 'string', 'email', 'max:255'],
 
-            'survey_email' => ['required', 'string', 'email', 'max:255'],
-            'survey_proof_image' => $proofRule,
+            'client_address' => ['required', 'string', 'max:500'],
+            'client_region' => ['nullable', 'string', 'max:255'],
+            'client_province' => ['nullable', 'string', 'max:255'],
+            'client_city_municipality' => ['nullable', 'string', 'max:255'],
+            'client_barangay' => ['nullable', 'string', 'max:255'],
+            'client_zip_code' => ['nullable', 'string', 'max:20'],
+            'client_street_address' => ['nullable', 'string', 'max:255'],
 
-            'client_address' => ['required', 'string', 'max:255'],
             'head_of_organization' => ['nullable', 'string', 'max:255'],
-
             'type_of_event' => ['required', 'string', 'max:255'],
 
             'booking_date_from' => ['required', 'date'],
-            'booking_date_to'   => ['required', 'date', 'after:booking_date_from'],
+            'booking_date_to' => ['required', 'date', 'after:booking_date_from'],
 
             'extra_schedules' => ['sometimes', 'array'],
             'extra_schedules.*' => ['array'],
             'extra_schedules.*.from' => ['required_with:extra_schedules.*.to', 'date'],
-            'extra_schedules.*.to'   => ['required_with:extra_schedules.*.from', 'date'],
+            'extra_schedules.*.to' => ['required_with:extra_schedules.*.from', 'date', 'after:extra_schedules.*.from'],
 
             'number_of_guests' => ['required', 'integer', 'min:1', 'max:2000'],
 
-            'booking_status' => ['required', 'in:pending,active,confirmed,cancelled,declined,completed'],
-            'payment_status' => ['sometimes', 'in:unpaid,partial,paid,owing'],
+            'booking_status' => [
+                'required',
+                Rule::in([
+                    'pending',
+                    'for_review',
+                    'pencil_booked',
+                    'active',
+                    'confirmed',
+                    'cancelled',
+                    'declined',
+                    'completed',
+                ]),
+            ],
+
+            'payment_status' => [
+                'nullable',
+                Rule::in([
+                    'unpaid',
+                    'partial',
+                    'paid',
+                    'owing',
+                ]),
+            ],
+
             'is_public_calendar_visible' => ['sometimes', 'boolean'],
             'public_calendar_title' => ['nullable', 'string', 'max:255'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'items.min' => 'Please select at least one venue or rental option.',
+            'items.*.service_id.exists' => 'One selected venue option is no longer available. Please refresh and select again.',
+
+            'client_name.required' => 'Contact person is required.',
+            'client_contact_number.required' => 'Contact number is required.',
+            'client_contact_number.regex' => 'Use a valid Philippine mobile number, example: 09171234567.',
+            'client_email.required' => 'Email address is required.',
+            'client_email.email' => 'Enter a valid email address.',
+            'client_address.required' => 'Client address is required.',
+
+            'type_of_event.required' => 'Event title or event type is required.',
+            'booking_date_from.required' => 'Start date and time are required.',
+            'booking_date_to.required' => 'End date and time are required.',
+            'booking_date_to.after' => 'End date and time must be later than the start date and time.',
+
+            'number_of_guests.required' => 'Number of guests is required.',
+            'number_of_guests.min' => 'Number of guests must be at least 1.',
+            'number_of_guests.max' => 'Number of guests cannot exceed 2,000.',
         ];
     }
 
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
-            $isAdmin  = $this->isAdminUser();
-            $isStaff  = $this->isStaffUser();
+            $isStaff = $this->isStaffUser();
             $isClient = $this->isClientUser();
 
             /** @var Booking|null $booking */
             $booking = $this->route('booking');
-            if (!$booking instanceof Booking) $booking = null;
 
-            /**
-             * ✅ CLIENT RULES (per your request)
-             * Clients CAN edit:
-             * - client_name, company_name, contact, email, address
-             * - head_of_organization
-             * - type_of_event
-             * - number_of_guests
-             * - survey_email + survey_proof_image (upload/replace)
-             *
-             * Clients CANNOT edit:
-             * - schedule (booking_date_from/to)
-             * - booking_status
-             * - services/items
-             * - payment_status
-             */
-            if ($isClient && !$isStaff && $booking) {
-                if ($this->filled('items')) {
-                    $validator->errors()->add('items', 'Clients cannot modify services/items. Please contact staff.');
-                }
+            if (! $booking instanceof Booking) {
+                $booking = null;
+            }
 
-                // Optional hardening: do not allow changing selected service_id
+            if ($isClient && ! $isStaff && $booking) {
+                $booking->loadMissing('bookingServices');
+
                 if ($this->filled('service_id') && (string) $this->input('service_id') !== (string) $booking->service_id) {
-                    $validator->errors()->add('service_id', 'Clients cannot change selected service. Please contact staff.');
+                    $validator->errors()->add('service_id', 'Clients cannot change the selected venue/service. Please contact staff.');
                 }
 
-                // ✅ FIX: canonicalSchedule now supports Carbon/DateTime (DB values) properly
-                $reqCanon = $this->canonicalSchedule($this->input('booking_date_from'), $this->input('booking_date_to'));
-                $dbCanon  = $this->canonicalSchedule($booking->booking_date_from, $booking->booking_date_to);
+                if ($this->has('items') && ! $this->submittedItemsMatchExistingBooking($booking)) {
+                    $validator->errors()->add('items', 'Clients cannot change selected services/items. Please contact staff.');
+                }
 
-                if ($reqCanon !== $dbCanon) {
+                $requestSchedule = $this->canonicalSchedule(
+                    $this->input('booking_date_from'),
+                    $this->input('booking_date_to'),
+                );
+
+                $databaseSchedule = $this->canonicalSchedule(
+                    $booking->booking_date_from,
+                    $booking->booking_date_to,
+                );
+
+                if ($requestSchedule !== $databaseSchedule) {
                     $validator->errors()->add('booking_date_from', 'Clients cannot change the booking schedule. Please contact staff.');
                 }
 
-                if (strtolower((string) $this->input('booking_status')) !== strtolower((string) $booking->booking_status)) {
+                if (
+                    $this->filled('booking_status')
+                    && strtolower((string) $this->input('booking_status')) !== strtolower((string) $booking->booking_status)
+                ) {
                     $validator->errors()->add('booking_status', 'Clients cannot change booking status.');
                 }
 
-                if ($this->filled('payment_status')) {
+                if (
+                    $this->filled('payment_status')
+                    && strtolower((string) $this->input('payment_status')) !== strtolower((string) $booking->payment_status)
+                ) {
                     $validator->errors()->add('payment_status', 'Payment status is managed by the system.');
                 }
 
                 return;
             }
 
-            // Staff/admin: validate schedule blocks + DB conflicts
+            if ($booking instanceof Booking) {
+                $this->validateMiceRequirementBeforeFinalStatus($validator, $booking);
+            }
+
+            if ($this->boolean('is_public_calendar_visible') && ! $this->filled('public_calendar_title')) {
+                $validator->errors()->add('public_calendar_title', 'Please enter the title that should appear on the public calendar.');
+            }
+
             $mainFrom = $this->parseDateTime($this->input('booking_date_from'));
-            $mainTo   = $this->parseDateTime($this->input('booking_date_to'));
+            $mainTo = $this->parseDateTime($this->input('booking_date_to'));
 
             if ($mainFrom && $mainTo) {
-                $msg = $this->validateBlockRange($mainFrom, $mainTo, $isAdmin);
-                if ($msg) {
-                    $validator->errors()->add('booking_date_to', $msg);
-                } else {
-                    $excludeId = $booking?->id;
-                    $conflict = $this->findConflict($mainFrom, $mainTo, $excludeId);
-                    if ($conflict) {
-                        $validator->errors()->add(
-                            'booking_date_from',
-                            'This schedule overlaps an existing CONFIRMED/ACTIVE booking. Please choose another date/block.'
-                        );
-                    }
+                $message = $this->validateBlockRange($mainFrom, $mainTo, $this->isAdminUser());
+
+                if ($message) {
+                    $validator->errors()->add('booking_date_to', $message);
                 }
             }
 
-            // Extra schedules (if used in update)
-            $extras = $this->input('extra_schedules', []);
             $extraIntervals = [];
 
-            if (is_array($extras)) {
-                foreach ($extras as $idx => $s) {
-                    $fromRaw = $s['from'] ?? null;
-                    $toRaw   = $s['to'] ?? null;
-
-                    if (!$fromRaw && !$toRaw) continue;
-
-                    $from = $this->parseDateTime($fromRaw);
-                    $to   = $this->parseDateTime($toRaw);
-
-                    if (!$from || !$to) {
-                        $validator->errors()->add("extra_schedules.$idx.from", 'Invalid date/time for this schedule row.');
-                        continue;
-                    }
-
-                    if ($to->lessThanOrEqualTo($from)) {
-                        $validator->errors()->add("extra_schedules.$idx.to", 'End must be after start.');
-                        continue;
-                    }
-
-                    $msg = $this->validateBlockRange($from, $to, $isAdmin);
-                    if ($msg) {
-                        $validator->errors()->add("extra_schedules.$idx.to", $msg);
-                    } else {
-                        $excludeId = $booking?->id;
-                        $conflict = $this->findConflict($from, $to, $excludeId);
-                        if ($conflict) {
-                            $validator->errors()->add(
-                                "extra_schedules.$idx.from",
-                                "Extra schedule row " . ($idx + 1) . " overlaps an existing CONFIRMED/ACTIVE booking."
-                            );
-                        }
-                    }
-
-                    $extraIntervals[] = [
-                        'key' => "extra:$idx",
-                        'from' => $from,
-                        'to' => $to,
-                        'error_field' => "extra_schedules.$idx.from",
-                    ];
+            foreach ((array) $this->input('extra_schedules', []) as $index => $schedule) {
+                if (! is_array($schedule)) {
+                    continue;
                 }
+
+                $fromRaw = $schedule['from'] ?? null;
+                $toRaw = $schedule['to'] ?? null;
+
+                if (! $fromRaw && ! $toRaw) {
+                    continue;
+                }
+
+                $from = $this->parseDateTime($fromRaw);
+                $to = $this->parseDateTime($toRaw);
+
+                if (! $from || ! $to) {
+                    $validator->errors()->add("extra_schedules.{$index}.from", 'Invalid date/time for this schedule row.');
+                    continue;
+                }
+
+                if ($to->lessThanOrEqualTo($from)) {
+                    $validator->errors()->add("extra_schedules.{$index}.to", 'End must be later than start.');
+                    continue;
+                }
+
+                $message = $this->validateBlockRange($from, $to, $this->isAdminUser());
+
+                if ($message) {
+                    $validator->errors()->add("extra_schedules.{$index}.to", $message);
+                    continue;
+                }
+
+                $extraIntervals[] = [
+                    'from' => $from,
+                    'to' => $to,
+                    'error_field' => "extra_schedules.{$index}.from",
+                ];
             }
 
             if ($mainFrom && $mainTo) {
-                $intervals = array_merge(
-                    [[
-                        'key' => 'main',
+                $this->validateNoOverlaps($validator, array_merge([
+                    [
                         'from' => $mainFrom,
                         'to' => $mainTo,
                         'error_field' => 'booking_date_from',
-                    ]],
-                    $extraIntervals
-                );
-
-                $this->validateNoOverlaps($validator, $intervals);
-            }
-
-            // Prevent accepting/confirming a booking with no services
-            $status = strtolower((string) $this->input('booking_status', ''));
-            $acceptStatuses = ['active', 'confirmed', 'completed'];
-
-            if (in_array($status, $acceptStatuses, true)) {
-                $itemsCount = 0;
-
-                $itemsInput = $this->input('items');
-                if (is_array($itemsInput)) {
-                    $itemsCount = count(array_filter($itemsInput, function ($row) {
-                        return is_array($row) && !empty($row['service_id']);
-                    }));
-                } elseif ($booking) {
-                    $itemsCount = (int) $booking->bookingServices()->count();
-                }
-
-                if ($itemsCount < 1) {
-                    $validator->errors()->add(
-                        'items',
-                        'A booking cannot be confirmed/activated/completed without at least one selected service.'
-                    );
-                }
+                    ],
+                ], $extraIntervals));
             }
         });
     }
 
+    protected function validateMiceRequirementBeforeFinalStatus($validator, Booking $booking): void
+    {
+        $nextStatus = strtolower((string) $this->input('booking_status'));
+
+        if (! in_array($nextStatus, ['confirmed', 'active', 'completed'], true)) {
+            return;
+        }
+
+        $hasMiceReport = MiceRecord::query()
+            ->where('booking_id', $booking->id)
+            ->where('status', 'submitted')
+            ->whereNotNull('submitted_at')
+            ->exists();
+
+        if (! $hasMiceReport) {
+            $validator->errors()->add(
+                'booking_status',
+                'This booking cannot be confirmed, activated, or completed until the required MICE report is submitted.',
+            );
+        }
+    }
+
+    protected function submittedItemsMatchExistingBooking(Booking $booking): bool
+    {
+        $submitted = collect((array) $this->input('items', []))
+            ->map(fn ($item) => (int) ($item['service_id'] ?? 0))
+            ->filter()
+            ->sort()
+            ->values()
+            ->all();
+
+        if (empty($submitted)) {
+            return true;
+        }
+
+        $existing = $booking->bookingServices
+            ->map(fn ($item) => (int) $item->service_id)
+            ->filter()
+            ->push((int) $booking->service_id)
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        return $submitted === $existing;
+    }
+
+    protected function buildClientAddress(array $payload): string
+    {
+        return collect([
+            $payload['client_street_address'] ?? null,
+            $payload['client_barangay'] ?? null,
+            $payload['client_city_municipality'] ?? null,
+            $payload['client_province'] ?? null,
+            $payload['client_region'] ?? null,
+            $payload['client_zip_code'] ?? null,
+        ])
+            ->filter(fn ($value) => $value !== null && trim((string) $value) !== '')
+            ->map(fn ($value) => trim((string) $value))
+            ->implode(', ');
+    }
+
+    protected function normalizeItems(mixed $items, mixed $fallbackServiceId = null): array
+    {
+        $rows = is_array($items) ? $items : [];
+
+        if (empty($rows) && $fallbackServiceId) {
+            $rows = [
+                [
+                    'service_id' => $fallbackServiceId,
+                    'quantity' => 1,
+                ],
+            ];
+        }
+
+        $seen = [];
+        $normalized = [];
+
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $serviceId = (int) ($row['service_id'] ?? 0);
+
+            if ($serviceId < 1 || isset($seen[$serviceId])) {
+                continue;
+            }
+
+            $seen[$serviceId] = true;
+
+            $normalized[] = [
+                'service_id' => $serviceId,
+                'quantity' => max(1, (int) ($row['quantity'] ?? 1)),
+            ];
+        }
+
+        return $normalized;
+    }
+
     protected function validateBlockRange(Carbon $from, Carbon $to, bool $isAdmin): ?string
     {
-        $fromTime = $from->format('H:i');
-        $toTime   = $to->format('H:i');
+        if ($to->lessThanOrEqualTo($from)) {
+            return 'End date/time must be later than start date/time.';
+        }
 
         if ($from->minute !== 0) {
-            return 'Start time must be aligned to exact block hours (minutes must be :00).';
+            return 'Start time must be aligned to exact block hours.';
         }
 
-        $endOk = ($to->minute === 0) || ($to->hour === 23 && $to->minute === 59);
-        if (!$endOk) {
-            return 'End time must be aligned to block hours (:00) or exactly 11:59 PM for EVE.';
+        $validEndMinute = $to->minute === 0 || ($to->hour === 23 && $to->minute === 59);
+
+        if (! $validEndMinute) {
+            return 'End time must be aligned to block hours or exactly 11:59 PM.';
         }
 
-        $fromDate = $from->copy()->startOfDay();
-        $toDate   = $to->copy()->startOfDay();
+        $fromTime = $from->format('H:i');
+        $toTime = $to->format('H:i');
 
-        $sameDay = $toDate->equalTo($fromDate);
-        $nextDay = $toDate->equalTo($fromDate->copy()->addDay());
+        $sameDay = $from->isSameDay($to);
+        $multiDay = $to->copy()->startOfDay()->gt($from->copy()->startOfDay());
 
         if ($sameDay && $fromTime === '00:00' && $toTime === '06:00') {
-            return $isAdmin ? null : '11:59 PM – 6:00 AM is ADMIN-only. Please contact admin for this booking.';
+            return $isAdmin ? null : '12:00 AM to 6:00 AM is admin-only. Please contact the office.';
         }
 
-        if ($sameDay && $fromTime === '06:00' && $toTime === '12:00') return null;
-        if ($sameDay && $fromTime === '12:00' && $toTime === '18:00') return null;
-        if ($sameDay && $fromTime === '06:00' && $toTime === '18:00') return null;
+        if ($sameDay) {
+            $allowed = [
+                ['06:00', '12:00'],
+                ['12:00', '18:00'],
+                ['18:00', '23:59'],
+                ['06:00', '18:00'],
+                ['12:00', '23:59'],
+                ['06:00', '23:59'],
+            ];
 
-        if ($sameDay && $fromTime === '18:00' && $toTime === '23:59') return null;
-        if ($sameDay && $fromTime === '12:00' && $toTime === '23:59') return null;
-        if ($sameDay && $fromTime === '06:00' && $toTime === '23:59') return null;
+            foreach ($allowed as [$allowedStart, $allowedEnd]) {
+                if ($fromTime === $allowedStart && $toTime === $allowedEnd) {
+                    return null;
+                }
+            }
+        }
 
-        // Allow legacy "next day midnight" normalized cases (if any slip through)
-        if ($nextDay && in_array($fromTime, ['06:00', '12:00', '18:00'], true) && $toTime === '00:00') return null;
+        if ($multiDay && $fromTime === '06:00' && $toTime === '23:59') {
+            return null;
+        }
 
-        return 'Invalid schedule. Use AM (6–12), PM (12–6), EVE (6–11:59), or valid combinations.';
+        return 'Invalid schedule. Use AM, PM, EVE, Whole Day, or a multi-day Whole Day range.';
     }
 
     protected function validateNoOverlaps($validator, array $intervals): void
@@ -381,123 +499,65 @@ class UpdateBookingRequest extends FormRequest
                 $a = $intervals[$i];
                 $b = $intervals[$j];
 
-                /** @var Carbon $aFrom */
-                $aFrom = $a['from'];
-                /** @var Carbon $aTo */
-                $aTo = $a['to'];
-
-                /** @var Carbon $bFrom */
-                $bFrom = $b['from'];
-                /** @var Carbon $bTo */
-                $bTo = $b['to'];
-
-                if ($aFrom->lt($bTo) && $bFrom->lt($aTo)) {
+                if ($a['from']->lt($b['to']) && $b['from']->lt($a['to'])) {
                     $validator->errors()->add(
                         $b['error_field'],
-                        'Schedules in this request overlap each other. Please choose non-overlapping blocks/dates.'
+                        'Schedules in this request overlap each other. Please choose non-overlapping blocks or dates.',
                     );
                 }
             }
         }
     }
 
-    protected function findConflict(Carbon $from, Carbon $to, ?int $excludeId = null): ?Booking
+    protected function canonicalSchedule(mixed $fromRaw, mixed $toRaw): string
     {
-        $toCalc = $this->endForOverlap($to);
+        [$from, $to] = $this->normalizeSchedulePair($fromRaw, $toRaw);
 
-        return Booking::query()
-            ->select(['id', 'booking_date_from', 'booking_date_to', 'booking_status'])
-            ->whereIn('booking_status', ['confirmed', 'active'])
-            ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
-            ->where('booking_date_from', '<', $toCalc->toDateTimeString())
-            ->where('booking_date_to', '>', $from->toDateTimeString())
-            ->orderBy('booking_date_from', 'asc')
-            ->first();
+        return (string) $from . '|' . (string) $to;
     }
 
-    protected function endForOverlap(Carbon $to): Carbon
+    protected function parseDateTime(mixed $value): ?Carbon
     {
-        return ($to->hour === 23 && $to->minute === 59)
-            ? $to->copy()->addMinute()
-            : $to;
-    }
+        if (! $value) {
+            return null;
+        }
 
-    /**
-     * ✅ FIX: accepts string OR DateTimeInterface (Carbon) safely
-     */
-    protected function parseDateTime($value): ?Carbon
-    {
-        if ($value instanceof DateTimeInterface) {
+        if ($value instanceof \DateTimeInterface) {
             return Carbon::instance($value);
         }
-        if (!$value) return null;
 
         try {
             return Carbon::parse($value);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return null;
         }
     }
 
-    protected function normalizeSchedulePair(?string $fromRaw, ?string $toRaw): array
+    protected function normalizeSchedulePair(mixed $fromRaw, mixed $toRaw): array
     {
-        if (!$fromRaw || !$toRaw) return [$fromRaw, $toRaw];
+        if (! $fromRaw || ! $toRaw) {
+            return [$fromRaw, $toRaw];
+        }
 
         $from = $this->parseDateTime($fromRaw);
-        $to   = $this->parseDateTime($toRaw);
+        $to = $this->parseDateTime($toRaw);
 
-        if (!$from || !$to) return [$fromRaw, $toRaw];
+        if (! $from || ! $to) {
+            return [$fromRaw, $toRaw];
+        }
 
-        $fromTime = $from->format('H:i');
-        $toTime   = $to->format('H:i');
-
-        // legacy: end at 00:00 next day -> normalize to 23:59 same day
-        if ($toTime === '00:00') {
-            $fromDate = $from->copy()->startOfDay();
-            $toDate   = $to->copy()->startOfDay();
-
-            $isNextDay = $toDate->equalTo($fromDate->copy()->addDay());
-            $validStarts = in_array($fromTime, ['06:00', '12:00', '18:00'], true);
-
-            if ($isNextDay && $validStarts) {
-                $toFixed = $from->copy()->setTime(23, 59, 0);
-                return [
-                    $from->format('Y-m-d\TH:i'),
-                    $toFixed->format('Y-m-d\TH:i'),
-                ];
-            }
+        if (
+            $to->format('H:i') === '00:00'
+            && $to->copy()->startOfDay()->equalTo($from->copy()->startOfDay()->addDay())
+            && in_array($from->format('H:i'), ['06:00', '12:00', '18:00'], true)
+        ) {
+            $to = $from->copy()->setTime(23, 59);
         }
 
         return [
             $from->format('Y-m-d\TH:i'),
             $to->format('Y-m-d\TH:i'),
         ];
-    }
-
-    /**
-     * ✅ FIX: canonical schedule works for BOTH request strings and DB Carbon values.
-     * Treats "00:00 next day" as equivalent to "23:59 same day" for block schedules.
-     */
-    protected function canonicalSchedule($fromRaw, $toRaw): string
-    {
-        $from = $this->parseDateTime($fromRaw);
-        $to   = $this->parseDateTime($toRaw);
-
-        if (!$from || !$to) return '';
-
-        $fromTime = $from->format('H:i');
-        $toTime   = $to->format('H:i');
-
-        if ($toTime === '00:00') {
-            $isNextDay = $to->copy()->startOfDay()->equalTo($from->copy()->startOfDay()->addDay());
-            $validStarts = in_array($fromTime, ['06:00', '12:00', '18:00'], true);
-
-            if ($isNextDay && $validStarts) {
-                $to = $from->copy()->setTime(23, 59, 0);
-            }
-        }
-
-        return $from->format('Y-m-d\TH:i') . '|' . $to->format('Y-m-d\TH:i');
     }
 
     protected function isClientUser(): bool
@@ -518,17 +578,38 @@ class UpdateBookingRequest extends FormRequest
     protected function userHasAnyRole(array $roles): bool
     {
         $user = $this->user();
-        if (!$user) return false;
+
+        if (! $user) {
+            return false;
+        }
+
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole($roles)) {
+            return true;
+        }
 
         if (method_exists($user, 'hasRole')) {
-            return $user->hasRole($roles);
+            foreach ($roles as $role) {
+                if ($user->hasRole($role)) {
+                    return true;
+                }
+            }
+        }
+
+        $role = (string) ($user->role_name ?? $user->role ?? '');
+
+        if ($role !== '' && in_array($role, $roles, true)) {
+            return true;
         }
 
         $userRoles = $user->roles ?? [];
-        if (is_array($userRoles) || $userRoles instanceof \Traversable) {
-            foreach ($userRoles as $ur) {
-                $name = is_string($ur) ? $ur : ($ur->name ?? null);
-                if ($name && in_array($name, $roles, true)) return true;
+
+        if (is_iterable($userRoles)) {
+            foreach ($userRoles as $userRole) {
+                $name = is_string($userRole) ? $userRole : ($userRole->name ?? null);
+
+                if ($name && in_array($name, $roles, true)) {
+                    return true;
+                }
             }
         }
 

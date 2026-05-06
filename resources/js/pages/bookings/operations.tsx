@@ -1,55 +1,36 @@
-
-import AppLayout from '@/layouts/app-layout';
-import { Head, Link, router } from '@inertiajs/react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { type BreadcrumbItem } from '@/types';
+import { BookingRolePageShell } from '@/components/bookings/booking-role-page-shell';
+import { BookingStatusBadge } from '@/components/bookings/booking-status-badge';
+import {
+  bookingShowPath,
+  cleanLabel,
+  formatDateTime,
+  formatMoney,
+  normalizeWorkspaceRole,
+} from '@/lib/booking-role-ui';
+import type { RoleThemeKey } from '@/lib/role-theme';
+import { Link, router, usePage } from '@inertiajs/react';
 import {
   AlertTriangle,
-  BellRing,
-  CalendarDays,
+  ArrowLeft,
   CheckCircle2,
   Clock3,
-  CreditCard,
   Eye,
+  FileImage,
+  Filter,
+  LoaderCircle,
+  ReceiptText,
+  RefreshCcw,
   Search,
-  ShieldAlert,
-  Wallet,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+  WalletCards,
   XCircle,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import OpsPageHeader from '@/components/ui/ops-page-header';
-import OpsKpiCard from '@/components/ui/ops-kpi-card';
-import OpsStatusChip from '@/components/ui/ops-status-chip';
-import OpsEmptyState from '@/components/ui/ops-empty-state';
+import { type FormEvent, type ReactNode, useState } from 'react';
 
-const breadcrumbs: BreadcrumbItem[] = [
-  { title: 'Bookings', href: '/bookings' },
-  { title: 'Operations Center', href: '/bookings/operations' },
-];
-
-type PaymentItem = {
-  id: number;
-  amount: number;
-  status: string;
-  payment_gateway?: string | null;
-  payment_type?: string | null;
-  transaction_reference?: string | null;
-  payer_name?: string | null;
-  proof_image_url?: string | null;
-  created_at?: string | null;
-  booking?: {
-    id: number;
-    client_name?: string | null;
-    company_name?: string | null;
-    booking_status?: string | null;
-    payment_status?: string | null;
-  } | null;
-};
-
-type BookingRow = {
-  id: number;
+type OperationsBooking = {
+  id: number | string;
   client_name?: string | null;
   company_name?: string | null;
   client_email?: string | null;
@@ -61,43 +42,92 @@ type BookingRow = {
   booking_date_to?: string | null;
   created_at?: string | null;
   created_by_name?: string | null;
-  items: Array<{ id: number; service_name?: string | null; area?: string | null; line_total: number }>;
-  latest_payment?: PaymentItem | null;
-  totals: {
-    items_total: number;
-    submitted_payments_total: number;
-    confirmed_payments_total: number;
-    remaining_balance: number;
-    down_payment_required: number;
+  items?: Array<{
+    id?: number | string;
+    service_name?: string | null;
+    area?: string | null;
+    quantity?: number | string | null;
+    unit_price?: number | string | null;
+    line_total?: number | string | null;
+  }>;
+  latest_payment?: {
+    id?: number | string;
+    status?: string | null;
+    amount?: number | string | null;
+    payment_gateway?: string | null;
+    payment_type?: string | null;
+    transaction_reference?: string | null;
+    proof_image_url?: string | null;
+    created_at?: string | null;
+  } | null;
+  totals?: {
+    items_total?: number | string | null;
+    submitted_payments_total?: number | string | null;
+    confirmed_payments_total?: number | string | null;
+    remaining_balance?: number | string | null;
+    down_payment_required?: number | string | null;
   };
-  deadline: {
-    risk: string;
-    label: string;
-    recommended: string;
+  deadline?: {
+    risk?: string;
+    label?: string;
+    recommended?: string;
     down_deadline?: string | null;
     full_deadline?: string | null;
-    down_required: number;
-    submitted_total: number;
-    confirmed_total: number;
+    down_required?: number | string | null;
+    submitted_total?: number | string | null;
+    confirmed_total?: number | string | null;
   };
 };
 
-type AutomationItem = {
-  id: number;
-  event_key: string;
-  title: string;
+type PendingPayment = {
+  id: number | string;
+  amount?: number | string | null;
+  status?: string | null;
+  payment_gateway?: string | null;
+  payment_type?: string | null;
+  transaction_reference?: string | null;
+  payer_name?: string | null;
+  proof_image_url?: string | null;
+  created_at?: string | null;
+  booking?: {
+    id: number | string;
+    client_name?: string | null;
+    company_name?: string | null;
+    booking_status?: string | null;
+    payment_status?: string | null;
+  } | null;
+};
+
+type AutomationEvent = {
+  id: number | string;
+  event_key?: string | null;
+  title?: string | null;
   reason?: string | null;
   from_status?: string | null;
   to_status?: string | null;
   from_payment_status?: string | null;
   to_payment_status?: string | null;
   event_at?: string | null;
-  meta?: Record<string, unknown> | null;
-  booking?: { id: number; client_name?: string | null; company_name?: string | null } | null;
+  actor?: {
+    name?: string | null;
+    email?: string | null;
+  } | null;
+  booking?: {
+    id?: number | string;
+    client_name?: string | null;
+    company_name?: string | null;
+  } | null;
 };
 
-type Props = {
-  filters: {
+type PaginationLink = {
+  url: string | null;
+  label: string;
+  active: boolean;
+};
+
+type PageProps = {
+  workspaceRole?: string;
+  filters?: {
     q?: string;
     booking_status?: string;
     payment_status?: string;
@@ -105,111 +135,436 @@ type Props = {
     attention?: string;
     gateway?: string;
   };
-  bookings: {
-    data: BookingRow[];
-    links?: Array<{ url: string | null; label: string; active: boolean }>;
+  bookings?: {
+    data?: OperationsBooking[];
+    links?: PaginationLink[];
+    meta?: {
+      from?: number | null;
+      to?: number | null;
+      total?: number | null;
+    };
   };
-  summary: {
-    visible: number;
-    review_needed: number;
-    due_soon: number;
-    overdue: number;
-    submitted_total: number;
-    confirmed_total: number;
-    outstanding_total: number;
+  summary?: {
+    visible?: number;
+    review_needed?: number;
+    due_soon?: number;
+    overdue?: number;
+    submitted_total?: number | string;
+    confirmed_total?: number | string;
+    outstanding_total?: number | string;
   };
-  pendingPayments: PaymentItem[];
-  automationEvents: AutomationItem[];
+  pendingPayments?: PendingPayment[];
+  automationEvents?: AutomationEvent[];
 };
 
-function money(v: number) {
-  return `₱ ${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(' ');
 }
 
-function dt(v?: string | null) {
-  if (!v) return '—';
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
+function operationsPath(role: RoleThemeKey) {
+  if (role === 'admin') return '/admin/bookings/operations';
+  if (role === 'manager') return '/manager/bookings/operations';
+  if (role === 'staff') return '/staff/bookings/operations';
+
+  return '/bookings/operations';
+}
+
+function paymentActionPath(action: 'approve' | 'decline' | 'fail', paymentId: number | string) {
+  return `/bookings/operations/payments/${paymentId}/${action}`;
+}
+
+function cleanPageLabel(label?: string | null) {
+  return String(label || '')
+    .replace(/&laquo;|«/g, '‹')
+    .replace(/&raquo;|»/g, '›')
+    .replace(/<[^>]*>/g, '')
+    .trim();
+}
+
+function numberValue(value: unknown): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function bookingLabel(booking: OperationsBooking) {
+  return booking.company_name || booking.client_name || `Booking #${booking.id}`;
+}
+
+function eventLabel(booking: OperationsBooking) {
+  return booking.type_of_event || 'Untitled event';
 }
 
 function riskTone(risk?: string | null) {
-  switch (String(risk || '').toLowerCase()) {
-    case 'overdue':
-      return 'red';
-    case 'due_soon':
-      return 'amber';
-    case 'watch':
-      return 'sky';
-    case 'normal':
-      return 'emerald';
-    case 'closed':
-      return 'slate';
-    default:
-      return 'slate';
+  const value = String(risk || '').toLowerCase();
+
+  if (value === 'overdue') {
+    return 'border-rose-300/45 bg-rose-400/10 text-rose-700 dark:text-rose-200';
   }
-}
 
-function paymentTone(status?: string | null) {
-  switch (String(status || '').toLowerCase()) {
-    case 'confirmed':
-    case 'paid':
-      return 'emerald';
-    case 'pending':
-    case 'partial':
-      return 'amber';
-    case 'failed':
-    case 'declined':
-    case 'unpaid':
-      return 'red';
-    default:
-      return 'slate';
+  if (value === 'due_soon') {
+    return 'border-amber-300/45 bg-amber-400/10 text-amber-700 dark:text-amber-200';
   }
-}
 
-function bookingTone(status?: string | null) {
-  switch (String(status || '').toLowerCase()) {
-    case 'confirmed':
-    case 'active':
-    case 'completed':
-      return 'emerald';
-    case 'pending':
-      return 'amber';
-    case 'declined':
-    case 'cancelled':
-      return 'red';
-    default:
-      return 'slate';
+  if (value === 'watch') {
+    return 'border-blue-300/45 bg-blue-400/10 text-blue-700 dark:text-blue-200';
   }
+
+  if (value === 'closed') {
+    return 'border-slate-300/45 bg-slate-400/10 text-slate-700 dark:text-slate-200';
+  }
+
+  return 'border-emerald-300/40 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200';
 }
 
-function stripHtml(label: string) {
-  return String(label || '').replace(/<[^>]*>/g, '').replace(/&laquo;|&raquo;/g, '').trim();
+function proofTone(hasProof: boolean) {
+  return hasProof
+    ? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200'
+    : 'border-rose-300/40 bg-rose-400/10 text-rose-700 dark:text-rose-200';
 }
 
-export default function BookingOperationsPage({ filters, bookings, summary, pendingPayments, automationEvents }: Props) {
+function statusOptions() {
+  return [
+    ['All booking statuses', ''],
+    ['Pending', 'pending'],
+    ['For Review', 'for_review'],
+    ['Pencil Booked', 'pencil_booked'],
+    ['Confirmed', 'confirmed'],
+    ['Active', 'active'],
+    ['Completed', 'completed'],
+    ['Cancelled', 'cancelled'],
+    ['Declined', 'declined'],
+  ] as const;
+}
+
+function paymentOptions() {
+  return [
+    ['All payment statuses', ''],
+    ['Unpaid', 'unpaid'],
+    ['Partial', 'partial'],
+    ['Paid', 'paid'],
+    ['Owing', 'owing'],
+  ] as const;
+}
+
+function riskOptions() {
+  return [
+    ['All risk states', ''],
+    ['Normal', 'normal'],
+    ['Watch', 'watch'],
+    ['Due Soon', 'due_soon'],
+    ['Overdue', 'overdue'],
+    ['Closed', 'closed'],
+  ] as const;
+}
+
+function attentionOptions() {
+  return [
+    ['All attention states', ''],
+    ['Needs Payment Review', 'needs_review'],
+    ['With Proof', 'with_proof'],
+    ['Without Proof', 'without_proof'],
+    ['Outstanding Balance', 'outstanding'],
+  ] as const;
+}
+
+function gatewayOptions() {
+  return [
+    ['All gateways', ''],
+    ['GCash', 'gcash'],
+    ['PayPal', 'paypal'],
+    ['Bank Transfer', 'bank'],
+    ['Card', 'card'],
+    ['Cash', 'cash'],
+    ['Manual', 'manual'],
+  ] as const;
+}
+
+function StatCard({
+  label,
+  value,
+  description,
+  icon: Icon,
+  tone = 'default',
+}: {
+  label: string;
+  value: ReactNode;
+  description: string;
+  icon: typeof ReceiptText;
+  tone?: 'default' | 'gold' | 'green' | 'red' | 'blue';
+}) {
+  return (
+    <article className={cx('operations-stat-card', `tone-${tone}`)}>
+      <div>
+        <p>{label}</p>
+        <strong>{value}</strong>
+        <span>{description}</span>
+      </div>
+
+      <Icon className="h-5 w-5" />
+    </article>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label className="operations-filter-control">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function SnapshotLine({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="operations-snapshot-line">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function OperationsBookingCard({
+  booking,
+  role,
+}: {
+  booking: OperationsBooking;
+  role: RoleThemeKey;
+}) {
+  const totals = booking.totals || {};
+  const deadline = booking.deadline || {};
+  const latestPayment = booking.latest_payment;
+  const hasProof = Boolean(latestPayment?.proof_image_url);
+
+  return (
+    <article className="operations-booking-card">
+      <main className="grid gap-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <p className="operations-kicker">Booking #{booking.id}</p>
+
+            <h3 className="operations-title">{bookingLabel(booking)}</h3>
+
+            <p className="operations-muted">
+              {eventLabel(booking)} · {booking.client_email || 'No email'}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 xl:justify-end">
+            <BookingStatusBadge value={booking.booking_status} />
+            <BookingStatusBadge value={booking.payment_status} compact />
+
+            <span className={cx('operations-chip', riskTone(deadline.risk))}>
+              {deadline.label || cleanLabel(deadline.risk || 'normal')}
+            </span>
+          </div>
+        </div>
+
+        <div className="operations-grid">
+          <SnapshotLine label="Items Total" value={formatMoney(totals.items_total || 0)} />
+          <SnapshotLine label="Submitted" value={formatMoney(totals.submitted_payments_total || 0)} />
+          <SnapshotLine label="Confirmed" value={formatMoney(totals.confirmed_payments_total || 0)} />
+          <SnapshotLine label="Remaining" value={formatMoney(totals.remaining_balance || 0)} />
+          <SnapshotLine label="Down Required" value={formatMoney(totals.down_payment_required || 0)} />
+          <SnapshotLine label="Start" value={formatDateTime(booking.booking_date_from)} />
+        </div>
+
+        <div className="operations-recommendation">
+          <AlertTriangle className="h-4 w-4" />
+          <span>{deadline.recommended || 'No immediate action required.'}</span>
+        </div>
+
+        {booking.items && booking.items.length > 0 ? (
+          <div className="operations-services">
+            <p>Services</p>
+            <span>
+              {booking.items
+                .map((item) => item.area || item.service_name || 'Service')
+                .filter(Boolean)
+                .join(', ')}
+            </span>
+          </div>
+        ) : null}
+
+        {latestPayment ? (
+          <div className="operations-latest-payment">
+            <div>
+              <p>Latest Payment</p>
+              <strong>
+                {formatMoney(latestPayment.amount || 0)} · {cleanLabel(latestPayment.status || 'pending')}
+              </strong>
+              <span>
+                {cleanLabel(latestPayment.payment_gateway || 'manual')} · Ref:{' '}
+                {latestPayment.transaction_reference || '—'}
+              </span>
+            </div>
+
+            <span className={cx('operations-chip', proofTone(hasProof))}>
+              {hasProof ? 'Proof attached' : 'No proof'}
+            </span>
+          </div>
+        ) : null}
+      </main>
+
+      <aside className="operations-card-actions">
+        <Link href={bookingShowPath(role, booking.id)} className="operations-primary-action">
+          <Eye className="h-4 w-4" />
+          Open
+        </Link>
+
+        {latestPayment?.proof_image_url ? (
+          <a
+            href={latestPayment.proof_image_url}
+            target="_blank"
+            rel="noreferrer"
+            className="operations-secondary-action"
+          >
+            <FileImage className="h-4 w-4" />
+            Proof
+          </a>
+        ) : null}
+      </aside>
+    </article>
+  );
+}
+
+function PendingPaymentCard({
+  payment,
+  busyId,
+  onAction,
+}: {
+  payment: PendingPayment;
+  busyId: number | string | null;
+  onAction: (payment: PendingPayment, action: 'approve' | 'decline' | 'fail') => void;
+}) {
+  const busy = String(busyId || '') === String(payment.id);
+
+  return (
+    <article className="operations-pending-payment">
+      <div>
+        <p>Payment #{payment.id}</p>
+        <h4>{payment.booking?.company_name || payment.booking?.client_name || 'Pending payment'}</h4>
+        <span>
+          {formatMoney(payment.amount || 0)} · {cleanLabel(payment.payment_gateway || 'manual')} ·{' '}
+          {formatDateTime(payment.created_at)}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {payment.proof_image_url ? (
+          <a
+            href={payment.proof_image_url}
+            target="_blank"
+            rel="noreferrer"
+            className="operations-secondary-action"
+          >
+            <FileImage className="h-4 w-4" />
+            Proof
+          </a>
+        ) : null}
+
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onAction(payment, 'approve')}
+          className="operations-primary-action"
+        >
+          {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+          Approve
+        </button>
+
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onAction(payment, 'decline')}
+          className="operations-danger-action"
+        >
+          {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+          Decline
+        </button>
+
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onAction(payment, 'fail')}
+          className="operations-danger-action"
+        >
+          {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+          Fail
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function AutomationEventCard({ event }: { event: AutomationEvent }) {
+  return (
+    <article className="operations-automation-event">
+      <div className="operations-timeline-dot" />
+
+      <div>
+        <h4>{event.title || cleanLabel(event.event_key || 'Lifecycle event')}</h4>
+        <p>{formatDateTime(event.event_at)}</p>
+
+        {event.reason ? <span>{event.reason}</span> : null}
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {event.from_status || event.to_status ? (
+            <span className="operations-chip">
+              {cleanLabel(event.from_status || '—')} → {cleanLabel(event.to_status || '—')}
+            </span>
+          ) : null}
+
+          {event.from_payment_status || event.to_payment_status ? (
+            <span className="operations-chip">
+              Payment: {cleanLabel(event.from_payment_status || '—')} →{' '}
+              {cleanLabel(event.to_payment_status || '—')}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export default function BookingOperationsPage() {
+  const { props } = usePage<PageProps>();
+
+  const role = normalizeWorkspaceRole(props.workspaceRole) as RoleThemeKey;
+  const filters = props.filters || {};
+  const bookings = props.bookings?.data || [];
+  const links = props.bookings?.links || [];
+  const summary = props.summary || {};
+  const pendingPayments = props.pendingPayments || [];
+  const automationEvents = props.automationEvents || [];
+  const basePath = operationsPath(role);
+
   const [q, setQ] = useState(filters.q || '');
   const [bookingStatus, setBookingStatus] = useState(filters.booking_status || '');
   const [paymentStatus, setPaymentStatus] = useState(filters.payment_status || '');
   const [risk, setRisk] = useState(filters.risk || '');
   const [attention, setAttention] = useState(filters.attention || '');
   const [gateway, setGateway] = useState(filters.gateway || '');
+  const [filtering, setFiltering] = useState(false);
+  const [busyId, setBusyId] = useState<number | string | null>(null);
 
-  const metrics = useMemo(
-    () => [
-      { label: 'Visible bookings', value: summary.visible, icon: CalendarDays, tone: 'sky' as const },
-      { label: 'Pending review', value: summary.review_needed, icon: CreditCard, tone: 'amber' as const },
-      { label: 'Due soon', value: summary.due_soon, icon: Clock3, tone: 'amber' as const },
-      { label: 'Overdue', value: summary.overdue, icon: ShieldAlert, tone: 'red' as const },
-      { label: 'Confirmed total', value: money(summary.confirmed_total), icon: CheckCircle2, tone: 'emerald' as const },
-      { label: 'Outstanding', value: money(summary.outstanding_total), icon: Wallet, tone: 'violet' as const },
-    ],
-    [summary],
-  );
+  function submitFilters(event?: FormEvent) {
+    event?.preventDefault();
+    setFiltering(true);
 
-  const applyFilters = () => {
     router.get(
-      '/bookings/operations',
+      basePath,
       {
         q: q || undefined,
         booking_status: bookingStatus || undefined,
@@ -218,287 +573,289 @@ export default function BookingOperationsPage({ filters, bookings, summary, pend
         attention: attention || undefined,
         gateway: gateway || undefined,
       },
-      { preserveState: true, preserveScroll: true, replace: true },
+      {
+        preserveScroll: true,
+        preserveState: true,
+        replace: true,
+        onFinish: () => setFiltering(false),
+      },
     );
-  };
+  }
 
-  const resetFilters = () => {
+  function resetFilters() {
     setQ('');
     setBookingStatus('');
     setPaymentStatus('');
     setRisk('');
     setAttention('');
     setGateway('');
-    router.get('/bookings/operations', {}, { preserveState: true, preserveScroll: true, replace: true });
-  };
+    setFiltering(true);
 
-  const postAction = (url: string) => {
-    router.post(url, {}, { preserveScroll: true });
-  };
+    router.get(basePath, {}, {
+      preserveScroll: true,
+      preserveState: true,
+      replace: true,
+      onFinish: () => setFiltering(false),
+    });
+  }
+
+  function handlePaymentAction(payment: PendingPayment, action: 'approve' | 'decline' | 'fail') {
+    const label = action === 'approve' ? 'approve' : action === 'decline' ? 'decline' : 'mark as failed';
+
+    if (!window.confirm(`Are you sure you want to ${label} this payment?`)) {
+      return;
+    }
+
+    setBusyId(payment.id);
+
+    router.post(
+      paymentActionPath(action, payment.id),
+      {
+        remarks: `${cleanLabel(action)} from operations center.`,
+      },
+      {
+        preserveScroll: true,
+        onFinish: () => setBusyId(null),
+      },
+    );
+  }
 
   return (
-    <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="Booking Operations Center" />
+    <BookingRolePageShell
+      role={role}
+      title="Booking Operations"
+      description="Monitor payment deadlines, pending proof reviews, booking compliance, and lifecycle activity in one control center."
+      actions={
+        <>
+          <Link href={role === 'admin' ? '/admin/bookings' : role === 'manager' ? '/manager/bookings' : '/staff/bookings'} className="operations-secondary-action">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Bookings
+          </Link>
 
-      <div className="space-y-6 p-4 md:p-6">
-        <OpsPageHeader
-          eyebrow="Unified Booking Operations"
-          title="Booking Operations Center"
-          description="One page for deadline risk, payment review, recent automation activity, and the bookings that need action first."
-          actions={
-            <>
-              <Button asChild variant="outline"><Link href="/bookings">Bookings list</Link></Button>
-              <Button asChild variant="outline"><Link href="/payments/review">Payment review</Link></Button>
-              <Button asChild><Link href="/bookings/analytics">Analytics</Link></Button>
-            </>
-          }
-        />
+          <button type="button" onClick={() => submitFilters()} className="operations-secondary-action">
+            <RefreshCcw className="h-4 w-4" />
+            Refresh
+          </button>
+        </>
+      }
+    >
+      <section className="grid gap-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Visible Records"
+            value={summary.visible || bookings.length}
+            description="Bookings currently included in the operations queue."
+            icon={ReceiptText}
+          />
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-          {metrics.map((metric) => (
-            <OpsKpiCard
-              key={metric.label}
-              label={metric.label}
-              value={metric.value}
-              icon={metric.icon}
-              tone={metric.tone}
-            />
-          ))}
+          <StatCard
+            label="Payment Review"
+            value={summary.review_needed || 0}
+            description="Bookings with pending payment proof."
+            icon={AlertTriangle}
+            tone="gold"
+          />
+
+          <StatCard
+            label="Due Soon"
+            value={summary.due_soon || 0}
+            description="Bookings approaching policy deadlines."
+            icon={Clock3}
+            tone="blue"
+          />
+
+          <StatCard
+            label="Overdue"
+            value={summary.overdue || 0}
+            description="Bookings beyond payment compliance windows."
+            icon={XCircle}
+            tone="red"
+          />
         </div>
 
-        <Card className="rounded-[2rem] border-black/5 shadow-sm dark:border-white/10">
-          <CardHeader className="space-y-5 px-6 py-6">
-            <CardTitle className="text-xl">Filter the operations queue</CardTitle>
+        <div className="grid gap-4 md:grid-cols-3">
+          <StatCard
+            label="Submitted Total"
+            value={formatMoney(summary.submitted_total || 0)}
+            description="Pending + confirmed/verified/paid payment records."
+            icon={WalletCards}
+            tone="blue"
+          />
 
-            <div className="grid gap-2 lg:grid-cols-7">
-              <div className="relative lg:col-span-2">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search client, company, email, event" />
+          <StatCard
+            label="Confirmed Total"
+            value={formatMoney(summary.confirmed_total || 0)}
+            description="Confirmed, verified, and paid records only."
+            icon={ShieldCheck}
+            tone="green"
+          />
+
+          <StatCard
+            label="Outstanding"
+            value={formatMoney(summary.outstanding_total || 0)}
+            description="Visible remaining balances."
+            icon={ReceiptText}
+            tone={numberValue(summary.outstanding_total) > 0 ? 'gold' : 'green'}
+          />
+        </div>
+
+        <form onSubmit={submitFilters} className="operations-filter-panel">
+          <label className="operations-search">
+            <Search className="h-4 w-4" />
+            <input
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+              placeholder="Search client, company, email, event, reference..."
+            />
+          </label>
+
+          <FilterSelect label="Booking Status" value={bookingStatus} onChange={setBookingStatus}>
+            {statusOptions().map(([label, value]) => (
+              <option key={value || 'all'} value={value}>
+                {label}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect label="Payment Status" value={paymentStatus} onChange={setPaymentStatus}>
+            {paymentOptions().map(([label, value]) => (
+              <option key={value || 'all'} value={value}>
+                {label}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect label="Risk" value={risk} onChange={setRisk}>
+            {riskOptions().map(([label, value]) => (
+              <option key={value || 'all'} value={value}>
+                {label}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect label="Attention" value={attention} onChange={setAttention}>
+            {attentionOptions().map(([label, value]) => (
+              <option key={value || 'all'} value={value}>
+                {label}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect label="Gateway" value={gateway} onChange={setGateway}>
+            {gatewayOptions().map(([label, value]) => (
+              <option key={value || 'all'} value={value}>
+                {label}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <button type="submit" disabled={filtering} className="operations-primary-action">
+            {filtering ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Filter className="h-4 w-4" />}
+            Filter
+          </button>
+
+          <button type="button" disabled={filtering} onClick={resetFilters} className="operations-secondary-action">
+            <SlidersHorizontal className="h-4 w-4" />
+            Clear
+          </button>
+        </form>
+
+        {pendingPayments.length > 0 ? (
+          <section className="operations-panel">
+            <header className="operations-section-header">
+              <div>
+                <p>Pending Payment Proof</p>
+                <h2>Review queue</h2>
+                <span>These are the latest pending payment records inside the visible booking set.</span>
               </div>
 
-              <select className="rounded-md border bg-background px-3 py-2 text-sm" value={bookingStatus} onChange={(e) => setBookingStatus(e.target.value)}>
-                <option value="">All booking statuses</option>
-                <option value="pending">Pending</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="declined">Declined</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+              <ReceiptText className="h-7 w-7 text-[var(--bccc-backend-gold)]" />
+            </header>
 
-              <select className="rounded-md border bg-background px-3 py-2 text-sm" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
-                <option value="">All payment statuses</option>
-                <option value="unpaid">Unpaid</option>
-                <option value="partial">Partial</option>
-                <option value="paid">Paid</option>
-                <option value="owing">Owing</option>
-              </select>
-
-              <select className="rounded-md border bg-background px-3 py-2 text-sm" value={risk} onChange={(e) => setRisk(e.target.value)}>
-                <option value="">All risk states</option>
-                <option value="watch">Watch</option>
-                <option value="due_soon">Due soon</option>
-                <option value="overdue">Overdue</option>
-                <option value="normal">On track</option>
-                <option value="closed">Closed</option>
-              </select>
-
-              <select className="rounded-md border bg-background px-3 py-2 text-sm" value={attention} onChange={(e) => setAttention(e.target.value)}>
-                <option value="">All attention types</option>
-                <option value="needs_review">Needs payment review</option>
-                <option value="with_proof">Has proof image</option>
-                <option value="outstanding">Has outstanding balance</option>
-              </select>
-
-              <select className="rounded-md border bg-background px-3 py-2 text-sm" value={gateway} onChange={(e) => setGateway(e.target.value)}>
-                <option value="">All gateways</option>
-                <option value="card">Card</option>
-                <option value="paypal">PayPal</option>
-                <option value="gcash">GCash</option>
-                <option value="manual">Manual</option>
-              </select>
+            <div className="grid gap-3">
+              {pendingPayments.map((payment) => (
+                <PendingPaymentCard
+                  key={payment.id}
+                  payment={payment}
+                  busyId={busyId}
+                  onAction={handlePaymentAction}
+                />
+              ))}
             </div>
+          </section>
+        ) : null}
 
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={applyFilters}>Apply filters</Button>
-              <Button variant="outline" onClick={resetFilters}>Reset</Button>
-            </div>
-          </CardHeader>
-        </Card>
-
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-6">
-            <Card className="rounded-[2rem] border-black/5 dark:border-white/10">
-              <CardHeader>
-                <CardTitle className="text-xl">Bookings needing action</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {bookings.data.length === 0 ? (
-                  <OpsEmptyState
-                    title="No bookings matched the current filter set"
-                    description="Try clearing one or more filters to bring back items that need attention."
-                  />
-                ) : (
-                  bookings.data.map((booking) => (
-                    <div key={booking.id} className="rounded-[1.6rem] border p-4 shadow-sm">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0 space-y-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="text-xl font-semibold text-slate-900 dark:text-white">
-                              {booking.company_name || booking.client_name || `Booking #${booking.id}`}
-                            </div>
-                            <OpsStatusChip label={booking.booking_status || '—'} tone={bookingTone(booking.booking_status)} />
-                            <OpsStatusChip label={booking.payment_status || '—'} tone={paymentTone(booking.payment_status)} />
-                            <OpsStatusChip label={booking.deadline?.label || '—'} tone={riskTone(booking.deadline?.risk)} />
-                          </div>
-
-                          <div className="text-sm text-muted-foreground">
-                            {booking.client_name || '—'} • {booking.client_email || 'No email'}
-                          </div>
-
-                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                            <div className="rounded-2xl border bg-muted/20 p-4">
-                              <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Schedule</div>
-                              <div className="mt-2 text-sm font-medium">{dt(booking.booking_date_from)}</div>
-                              <div className="mt-1 text-sm text-muted-foreground">to {dt(booking.booking_date_to)}</div>
-                            </div>
-
-                            <div className="rounded-2xl border bg-muted/20 p-4">
-                              <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Totals</div>
-                              <div className="mt-2 text-sm">Items: <span className="font-semibold">{money(booking.totals.items_total)}</span></div>
-                              <div className="mt-1 text-sm">Submitted: <span className="font-semibold">{money(booking.totals.submitted_payments_total)}</span></div>
-                              <div className="mt-1 text-sm">Confirmed: <span className="font-semibold">{money(booking.totals.confirmed_payments_total)}</span></div>
-                              <div className="mt-1 text-sm text-red-600">Outstanding: <span className="font-semibold">{money(booking.totals.remaining_balance)}</span></div>
-                            </div>
-
-                            <div className="rounded-2xl border bg-muted/20 p-4">
-                              <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Deadline watch</div>
-                              <div className="mt-2 text-sm">50% required: <span className="font-semibold">{money(booking.totals.down_payment_required)}</span></div>
-                              <div className="mt-1 text-sm">24H: <span className="font-semibold">{dt(booking.deadline.down_deadline)}</span></div>
-                              <div className="mt-1 text-sm">48H: <span className="font-semibold">{dt(booking.deadline.full_deadline)}</span></div>
-                            </div>
-                          </div>
-
-                          <div className="rounded-2xl border bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-700 dark:bg-slate-950/50 dark:text-slate-200">
-                            {booking.deadline?.recommended || 'No recommendation available.'}
-                          </div>
-
-                          <div className="text-sm text-muted-foreground">
-                            Services: {booking.items.length > 0 ? booking.items.map((item) => item.service_name || 'Service').join(', ') : 'No items attached'}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 lg:max-w-[220px] lg:flex-col lg:items-stretch">
-                          <Button asChild variant="outline"><Link href={`/bookings/${booking.id}`}><Eye className="mr-2 h-4 w-4" /> Open booking</Link></Button>
-                          <Button asChild variant="outline"><Link href="/payments/review">Open review queue</Link></Button>
-                          {booking.latest_payment?.id ? (
-                            <>
-                              <Button onClick={() => postAction(`/bookings/operations/payments/${booking.latest_payment?.id}/approve`)}><CheckCircle2 className="mr-2 h-4 w-4" /> Approve latest payment</Button>
-                              <Button variant="outline" onClick={() => postAction(`/bookings/operations/payments/${booking.latest_payment?.id}/fail`)}><AlertTriangle className="mr-2 h-4 w-4" /> Mark failed</Button>
-                              <Button variant="destructive" onClick={() => postAction(`/bookings/operations/payments/${booking.latest_payment?.id}/decline`)}><XCircle className="mr-2 h-4 w-4" /> Decline payment</Button>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-
-                {Array.isArray(bookings.links) && bookings.links.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    {bookings.links.map((link, index) => (
-                      <button
-                        key={`${link.label}-${index}`}
-                        type="button"
-                        disabled={!link.url}
-                        onClick={() => link.url && router.visit(link.url, { preserveState: true, preserveScroll: true, replace: true })}
-                        className={`rounded-lg border px-3 py-2 text-sm transition ${link.active ? 'bg-primary text-primary-foreground' : 'bg-background'} ${!link.url ? 'cursor-not-allowed opacity-40' : ''}`}
-                      >
-                        {stripHtml(link.label)}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
+        <div className="operations-toolbar">
+          <div>
+            <p>Operations Queue</p>
+            <h2>
+              {props.bookings?.meta?.total ?? bookings.length} booking
+              {Number(props.bookings?.meta?.total ?? bookings.length) === 1 ? '' : 's'}
+            </h2>
           </div>
 
-          <div className="space-y-6">
-            <Card className="rounded-[2rem] border-black/5 dark:border-white/10">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-xl">Recent payment review queue</CardTitle>
-                <BellRing className="h-5 w-5 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {pendingPayments.length === 0 ? (
-                  <OpsEmptyState title="No pending payments in the queue" />
-                ) : pendingPayments.map((payment) => (
-                  <div key={payment.id} className="rounded-[1.4rem] border p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-semibold text-slate-900 dark:text-white">
-                          {payment.booking?.company_name || payment.booking?.client_name || `Payment #${payment.id}`}
-                        </div>
-                        <div className="mt-1 text-sm text-muted-foreground">{payment.transaction_reference || 'No reference number'} • {payment.payment_gateway || 'gateway n/a'}</div>
-                        <div className="mt-1 text-sm">Amount: <span className="font-semibold">{money(payment.amount)}</span></div>
-                        <div className="mt-1 text-xs text-muted-foreground">Submitted: {dt(payment.created_at)}</div>
-                      </div>
-                      <OpsStatusChip label={payment.status} tone={paymentTone(payment.status)} />
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button size="sm" onClick={() => postAction(`/bookings/operations/payments/${payment.id}/approve`)}>Approve</Button>
-                      <Button size="sm" variant="outline" onClick={() => postAction(`/bookings/operations/payments/${payment.id}/fail`)}>Mark failed</Button>
-                      <Button size="sm" variant="destructive" onClick={() => postAction(`/bookings/operations/payments/${payment.id}/decline`)}>Decline</Button>
-                      {payment.booking?.id ? <Button asChild size="sm" variant="outline"><Link href={`/bookings/${payment.booking.id}`}>Open booking</Link></Button> : null}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[2rem] border-black/5 dark:border-white/10">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-xl">Recent lifecycle automation activity</CardTitle>
-                <ShieldAlert className="h-5 w-5 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {automationEvents.length === 0 ? (
-                  <OpsEmptyState title="No lifecycle activity found yet" />
-                ) : automationEvents.map((event) => (
-                  <div key={event.id} className="rounded-[1.4rem] border p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-semibold text-slate-900 dark:text-white">{event.title}</div>
-                        <div className="mt-1 text-sm text-muted-foreground">{event.booking?.company_name || event.booking?.client_name || 'Booking record'} • {dt(event.event_at)}</div>
-                      </div>
-                      <OpsStatusChip label={event.event_key} tone="violet" />
-                    </div>
-
-                    {(event.reason || event.to_status || event.to_payment_status) ? (
-                      <div className="mt-3 space-y-2 text-sm">
-                        {event.reason ? <div>{event.reason}</div> : null}
-                        {(event.from_status || event.to_status) ? (
-                          <div className="text-muted-foreground">Status: {event.from_status || '—'} → {event.to_status || '—'}</div>
-                        ) : null}
-                        {(event.from_payment_status || event.to_payment_status) ? (
-                          <div className="text-muted-foreground">Payment: {event.from_payment_status || '—'} → {event.to_payment_status || '—'}</div>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {event.booking?.id ? (
-                      <div className="mt-3">
-                        <Button asChild size="sm" variant="outline"><Link href={`/bookings/${event.booking.id}`}>Open booking</Link></Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
+          <span>
+            Showing {props.bookings?.meta?.from ?? (bookings.length > 0 ? 1 : 0)} to{' '}
+            {props.bookings?.meta?.to ?? bookings.length}
+            {props.bookings?.meta?.total ? ` of ${props.bookings.meta.total}` : ''}
+          </span>
         </div>
-      </div>
-    </AppLayout>
+
+        {bookings.length > 0 ? (
+          <div className="grid gap-4">
+            {bookings.map((booking) => (
+              <OperationsBookingCard key={booking.id} booking={booking} role={role} />
+            ))}
+          </div>
+        ) : (
+          <section className="operations-empty">
+            <Sparkles className="mx-auto h-12 w-12 text-[var(--bccc-backend-gold)]" />
+            <h3>No operations records found</h3>
+            <p>Clear the filters or wait for new booking/payment activity.</p>
+          </section>
+        )}
+
+        {links.length > 0 ? (
+          <nav className="operations-pagination" aria-label="Operations pagination">
+            {links.map((link, index) =>
+              link.url ? (
+                <Link
+                  key={`${link.label}-${index}`}
+                  href={link.url}
+                  preserveScroll
+                  className={cx('operations-page-link', link.active && 'is-active')}
+                >
+                  {cleanPageLabel(link.label)}
+                </Link>
+              ) : (
+                <span key={`${link.label}-${index}`} className="operations-page-link is-disabled">
+                  {cleanPageLabel(link.label)}
+                </span>
+              ),
+            )}
+          </nav>
+        ) : null}
+
+        {automationEvents.length > 0 ? (
+          <section className="operations-panel">
+            <header className="operations-section-header">
+              <div>
+                <p>Lifecycle Activity</p>
+                <h2>Automation and status movement</h2>
+                <span>Recent lifecycle events connected to visible booking activity.</span>
+              </div>
+
+              <ShieldCheck className="h-7 w-7 text-[var(--bccc-backend-gold)]" />
+            </header>
+
+            <div className="grid gap-3">
+              {automationEvents.map((event) => (
+                <AutomationEventCard key={event.id} event={event} />
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </section>
+    </BookingRolePageShell>
   );
 }

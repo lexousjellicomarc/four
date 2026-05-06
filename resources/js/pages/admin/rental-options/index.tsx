@@ -1,5 +1,3 @@
-import { RentalOptionsPage } from '@/components/admin-resource/rental-options-page';
+import { RentalOptionsPage } from '@/components/admin-resource/system-setup-pages';
 
-export default function AdminRentalOptionsIndex() {
-  return <RentalOptionsPage />;
-}
+export default RentalOptionsPage;

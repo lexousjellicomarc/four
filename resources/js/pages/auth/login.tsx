@@ -1,14 +1,14 @@
-import { FormEvent } from 'react';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import GoogleSignInButton from '@/components/auth/google-sign-in-button';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
-import GoogleSignInButton from '@/components/auth/google-sign-in-button';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { LoaderCircle } from 'lucide-react';
+import { FormEvent } from 'react';
 
 interface LoginProps {
     status?: string;
@@ -60,7 +60,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             <div className="absolute inset-0 flex items-center">
                                 <span className="w-full border-t border-border" />
                             </div>
-                            <div className="relative flex justify-center text-xs uppercase tracking-[0.18em]">
+                            <div className="relative flex justify-center text-xs tracking-[0.18em] uppercase">
                                 <span className="bg-background px-3 text-muted-foreground">
                                     Or continue with email
                                 </span>
@@ -83,9 +83,14 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                 autoComplete="email"
                                 placeholder="email@example.com"
                                 value={data.email}
-                                onChange={(e) => setData('email', e.target.value)}
+                                onChange={(e) =>
+                                    setData('email', e.target.value)
+                                }
                             />
-                            <InputError message={errors.email} className="mt-2" />
+                            <InputError
+                                message={errors.email}
+                                className="mt-2"
+                            />
                         </div>
 
                         <div className="grid gap-2">
@@ -93,7 +98,11 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                 <Label htmlFor="password">Password</Label>
 
                                 {canResetPassword && (
-                                    <TextLink href="/forgot-password" className="ml-auto text-sm" tabIndex={5}>
+                                    <TextLink
+                                        href="/forgot-password"
+                                        className="ml-auto text-sm"
+                                        tabIndex={5}
+                                    >
                                         Forgot password?
                                     </TextLink>
                                 )}
@@ -108,30 +117,47 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                 autoComplete="current-password"
                                 placeholder="Password"
                                 value={data.password}
-                                onChange={(e) => setData('password', e.target.value)}
+                                onChange={(e) =>
+                                    setData('password', e.target.value)
+                                }
                             />
-                            <InputError message={errors.password} className="mt-2" />
+                            <InputError
+                                message={errors.password}
+                                className="mt-2"
+                            />
                         </div>
 
                         <div className="flex items-center gap-3">
                             <Checkbox
                                 id="remember"
                                 checked={data.remember}
-                                onCheckedChange={(checked) => setData('remember', !!checked)}
+                                onCheckedChange={(checked) =>
+                                    setData('remember', !!checked)
+                                }
                                 tabIndex={3}
                             />
                             <Label htmlFor="remember">Remember me</Label>
                         </div>
 
-                        <Button type="submit" className="mt-2 w-full" tabIndex={4} disabled={processing}>
-                            {processing && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                        <Button
+                            type="submit"
+                            className="mt-2 w-full"
+                            tabIndex={4}
+                            disabled={processing}
+                        >
+                            {processing && (
+                                <LoaderCircle className="h-4 w-4 animate-spin" />
+                            )}
                             Log in
                         </Button>
                     </div>
 
                     <div className="text-center text-sm text-muted-foreground">
                         Don&apos;t have an account?{' '}
-                        <Link href="/register" className="underline underline-offset-4">
+                        <Link
+                            href="/register"
+                            className="underline underline-offset-4"
+                        >
                             Sign up
                         </Link>
                     </div>

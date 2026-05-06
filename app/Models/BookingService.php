@@ -10,12 +10,12 @@ class BookingService extends Model
 {
     use HasFactory;
 
-    protected $table = 'booking_services';
+    protected $guarded = [];
 
-    protected $fillable = [
-        'booking_id',
-        'service_id',
-        'quantity',
+    protected $casts = [
+        'quantity' => 'integer',
+        'unit_price' => 'decimal:2',
+        'line_total' => 'decimal:2',
     ];
 
     public function booking(): BelongsTo

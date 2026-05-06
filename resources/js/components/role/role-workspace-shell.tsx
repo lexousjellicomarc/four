@@ -1,24 +1,11 @@
 import AppLayout from '@/layouts/app-layout';
-import {
-  getRoleTheme,
-  normalizeRoleTheme,
-  type RoleThemeKey,
-} from '@/lib/role-theme';
 import type { BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
+import { Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-
 type RoleWorkspaceShellProps = {
-  role?: RoleThemeKey | string | null;
+  role?: 'admin' | 'manager' | 'staff' | 'user' | string | null;
   title: string;
   eyebrow?: string;
   description?: string;
@@ -27,6 +14,22 @@ type RoleWorkspaceShellProps = {
   children: ReactNode;
   compact?: boolean;
 };
+
+function roleLabel(role?: string | null) {
+  if (role === 'admin') return 'Administrator';
+  if (role === 'manager') return 'Manager';
+  if (role === 'staff') return 'Staff';
+  if (role === 'user') return 'Client';
+  return 'Workspace';
+}
+
+function roleEyebrow(role?: string | null) {
+  if (role === 'admin') return 'Executive Workspace';
+  if (role === 'manager') return 'Management Workspace';
+  if (role === 'staff') return 'Operations Workspace';
+  if (role === 'user') return 'Client Portal';
+  return 'BCCC EASE';
+}
 
 export function RoleWorkspaceShell({
   role = 'admin',
@@ -38,69 +41,52 @@ export function RoleWorkspaceShell({
   children,
   compact = false,
 }: RoleWorkspaceShellProps) {
-  const normalizedRole = normalizeRoleTheme(role);
-  const theme = getRoleTheme(normalizedRole);
+  const normalizedRole = String(role || 'admin').toLowerCase();
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title={title} />
 
-      <div className="backend-page-shell">
-        <div className="backend-page-container">
-          <Card className="backend-page-hero overflow-hidden">
-            <div className="pointer-events-none absolute inset-0">
-              <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[#c9a96a]/10 blur-3xl" />
-              <div className="absolute bottom-0 left-1/4 h-48 w-48 rounded-full bg-foreground/[0.035] blur-3xl" />
+      <section
+        className={`relative mb-5 overflow-hidden border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] shadow-[var(--bccc-backend-shadow-soft)] backdrop-blur-xl ${
+          compact ? 'p-5' : 'p-5 sm:p-6 lg:p-7'
+        }`}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(169,132,67,0.11),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(23,56,45,0.10),transparent_42%)]" />
+
+        <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 border border-[var(--bccc-backend-gold-line)] bg-[rgba(169,132,67,0.10)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.28em] text-[var(--bccc-backend-gold)]">
+                <Sparkles className="h-3.5 w-3.5" />
+                {eyebrow || roleEyebrow(normalizedRole)}
+              </span>
+
+              <span className="inline-flex border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel-muted)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-[var(--bccc-backend-muted)]">
+                {roleLabel(normalizedRole)}
+              </span>
             </div>
 
-            <CardHeader className={compact ? 'relative p-5 sm:p-6' : 'relative p-6 sm:p-8'}>
-              <div className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
-                <div className="max-w-5xl">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge
-                      variant="outline"
-                      className="border-[#c9a96a]/30 bg-[#c9a96a]/10 text-[11px] font-black uppercase tracking-[0.22em] text-[#7a5c21] dark:text-[#e8d8b5]"
-                    >
-                      {eyebrow || theme.eyebrow}
-                    </Badge>
+            <h1 className="mt-4 max-w-5xl text-3xl font-semibold leading-[0.96] tracking-[-0.06em] text-[var(--bccc-backend-text)] sm:text-4xl lg:text-5xl">
+              {title}
+            </h1>
 
-                    <Badge
-                      variant="outline"
-                      className="border-border/70 bg-background/60 text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground"
-                    >
-                      {theme.label}
-                    </Badge>
-                  </div>
+            {description ? (
+              <p className="mt-4 max-w-4xl text-sm leading-8 text-[var(--bccc-backend-muted)]">
+                {description}
+              </p>
+            ) : null}
+          </div>
 
-                  <CardTitle
-                    className={`mt-4 max-w-5xl font-black leading-[0.98] tracking-[-0.055em] ${
-                      compact ? 'text-3xl lg:text-4xl' : 'text-4xl lg:text-5xl'
-                    }`}
-                  >
-                    {title}
-                  </CardTitle>
-
-                  {description ? (
-                    <CardDescription className="mt-4 max-w-4xl text-sm leading-7 sm:text-base">
-                      {description}
-                    </CardDescription>
-                  ) : null}
-                </div>
-
-                {actions ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {actions}
-                  </div>
-                ) : null}
-              </div>
-            </CardHeader>
-          </Card>
-
-          <CardContent className="backend-page-content px-0 pb-0">
-            {children}
-          </CardContent>
+          {actions ? (
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              {actions}
+            </div>
+          ) : null}
         </div>
-      </div>
+      </section>
+
+      {children}
     </AppLayout>
   );
 }

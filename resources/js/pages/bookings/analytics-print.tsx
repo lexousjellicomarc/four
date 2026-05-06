@@ -1,280 +1,363 @@
 import { Head } from '@inertiajs/react';
+import { Printer } from 'lucide-react';
 
-type Breakdown = { label: string; value: number };
-type TrendPoint = { label: string; bookings: number; guests: number; confirmed_revenue: number };
-type ServicePoint = { label: string; usage_count: number; revenue_total: number };
-type RiskBooking = {
-  id: number;
-  client_name: string;
-  company_name: string;
-  type_of_event: string;
-  booking_status: string;
-  payment_status: string;
-  booking_date_from: string | null;
-  booking_date_to: string | null;
-  created_at: string | null;
-  number_of_guests: number;
-  items_total: number;
-  submitted_total: number;
-  confirmed_total: number;
-  outstanding: number;
-  policy: {
-    state: string;
+type Breakdown = {
     label: string;
-    half_required: number;
-    down_payment_due_at: string | null;
-    full_payment_due_at: string | null;
-  };
+    value: number;
+};
+
+type TrendPoint = {
+    label: string;
+    bookings: number;
+    guests: number;
+    confirmed_revenue: number;
+};
+
+type ServicePoint = {
+    label: string;
+    usage_count: number;
+    revenue_total: number;
+};
+
+type WorkloadPoint = {
+    label: string;
+    bookings: number;
+    guests: number;
+};
+
+type RiskBooking = {
+    id: number;
+    client_name: string;
+    company_name: string;
+    type_of_event: string;
+    booking_status: string;
+    payment_status: string;
+    booking_date_from: string | null;
+    booking_date_to: string | null;
+    items_total: number;
+    submitted_total: number;
+    confirmed_total: number;
+    outstanding: number;
+    policy?: {
+        state?: string;
+        label?: string;
+        down_payment_due_at?: string | null;
+        full_payment_due_at?: string | null;
+    };
 };
 
 type Props = {
-  generatedAt: string;
-  filters: Record<string, string>;
-  summary: Record<string, number>;
-  statusBreakdown: Breakdown[];
-  paymentBreakdown: Breakdown[];
-  monthlyTrend: TrendPoint[];
-  topServices: ServicePoint[];
-  highRiskBookings: RiskBooking[];
+    filters: Record<string, unknown>;
+    generated_at?: string;
+    summary: Record<string, number>;
+    statusBreakdown: Breakdown[];
+    paymentBreakdown: Breakdown[];
+    monthlyTrend: TrendPoint[];
+    upcomingWorkload: WorkloadPoint[];
+    topServices: ServicePoint[];
+    highRiskBookings: RiskBooking[];
 };
 
-function money(value: number) {
-  return `₱ ${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function money(value: unknown) {
+    const parsed = Number(value ?? 0);
+
+    return new Intl.NumberFormat('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+        minimumFractionDigits: 2,
+    }).format(Number.isFinite(parsed) ? parsed : 0);
 }
 
-function dt(value?: string | null) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
+function cleanLabel(value: unknown) {
+    return String(value || '—')
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function niceKey(key: string) {
-  return key.replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+function formatDateTime(value?: string | null) {
+    if (!value) return '—';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat('en-PH', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    }).format(date);
+}
+
+function SummaryTable({ summary }: { summary: Record<string, number> }) {
+    return (
+        <table className="print-report-table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {Object.entries(summary || {}).map(([key, value]) => (
+                    <tr key={key}>
+                        <td>{cleanLabel(key)}</td>
+                        <td>
+                            {key.includes('revenue') || key.includes('balance')
+                                ? money(value)
+                                : value}
+                        </td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    );
+}
+
+function BreakdownTable({ title, rows }: { title: string; rows: Breakdown[] }) {
+    return (
+        <section className="print-report-section">
+            <h2>{title}</h2>
+            <table className="print-report-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.length > 0 ? (
+                        rows.map((row) => (
+                            <tr key={row.label}>
+                                <td>{cleanLabel(row.label)}</td>
+                                <td>{row.value}</td>
+                            </tr>
+                        ))
+                    ) : (
+                        <tr>
+                            <td colSpan={2}>No data.</td>
+                        </tr>
+                    )}
+                </tbody>
+            </table>
+        </section>
+    );
 }
 
 export default function BookingAnalyticsPrint({
-  generatedAt,
-  filters,
-  summary,
-  statusBreakdown,
-  paymentBreakdown,
-  monthlyTrend,
-  topServices,
-  highRiskBookings,
+    filters,
+    generated_at,
+    summary,
+    statusBreakdown = [],
+    paymentBreakdown = [],
+    monthlyTrend = [],
+    upcomingWorkload = [],
+    topServices = [],
+    highRiskBookings = [],
 }: Props) {
-  return (
-    <>
-      <Head title="Booking Analytics Print" />
-      <div className="min-h-screen bg-white text-slate-900 print:bg-white">
-        <div className="mx-auto max-w-7xl p-6 print:max-w-none print:p-4">
-          <div className="mb-6 flex items-start justify-between gap-4 border-b pb-4 print:mb-4">
-            <div>
-              <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">BCCC EASE</div>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight">Booking Analytics Report</h1>
-              <p className="mt-2 text-sm text-slate-600">Generated at: {dt(generatedAt)}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="rounded-full border px-4 py-2 text-sm font-medium print:hidden"
-            >
-              Print now
-            </button>
-          </div>
+    return (
+        <>
+            <Head title="Booking Analytics Print" />
 
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 print:mb-4">
-            <div className="rounded-2xl border p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Filtered bookings</div>
-              <div className="mt-2 text-2xl font-semibold">{summary.total_bookings ?? 0}</div>
-              <div className="mt-2 text-sm text-slate-600">Guests: {summary.total_guests ?? 0}</div>
-            </div>
-            <div className="rounded-2xl border p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Confirmed revenue</div>
-              <div className="mt-2 text-2xl font-semibold">{money(summary.confirmed_revenue ?? 0)}</div>
-              <div className="mt-2 text-sm text-slate-600">Submitted: {money(summary.submitted_revenue ?? 0)}</div>
-            </div>
-            <div className="rounded-2xl border p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Outstanding</div>
-              <div className="mt-2 text-2xl font-semibold">{money(summary.outstanding_balance ?? 0)}</div>
-              <div className="mt-2 text-sm text-slate-600">50% met: {summary.half_paid_met ?? 0}</div>
-            </div>
-            <div className="rounded-2xl border p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Automation (7d)</div>
-              <div className="mt-2 text-2xl font-semibold">{summary.automation_events_7d ?? 0}</div>
-              <div className="mt-2 text-sm text-slate-600">Declined: {summary.auto_declined_7d ?? 0} • Deleted: {summary.auto_deleted_7d ?? 0}</div>
-            </div>
-          </div>
+            <div className="print-report-page">
+                <div className="print-report-toolbar no-print">
+                    <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="alh-primary-button"
+                    >
+                        <Printer className="h-4 w-4" />
+                        Print Report
+                    </button>
+                </div>
 
-          <div className="mb-6 rounded-2xl border p-4 print:mb-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Applied Filters</div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.keys(filters || {}).length === 0 ? (
-                <div className="text-sm text-slate-600">No filters applied.</div>
-              ) : (
-                Object.entries(filters).map(([key, value]) => (
-                  <div key={key} className="rounded-xl border bg-slate-50 px-3 py-2 text-sm">
-                    <strong>{niceKey(key)}:</strong> {String(value || '—')}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+                <main className="print-report-paper">
+                    <header className="print-report-header">
+                        <p>Booking Analytics Report</p>
+                        <h1>Baguio Convention and Cultural Center</h1>
+                        <span>
+                            Generated {formatDateTime(generated_at)} · Filters:{' '}
+                            {Object.entries(filters || {})
+                                .filter(([, value]) => value)
+                                .map(
+                                    ([key, value]) =>
+                                        `${cleanLabel(key)}: ${String(value)}`,
+                                )
+                                .join(' · ') || 'None'}
+                        </span>
+                    </header>
 
-          <div className="grid gap-6 lg:grid-cols-2 print:gap-4">
-            <div className="rounded-2xl border p-4">
-              <h2 className="text-lg font-semibold">Booking Status Distribution</h2>
-              <div className="mt-3 overflow-hidden rounded-xl border">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Status</th>
-                      <th className="px-3 py-2 text-right">Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {statusBreakdown.map((row) => (
-                      <tr key={row.label} className="border-t">
-                        <td className="px-3 py-2">{row.label}</td>
-                        <td className="px-3 py-2 text-right">{row.value}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    <section className="print-report-section">
+                        <h2>Summary</h2>
+                        <SummaryTable summary={summary} />
+                    </section>
 
-            <div className="rounded-2xl border p-4">
-              <h2 className="text-lg font-semibold">Payment Status Distribution</h2>
-              <div className="mt-3 overflow-hidden rounded-xl border">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Status</th>
-                      <th className="px-3 py-2 text-right">Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paymentBreakdown.map((row) => (
-                      <tr key={row.label} className="border-t">
-                        <td className="px-3 py-2">{row.label}</td>
-                        <td className="px-3 py-2 text-right">{row.value}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+                    <div className="print-report-two-col">
+                        <BreakdownTable
+                            title="Booking Status Breakdown"
+                            rows={statusBreakdown}
+                        />
+                        <BreakdownTable
+                            title="Payment Status Breakdown"
+                            rows={paymentBreakdown}
+                        />
+                    </div>
 
-          <div className="mt-6 grid gap-6 lg:grid-cols-2 print:mt-4 print:gap-4">
-            <div className="rounded-2xl border p-4">
-              <h2 className="text-lg font-semibold">Monthly Trend</h2>
-              <div className="mt-3 overflow-hidden rounded-xl border">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Month</th>
-                      <th className="px-3 py-2 text-right">Bookings</th>
-                      <th className="px-3 py-2 text-right">Guests</th>
-                      <th className="px-3 py-2 text-right">Confirmed Revenue</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monthlyTrend.map((row) => (
-                      <tr key={row.label} className="border-t">
-                        <td className="px-3 py-2">{row.label}</td>
-                        <td className="px-3 py-2 text-right">{row.bookings}</td>
-                        <td className="px-3 py-2 text-right">{row.guests}</td>
-                        <td className="px-3 py-2 text-right">{money(row.confirmed_revenue)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    <section className="print-report-section">
+                        <h2>Monthly Trend</h2>
+                        <table className="print-report-table">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th>Bookings</th>
+                                    <th>Guests</th>
+                                    <th>Confirmed Revenue</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {monthlyTrend.length > 0 ? (
+                                    monthlyTrend.map((row) => (
+                                        <tr key={row.label}>
+                                            <td>{row.label}</td>
+                                            <td>{row.bookings}</td>
+                                            <td>{row.guests}</td>
+                                            <td>
+                                                {money(row.confirmed_revenue)}
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={4}>
+                                            No monthly trend data.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </section>
 
-            <div className="rounded-2xl border p-4">
-              <h2 className="text-lg font-semibold">Top Services</h2>
-              <div className="mt-3 overflow-hidden rounded-xl border">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Service</th>
-                      <th className="px-3 py-2 text-right">Usage</th>
-                      <th className="px-3 py-2 text-right">Revenue</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topServices.map((row) => (
-                      <tr key={row.label} className="border-t">
-                        <td className="px-3 py-2">{row.label}</td>
-                        <td className="px-3 py-2 text-right">{row.usage_count}</td>
-                        <td className="px-3 py-2 text-right">{money(row.revenue_total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+                    <section className="print-report-section">
+                        <h2>Top Services</h2>
+                        <table className="print-report-table">
+                            <thead>
+                                <tr>
+                                    <th>Service / Area</th>
+                                    <th>Usage</th>
+                                    <th>Revenue</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {topServices.length > 0 ? (
+                                    topServices.map((row) => (
+                                        <tr key={row.label}>
+                                            <td>{row.label}</td>
+                                            <td>{row.usage_count}</td>
+                                            <td>{money(row.revenue_total)}</td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={3}>
+                                            No service demand data.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </section>
 
-          <div className="mt-6 rounded-2xl border p-4 print:mt-4">
-            <h2 className="text-lg font-semibold">High-Risk Bookings</h2>
-            <div className="mt-3 overflow-x-auto rounded-xl border">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Booking</th>
-                    <th className="px-3 py-2 text-left">Schedule</th>
-                    <th className="px-3 py-2 text-left">Statuses</th>
-                    <th className="px-3 py-2 text-right">Totals</th>
-                    <th className="px-3 py-2 text-left">Policy</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {highRiskBookings.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-slate-500">No high-risk bookings for the current filters.</td>
-                    </tr>
-                  ) : (
-                    highRiskBookings.map((row) => (
-                      <tr key={row.id} className="border-t align-top">
-                        <td className="px-3 py-3">
-                          <div className="font-semibold">{row.company_name || row.client_name}</div>
-                          <div className="mt-1 text-slate-600">{row.client_name}</div>
-                          <div className="mt-1 text-slate-600">{row.type_of_event || '—'}</div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div>{dt(row.booking_date_from)}</div>
-                          <div className="mt-1 text-slate-600">to {dt(row.booking_date_to)}</div>
-                          <div className="mt-1 text-slate-600">Created: {dt(row.created_at)}</div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div>{row.booking_status}</div>
-                          <div className="mt-1 text-slate-600">{row.payment_status}</div>
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <div>Total: {money(row.items_total)}</div>
-                          <div className="mt-1 text-slate-600">Submitted: {money(row.submitted_total)}</div>
-                          <div className="mt-1 text-slate-600">Confirmed: {money(row.confirmed_total)}</div>
-                          <div className="mt-1 font-semibold text-red-700">Outstanding: {money(row.outstanding)}</div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="font-semibold">{row.policy.label}</div>
-                          <div className="mt-1 text-slate-600">50% target: {money(row.policy.half_required)}</div>
-                          <div className="mt-1 text-slate-600">24H: {dt(row.policy.down_payment_due_at)}</div>
-                          <div className="mt-1 text-slate-600">48H: {dt(row.policy.full_payment_due_at)}</div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    <section className="print-report-section">
+                        <h2>Upcoming Workload</h2>
+                        <table className="print-report-table">
+                            <thead>
+                                <tr>
+                                    <th>Period</th>
+                                    <th>Bookings</th>
+                                    <th>Guests</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {upcomingWorkload.length > 0 ? (
+                                    upcomingWorkload.map((row) => (
+                                        <tr key={row.label}>
+                                            <td>{row.label}</td>
+                                            <td>{row.bookings}</td>
+                                            <td>{row.guests}</td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={3}>
+                                            No upcoming workload data.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </section>
+
+                    <section className="print-report-section">
+                        <h2>High-Risk Bookings</h2>
+                        <table className="print-report-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Client</th>
+                                    <th>Event</th>
+                                    <th>Booking</th>
+                                    <th>Payment</th>
+                                    <th>Outstanding</th>
+                                    <th>Policy</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {highRiskBookings.length > 0 ? (
+                                    highRiskBookings.map((row) => (
+                                        <tr key={row.id}>
+                                            <td>#{row.id}</td>
+                                            <td>
+                                                {row.company_name ||
+                                                    row.client_name}
+                                            </td>
+                                            <td>{row.type_of_event}</td>
+                                            <td>
+                                                {cleanLabel(row.booking_status)}
+                                            </td>
+                                            <td>
+                                                {cleanLabel(row.payment_status)}
+                                            </td>
+                                            <td>{money(row.outstanding)}</td>
+                                            <td>
+                                                {row.policy?.label ||
+                                                    cleanLabel(
+                                                        row.policy?.state,
+                                                    )}
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={7}>
+                                            No high-risk bookings.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </section>
+
+                    <footer className="print-report-footer">
+                        <strong>BCCC EASE</strong>
+                        <span>
+                            Booking analytics generated for internal operations
+                            review.
+                        </span>
+                    </footer>
+                </main>
             </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
+        </>
+    );
 }

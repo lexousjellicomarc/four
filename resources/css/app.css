@@ -76,7 +76,7 @@
     --chart-3: oklch(0.398 0.07 227.392);
     --chart-4: oklch(0.828 0.189 84.429);
     --chart-5: oklch(0.769 0.188 70.08);
-    --radius: 0.9rem;
+    --radius: 0.65rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
     --sidebar-primary: oklch(0.205 0 0);
@@ -134,30 +134,154 @@
 
     body {
         @apply bg-background text-foreground;
-        background:
-            radial-gradient(circle at top left, rgba(255,255,255,0.9), rgba(255,255,255,0) 26%),
-            linear-gradient(180deg, #f7f4ec 0%, #f4f1ea 46%, #efe8dc 100%);
-        color: #1f262f;
+        min-width: 320px;
+        background: #f5f7fa;
+        color: #111827;
+        overflow-x: hidden;
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
     }
 
     html.dark body {
-        background:
-            radial-gradient(circle at top left, rgba(122, 154, 255, 0.14), rgba(0,0,0,0) 24%),
-            linear-gradient(180deg, #111827 0%, #0f172a 46%, #111827 100%);
+        background: #0b1220;
         color: #f8fafc;
+    }
+
+    button,
+    a,
+    input,
+    select,
+    textarea {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    input,
+    select,
+    textarea {
+        font: inherit;
+    }
+
+    select option {
+        color: #111827;
+        background: #ffffff;
+    }
+
+    html.dark select option {
+        color: #f8fafc;
+        background: #0f172a;
     }
 }
 
 @layer utilities {
-    .scrollbar-hide {
+    .scrollbar-hide,
+    .bccc-hidden-scrollbar,
+    .bccc-no-scrollbar {
         -ms-overflow-style: none;
         scrollbar-width: none;
     }
 
-    .scrollbar-hide::-webkit-scrollbar {
+    .scrollbar-hide::-webkit-scrollbar,
+    .bccc-hidden-scrollbar::-webkit-scrollbar,
+    .bccc-no-scrollbar::-webkit-scrollbar {
         display: none;
     }
 
+    .bccc-safe-bottom {
+        padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    }
+
+    .bccc-safe-top {
+        padding-top: max(1rem, env(safe-area-inset-top));
+    }
+
+    .bccc-hover-lift {
+        transform: translateY(0);
+        transition:
+            transform 220ms ease,
+            box-shadow 220ms ease,
+            border-color 220ms ease;
+    }
+
+    .bccc-hover-lift:hover {
+        transform: translateY(-3px);
+    }
+}
+
+@keyframes public-sheen-sweep {
+    from {
+        transform: translateX(-135%) skewX(-16deg);
+    }
+
+    to {
+        transform: translateX(135%) skewX(-16deg);
+    }
+}
+
+@keyframes bccc-feedback-progress {
+    from {
+        width: 100%;
+    }
+
+    to {
+        width: 0%;
+    }
+}
+
+@keyframes bccc-soft-float {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0);
+    }
+
+    50% {
+        transform: translate3d(0, -8px, 0);
+    }
+}
+
+@keyframes bccc-lux-shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+@layer utilities {
+    .bccc-soft-float {
+        animation: bccc-soft-float 5.5s ease-in-out infinite;
+    }
+
+    .sheen-reveal,
+    .public-image-sheen {
+        position: relative;
+        isolation: isolate;
+    }
+
+    .sheen-reveal::after,
+    .public-image-sheen::after {
+        content: '';
+        position: absolute;
+        inset: -20%;
+        z-index: 3;
+        pointer-events: none;
+        background: linear-gradient(
+            100deg,
+            transparent 30%,
+            rgba(255, 255, 255, 0.3) 50%,
+            transparent 70%
+        );
+        transform: translateX(-135%) skewX(-16deg);
+        animation: public-sheen-sweep 1.25s ease-out forwards;
+    }
+}
+
+/* =========================================================
+   PUBLIC WEBSITE BASE
+   ========================================================= */
+
+@layer components {
     .public-shell {
         @apply relative isolate overflow-hidden;
     }
@@ -168,9 +292,34 @@
         inset: 0;
         pointer-events: none;
         background:
-            radial-gradient(circle at top right, rgba(15,139,109,0.08), transparent 26%),
-            radial-gradient(circle at bottom left, rgba(22,69,172,0.08), transparent 30%);
+            radial-gradient(
+                circle at top right,
+                rgba(15, 139, 109, 0.08),
+                transparent 26%
+            ),
+            radial-gradient(
+                circle at bottom left,
+                rgba(22, 69, 172, 0.08),
+                transparent 30%
+            );
         z-index: -1;
+    }
+
+    .public-container {
+        width: min(100% - 2rem, 1500px);
+        margin-inline: auto;
+    }
+
+    .public-section {
+        padding-block: clamp(3rem, 6vw, 6.5rem);
+    }
+
+    .public-section-title {
+        @apply text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl dark:text-white;
+    }
+
+    .public-chip {
+        @apply inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.28em] uppercase;
     }
 
     .glass-card {
@@ -183,46 +332,9 @@
         box-shadow: 0 18px 55px rgba(2, 8, 23, 0.4);
     }
 
-    .public-container {
-        @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
-    }
-
-    .public-section-title {
-        @apply text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl dark:text-white;
-    }
-
-    .public-chip {
-        @apply inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em];
-    }
-
     .hero-shadow {
         box-shadow: 0 30px 90px rgba(15, 23, 42, 0.18);
     }
-
-    .sheen-reveal {
-    position: relative;
-    isolation: isolate;
-}
-
-.sheen-reveal::after {
-    content: '';
-    position: absolute;
-    inset: -20%;
-    background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.34) 50%, transparent 70%);
-    transform: translateX(-135%) skewX(-16deg);
-    animation: public-sheen-sweep 1.25s ease-out forwards;
-    pointer-events: none;
-    z-index: 3;
-}
-
-@keyframes public-sheen-sweep {
-    from {
-        transform: translateX(-135%) skewX(-16deg);
-    }
-    to {
-        transform: translateX(135%) skewX(-16deg);
-    }
-}
 
     .public-hover-card {
         transition:
@@ -240,885 +352,851 @@
         box-shadow: 0 28px 80px rgba(2, 8, 23, 0.48);
     }
 
-    .public-image-sheen {
+    .bccc-public-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: 9999px;
+        border: 1px solid rgba(15, 23, 42, 0.14);
+        background: rgba(15, 23, 42, 0.04);
+        padding: 0.4rem 0.75rem;
+        font-size: 0.72rem;
+        font-weight: 900;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #334155;
+    }
+
+    .dark .bccc-public-eyebrow {
+        border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.06);
+        color: #e2e8f0;
+    }
+
+    .bccc-public-heading {
+        margin-top: 1rem;
+        max-width: 64rem;
+        font-size: clamp(2rem, 5vw, 4.5rem);
+        font-weight: 950;
+        line-height: 0.95;
+        letter-spacing: -0.06em;
+        color: #111827;
+    }
+
+    .dark .bccc-public-heading {
+        color: #f8fafc;
+    }
+
+    .bccc-public-panel {
         position: relative;
-        isolation: isolate;
+        overflow: hidden;
+        border-radius: 1.25rem;
+        border: 1px solid rgba(15, 23, 42, 0.1);
+        background: rgba(255, 255, 255, 0.86);
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+        backdrop-filter: blur(18px);
     }
 
-    .public-image-sheen::after {
-        content: '';
-        position: absolute;
-        inset: -20%;
-        background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.30) 50%, transparent 70%);
-        transform: translateX(-135%) skewX(-16deg);
-        animation: public-sheen-sweep 1.25s ease-out forwards;
-        pointer-events: none;
-        z-index: 3;
+    .dark .bccc-public-panel {
+        border-color: rgba(255, 255, 255, 0.1);
+        background: rgba(15, 23, 32, 0.78);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
     }
 
-    @keyframes public-sheen-sweep {
-        from {
-            transform: translateX(-135%) skewX(-16deg);
-        }
-        to {
-            transform: translateX(135%) skewX(-16deg);
-        }
+    .bccc-public-card {
+        border-radius: 1rem;
+        border: 1px solid rgba(15, 23, 42, 0.1);
+        background: rgba(255, 255, 255, 0.86);
+        box-shadow: 0 14px 35px rgba(15, 23, 42, 0.06);
+        backdrop-filter: blur(14px);
+        transition:
+            transform 0.24s ease,
+            box-shadow 0.24s ease,
+            border-color 0.24s ease;
     }
 
-    @layer utilities {
-        @keyframes bccc-feedback-progress {
-          from {
-            width: 100%;
-          }
+    .bccc-public-card:hover {
+        transform: translateY(-3px);
+        border-color: rgba(15, 23, 42, 0.18);
+        box-shadow: 0 22px 52px rgba(15, 23, 42, 0.1);
+    }
 
-          to {
-            width: 0%;
-          }
-        }
+    .dark .bccc-public-card {
+        border-color: rgba(255, 255, 255, 0.1);
+        background: rgba(15, 23, 32, 0.72);
+        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+    }
 
-        @keyframes bccc-soft-float {
-          0%,
-          100% {
-            transform: translate3d(0, 0, 0);
-          }
+    .bccc-lux-button {
+        display: inline-flex;
+        min-height: 2.65rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.75rem;
+        border: 1px solid #20242b;
+        background: #20242b;
+        padding-inline: 1.1rem;
+        font-size: 0.875rem;
+        font-weight: 800;
+        color: white;
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+        transition:
+            transform 0.2s ease,
+            box-shadow 0.2s ease,
+            filter 0.2s ease;
+    }
 
-          50% {
-            transform: translate3d(0, -8px, 0);
-          }
-        }
+    .bccc-lux-button:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.05);
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+    }
 
-        @keyframes bccc-lux-shimmer {
-          0% {
-            transform: translateX(-100%);
-          }
+    .bccc-lux-button-secondary {
+        display: inline-flex;
+        min-height: 2.65rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(15, 23, 42, 0.12);
+        background: rgba(255, 255, 255, 0.78);
+        padding-inline: 1.1rem;
+        font-size: 0.875rem;
+        font-weight: 800;
+        color: #111827;
+        backdrop-filter: blur(12px);
+        transition:
+            transform 0.2s ease,
+            background 0.2s ease,
+            border-color 0.2s ease;
+    }
 
-          100% {
-            transform: translateX(100%);
-          }
-        }
+    .bccc-lux-button-secondary:hover {
+        transform: translateY(-1px);
+        border-color: rgba(15, 23, 42, 0.2);
+        background: rgba(255, 255, 255, 0.95);
+    }
 
-        .bccc-hidden-scrollbar {
-          scrollbar-width: none;
-          -ms-overflow-style: none;
-        }
+    .dark .bccc-lux-button-secondary {
+        border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(15, 23, 32, 0.72);
+        color: #f8fafc;
+    }
+}
 
-        .bccc-hidden-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-
-        .bccc-hover-lift {
-          transform: translateY(0);
-        }
-
-        .bccc-hover-lift:hover {
-          transform: translateY(-3px);
-        }
-
-        .bccc-soft-float {
-          animation: bccc-soft-float 5.5s ease-in-out infinite;
-        }
-
-        .bccc-safe-bottom {
-          padding-bottom: max(1rem, env(safe-area-inset-bottom));
-        }
-
-        .bccc-safe-top {
-          padding-top: max(1rem, env(safe-area-inset-top));
-        }
-      }
-
-      @layer components {
-        .bccc-lux-panel {
-          position: relative;
-          isolation: isolate;
-        }
-
-        .bccc-lux-panel::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          z-index: -1;
-          pointer-events: none;
-          background:
-            linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.055) 46%, transparent 58%),
-            radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 38%);
-          opacity: 0.9;
-        }
-
-        .bccc-lux-panel::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          border-radius: inherit;
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.08),
-            inset 0 -1px 0 rgba(0, 0, 0, 0.12);
-        }
-
-        .bccc-role-page input,
-        .bccc-role-page select,
-        .bccc-role-page textarea {
-          color: inherit;
-        }
-
-        .bccc-role-page input::placeholder,
-        .bccc-role-page textarea::placeholder {
-          color: currentColor;
-          opacity: 0.42;
-        }
-
-        .bccc-role-page select option {
-          color: #111827;
-          background: #ffffff;
-        }
-
-        .bccc-role-page button,
-        .bccc-role-page a {
-          -webkit-tap-highlight-color: transparent;
-        }
-
-        .bccc-role-content > section,
-        .bccc-role-content > form,
-        .bccc-role-content > div {
-          min-width: 0;
-        }
-
-        .public-container {
-          width: min(100% - 2rem, 1500px);
-          margin-inline: auto;
-        }
-
-        .public-section {
-          padding-block: clamp(3rem, 6vw, 6.5rem);
-        }
-
-        .bccc-public-eyebrow {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          border-radius: 9999px;
-          border: 1px solid rgba(146, 64, 14, 0.18);
-          background: rgba(180, 83, 9, 0.08);
-          padding: 0.4rem 0.75rem;
-          font-size: 0.72rem;
-          font-weight: 900;
-          letter-spacing: 0.22em;
-          text-transform: uppercase;
-          color: rgb(146, 64, 14);
-        }
-
-        .dark .bccc-public-eyebrow {
-          border-color: rgba(252, 211, 77, 0.22);
-          background: rgba(252, 211, 77, 0.09);
-          color: rgb(253, 230, 138);
-        }
-
-        .bccc-public-heading {
-          margin-top: 1rem;
-          max-width: 64rem;
-          font-size: clamp(2rem, 5vw, 4.5rem);
-          font-weight: 950;
-          line-height: 0.95;
-          letter-spacing: -0.06em;
-          color: rgb(28, 25, 23);
-        }
-
-        .dark .bccc-public-heading {
-          color: rgb(250, 250, 249);
-        }
-
-        .bccc-public-panel {
-          position: relative;
-          overflow: hidden;
-          border-radius: 2rem;
-          border: 1px solid rgba(120, 113, 108, 0.16);
-          background:
-            linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(250, 250, 249, 0.72)),
-            radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 40%);
-          box-shadow:
-            0 24px 70px rgba(28, 25, 23, 0.08),
-            inset 0 1px 0 rgba(255, 255, 255, 0.7);
-          backdrop-filter: blur(18px);
-        }
-
-        .dark .bccc-public-panel {
-          border-color: rgba(255, 255, 255, 0.1);
-          background:
-            linear-gradient(145deg, rgba(28, 25, 23, 0.88), rgba(12, 10, 9, 0.76)),
-            radial-gradient(circle at top left, rgba(252, 211, 77, 0.12), transparent 40%);
-          box-shadow:
-            0 24px 70px rgba(0, 0, 0, 0.32),
-            inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        }
-
-        .bccc-public-panel::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          background: linear-gradient(
-            110deg,
-            transparent 0%,
-            rgba(255, 255, 255, 0.14) 42%,
-            transparent 55%
-          );
-          transform: translateX(-100%);
-          transition: transform 0.8s ease;
-        }
-
-        .bccc-public-panel:hover::before {
-          transform: translateX(100%);
-        }
-
-        .bccc-public-card {
-          border-radius: 1.5rem;
-          border: 1px solid rgba(120, 113, 108, 0.14);
-          background: rgba(255, 255, 255, 0.78);
-          box-shadow: 0 18px 45px rgba(28, 25, 23, 0.06);
-          backdrop-filter: blur(14px);
-          transition:
-            transform 0.28s ease,
-            box-shadow 0.28s ease,
-            border-color 0.28s ease;
-        }
-
-        .bccc-public-card:hover {
-          transform: translateY(-4px);
-          border-color: rgba(146, 64, 14, 0.22);
-          box-shadow: 0 24px 60px rgba(28, 25, 23, 0.1);
-        }
-
-        .dark .bccc-public-card {
-          border-color: rgba(255, 255, 255, 0.1);
-          background: rgba(28, 25, 23, 0.72);
-          box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
-        }
-
-        .dark .bccc-public-card:hover {
-          border-color: rgba(252, 211, 77, 0.22);
-          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
-        }
-
-        .bccc-lux-button {
-          display: inline-flex;
-          min-height: 2.75rem;
-          align-items: center;
-          justify-content: center;
-          border-radius: 9999px;
-          border: 1px solid rgba(146, 64, 14, 0.22);
-          background:
-            linear-gradient(135deg, rgba(120, 53, 15, 0.94), rgba(180, 83, 9, 0.94)),
-            radial-gradient(circle at top left, rgba(255, 255, 255, 0.22), transparent 38%);
-          padding-inline: 1.25rem;
-          font-size: 0.875rem;
-          font-weight: 900;
-          color: white;
-          box-shadow: 0 16px 40px rgba(120, 53, 15, 0.22);
-          transition:
-            transform 0.25s ease,
-            box-shadow 0.25s ease,
-            filter 0.25s ease;
-        }
-
-        .bccc-lux-button:hover {
-          transform: translateY(-2px);
-          filter: brightness(1.05);
-          box-shadow: 0 22px 55px rgba(120, 53, 15, 0.28);
-        }
-
-        .bccc-lux-button-secondary {
-          display: inline-flex;
-          min-height: 2.75rem;
-          align-items: center;
-          justify-content: center;
-          border-radius: 9999px;
-          border: 1px solid rgba(120, 113, 108, 0.18);
-          background: rgba(255, 255, 255, 0.72);
-          padding-inline: 1.25rem;
-          font-size: 0.875rem;
-          font-weight: 900;
-          color: rgb(41, 37, 36);
-          backdrop-filter: blur(12px);
-          transition:
-            transform 0.25s ease,
-            background 0.25s ease,
-            border-color 0.25s ease;
-        }
-
-        .bccc-lux-button-secondary:hover {
-          transform: translateY(-2px);
-          border-color: rgba(146, 64, 14, 0.22);
-          background: rgba(255, 255, 255, 0.9);
-        }
-
-        .dark .bccc-lux-button-secondary {
-          border-color: rgba(255, 255, 255, 0.12);
-          background: rgba(28, 25, 23, 0.72);
-          color: rgb(250, 250, 249);
-        }
-
-        .dark .bccc-lux-button-secondary:hover {
-          border-color: rgba(252, 211, 77, 0.24);
-          background: rgba(41, 37, 36, 0.88);
-        }
-      }
-
-      @media (max-width: 768px) {
-        @layer components {
-          .public-container {
-            width: min(100% - 1rem, 1500px);
-          }
-
-          .public-section {
-            padding-block: 3rem;
-          }
-
-          .bccc-public-heading {
-            letter-spacing: -0.045em;
-          }
-
-          .bccc-role-page {
-            overflow-x: hidden;
-          }
-
-          .bccc-role-content {
-            gap: 1rem;
-          }
-        }
-      }
-      /* BCCC EASE Batch 1 — Unified Backend Style Additions
-   Append this file to the bottom of resources/css/app.css.
-   This keeps the public homepage/hero intact while making backend, booking list,
-   dashboard cards, and configuration pages share one clean visual language. */
+/* =========================================================
+   CLEAN BACKEND / ADMIN THEME
+   ========================================================= */
 
 @layer components {
-    .ease-role-shell {
-      isolation: isolate;
+    .backend-page-frame {
+        @apply min-w-0;
     }
 
-    .ease-role-content > * {
-      min-width: 0;
+    .backend-page-shell {
+        @apply min-w-0;
     }
 
-    .ease-page-hero,
-    .ease-card,
-    .ease-role-content section,
-    .ease-role-content form {
-      -webkit-font-smoothing: antialiased;
-      text-rendering: geometricPrecision;
+    .backend-page-content {
+        @apply min-w-0;
     }
 
-    .ease-card {
-      position: relative;
-      isolation: isolate;
+    .backend-page-content > *,
+    .backend-page-shell > *,
+    .backend-booking-page > * {
+        min-width: 0;
     }
 
-    .ease-card::after {
-      content: '';
-      pointer-events: none;
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.35),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+    .backend-topbar {
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
     }
 
-    .dark .ease-card::after {
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.22);
+    .backend-booking-card {
+        @apply rounded-2xl border bg-white shadow-sm;
+        border-color: #e3e7ec;
     }
 
-    .ease-input {
-      height: 2.85rem;
-      width: 100%;
-      border-radius: 1rem;
-      border: 1px solid rgba(28, 25, 23, 0.12);
-      background: rgba(255, 255, 255, 0.78);
-      padding-inline: 1rem;
-      color: rgb(28, 25, 23);
-      font-size: 0.9rem;
-      outline: none;
-      transition:
-        border-color 0.2s ease,
-        box-shadow 0.2s ease,
-        background 0.2s ease;
+    .dark .backend-booking-card {
+        @apply bg-[#0f1720];
+        border-color: #1f2937;
     }
 
-    .dark .ease-input {
-      border-color: rgba(255, 255, 255, 0.11);
-      background: rgba(0, 0, 0, 0.16);
-      color: rgb(250, 250, 249);
+    .backend-booking-input {
+        @apply h-10 w-full rounded-lg border bg-white px-3 text-sm text-slate-900 transition outline-none;
+        border-color: #d7dce2;
     }
 
-    .ease-input:hover {
-      border-color: rgba(146, 64, 14, 0.22);
-      background: rgba(255, 255, 255, 0.92);
+    .backend-booking-input::placeholder {
+        color: #94a3b8;
     }
 
-    .dark .ease-input:hover {
-      border-color: rgba(252, 211, 77, 0.2);
-      background: rgba(0, 0, 0, 0.22);
+    .backend-booking-input:hover {
+        border-color: #b8c0cc;
+        background: #ffffff;
     }
 
-    .ease-input:focus {
-      border-color: rgba(146, 64, 14, 0.38);
-      box-shadow: 0 0 0 4px rgba(146, 64, 14, 0.08);
+    .backend-booking-input:focus {
+        border-color: #64748b;
+        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.16);
     }
 
-    .dark .ease-input:focus {
-      border-color: rgba(252, 211, 77, 0.34);
-      box-shadow: 0 0 0 4px rgba(252, 211, 77, 0.08);
+    .dark .backend-booking-input {
+        @apply bg-slate-900 text-slate-100;
+        border-color: #334155;
     }
 
-    .ease-input::placeholder {
-      color: currentColor;
-      opacity: 0.36;
+    .dark .backend-booking-input:hover {
+        border-color: #475569;
+        background: #0f172a;
     }
 
-    .ease-input:disabled {
-      cursor: not-allowed;
-      opacity: 0.55;
+    .dark .backend-booking-input::placeholder {
+        color: #64748b;
     }
 
-    .ease-input option {
-      background: #ffffff;
-      color: #1c1917;
+    .backend-booking-file {
+        @apply block h-10 w-full cursor-pointer rounded-lg border bg-white text-sm text-slate-700;
+        border-color: #d7dce2;
     }
 
-    .dark .ease-input option {
-      background: #171511;
-      color: #fafaf9;
+    .backend-booking-file::file-selector-button {
+        height: 100%;
+        border: 0;
+        margin-right: 0.75rem;
+        padding: 0 1rem;
+        background: #f1f5f9;
+        color: #334155;
+        font-weight: 600;
+        cursor: pointer;
     }
 
-    /* Compatibility: normalize older backend glass cards without touching public hero. */
-    .ease-role-content .rounded-\[2rem\].border.border-white\/10.bg-white\/\[0\.06\],
-    .ease-role-content .rounded-3xl.border.border-white\/10.bg-white\/\[0\.06\],
-    .ease-role-content .rounded-\[2rem\].border.border-white\/10.bg-white\/\[0\.055\],
-    .ease-role-content .rounded-\[2rem\].border.border-white\/10.bg-white\/\[0\.065\] {
-      border-color: rgba(28, 25, 23, 0.1) !important;
-      background: rgba(255, 255, 255, 0.78) !important;
-      color: rgb(28, 25, 23);
-      box-shadow: 0 18px 50px rgba(28, 25, 23, 0.08);
+    .dark .backend-booking-file {
+        @apply bg-slate-900 text-slate-200;
+        border-color: #334155;
     }
 
-    .dark .ease-role-content .rounded-\[2rem\].border.border-white\/10.bg-white\/\[0\.06\],
-    .dark .ease-role-content .rounded-3xl.border.border-white\/10.bg-white\/\[0\.06\],
-    .dark .ease-role-content .rounded-\[2rem\].border.border-white\/10.bg-white\/\[0\.055\],
-    .dark .ease-role-content .rounded-\[2rem\].border.border-white\/10.bg-white\/\[0\.065\] {
-      border-color: rgba(255, 255, 255, 0.1) !important;
-      background: rgba(255, 255, 255, 0.06) !important;
-      color: rgb(250, 250, 249);
-      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+    .dark .backend-booking-file::file-selector-button {
+        background: #1e293b;
+        color: #e2e8f0;
     }
 
-    /* Keep old bk pages from overpowering the global style until Batch 2 replaces them. */
-    .ease-role-content .bk-lux-root {
-      color: inherit;
-    }
-  }
-  @layer components {
-    :root {
-      --bccc-ivory: #f7f2e8;
-      --bccc-champagne: #e8d8b5;
-      --bccc-gold: #c9a96a;
-      --bccc-charcoal: #171812;
-      --bccc-black: #0d0d0b;
-      --bccc-stone: #7c7566;
-      --bccc-olive: #315c4d;
-      --bccc-teal: #1f6e73;
+    .backend-booking-label {
+        @apply text-[11px] font-bold tracking-[0.16em] text-slate-500 uppercase dark:text-slate-400;
     }
 
-    .bccc-workspace-page {
-      position: relative;
-      isolation: isolate;
+    .backend-booking-icon {
+        @apply flex h-10 w-10 items-center justify-center rounded-lg border bg-white text-slate-700 shadow-sm dark:bg-slate-800 dark:text-slate-200;
+        border-color: #e3e7ec;
     }
 
-    .bccc-workspace-page::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      z-index: -1;
-      pointer-events: none;
-      background:
-        radial-gradient(circle at 20% 10%, rgba(201, 169, 106, 0.09), transparent 34%),
-        radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.035), transparent 30%);
+    .dark .backend-booking-icon {
+        border-color: #1f2937;
     }
 
-    .bccc-workspace-hero,
-    .bccc-workspace-panel,
-    .bccc-workspace-card,
-    .bccc-kpi-card {
-      position: relative;
-      isolation: isolate;
+    .backend-booking-detail,
+    .backend-booking-summary-card {
+        @apply rounded-xl border bg-[#f8fafc] p-4 dark:bg-slate-900/70;
+        border-color: #e3e7ec;
     }
 
-    .bccc-workspace-hero::after,
-    .bccc-workspace-panel::after,
-    .bccc-workspace-card::after,
-    .bccc-kpi-card::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      border-radius: inherit;
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.075),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+    .dark .backend-booking-detail,
+    .dark .backend-booking-summary-card {
+        border-color: #1f2937;
     }
 
-    .bccc-workspace-content > * {
-      min-width: 0;
+    .backend-booking-row {
+        transition: background-color 0.18s ease;
     }
 
-    .bccc-workspace-content section,
-    .bccc-workspace-content form,
-    .bccc-workspace-content article,
-    .bccc-workspace-content aside {
-      min-width: 0;
+    .backend-booking-row:hover {
+        background: rgba(248, 250, 252, 0.9);
     }
 
-    .bccc-backend-input,
-    .ease-input {
-      height: 2.85rem;
-      width: 100%;
-      border-radius: 0.95rem;
-      border: 1px solid rgba(255, 255, 255, 0.11);
-      background: rgba(0, 0, 0, 0.14);
-      padding-inline: 1rem;
-      color: var(--bccc-ivory);
-      font-size: 0.9rem;
-      outline: none;
-      transition:
-        border-color 0.2s ease,
-        box-shadow 0.2s ease,
-        background 0.2s ease;
+    .dark .backend-booking-row:hover {
+        background: rgba(15, 23, 42, 0.55);
     }
 
-    .bccc-backend-input:hover,
-    .ease-input:hover {
-      border-color: rgba(255, 255, 255, 0.2);
-    }
-
-    .bccc-backend-input:focus,
-    .ease-input:focus {
-      border-color: rgba(201, 169, 106, 0.5);
-      background: rgba(0, 0, 0, 0.22);
-      box-shadow: 0 0 0 4px rgba(201, 169, 106, 0.1);
-    }
-
-    .bccc-backend-input:disabled,
-    .ease-input:disabled {
-      cursor: not-allowed;
-      opacity: 0.55;
-    }
-
-    .bccc-backend-input::placeholder,
-    .ease-input::placeholder {
-      color: currentColor;
-      opacity: 0.32;
-    }
-
-    .bccc-backend-input option,
-    .ease-input option {
-      background: #171812;
-      color: #f7f2e8;
-    }
-
-    .bccc-backend-button-primary {
-      display: inline-flex;
-      min-height: 2.75rem;
-      align-items: center;
-      justify-content: center;
-      border-radius: 9999px;
-      border: 1px solid rgba(201, 169, 106, 0.35);
-      background: rgba(201, 169, 106, 0.16);
-      padding-inline: 1.15rem;
-      font-size: 0.875rem;
-      font-weight: 900;
-      color: #f7f2e8;
-      transition:
-        transform 0.22s ease,
-        background 0.22s ease,
-        border-color 0.22s ease;
-    }
-
-    .bccc-backend-button-primary:hover {
-      transform: translateY(-1px);
-      border-color: rgba(201, 169, 106, 0.5);
-      background: rgba(201, 169, 106, 0.24);
-    }
-
-    .bccc-backend-button-secondary {
-      display: inline-flex;
-      min-height: 2.75rem;
-      align-items: center;
-      justify-content: center;
-      border-radius: 9999px;
-      border: 1px solid rgba(255, 255, 255, 0.11);
-      background: rgba(255, 255, 255, 0.07);
-      padding-inline: 1.15rem;
-      font-size: 0.875rem;
-      font-weight: 900;
-      color: #f7f2e8;
-      transition:
-        transform 0.22s ease,
-        background 0.22s ease,
-        border-color 0.22s ease;
-    }
-
-    .bccc-backend-button-secondary:hover {
-      transform: translateY(-1px);
-      border-color: rgba(255, 255, 255, 0.2);
-      background: rgba(255, 255, 255, 0.11);
-    }
-
-    .bccc-backend-card {
-      border-radius: 1.5rem;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      background: rgba(255, 255, 255, 0.055);
-      box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
-      backdrop-filter: blur(16px);
-    }
-
-    .bccc-backend-table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-    }
-
-    .bccc-backend-table th {
-      padding: 0.9rem 1rem;
-      color: rgba(247, 242, 232, 0.48);
-      font-size: 0.72rem;
-      font-weight: 900;
-      letter-spacing: 0.16em;
-      text-align: left;
-      text-transform: uppercase;
-    }
-
-    .bccc-backend-table td {
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
-      padding: 1rem;
-      color: rgba(247, 242, 232, 0.76);
-      font-size: 0.9rem;
-    }
-
-    .bccc-backend-table tr:hover td {
-      background: rgba(255, 255, 255, 0.035);
-    }
-
-    .bccc-admin-normalize {
-      color: var(--bccc-ivory);
-    }
-
-    .bccc-admin-normalize h1,
-    .bccc-admin-normalize h2,
-    .bccc-admin-normalize h3 {
-      color: var(--bccc-ivory);
-      letter-spacing: -0.035em;
-    }
-
-    .bccc-admin-normalize p {
-      color: rgba(247, 242, 232, 0.65);
-    }
-
-    .bccc-admin-normalize button,
-    .bccc-admin-normalize a {
-      -webkit-tap-highlight-color: transparent;
-    }
-  }
-
-  @layer utilities {
-    .bccc-no-scrollbar {
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-    }
-
-    .bccc-no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-  }
-  @layer components {
-    .bccc-detail-item {
-      border-radius: 1.25rem;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      background: rgba(0, 0, 0, 0.10);
-      padding: 1rem;
-    }
-
-    .bccc-summary-card {
-      display: flex;
-      align-items: center;
-      gap: 0.9rem;
-      border-radius: 1.35rem;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      background: rgba(0, 0, 0, 0.12);
-      padding: 1rem;
-      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.14);
-    }
-
-    .bccc-calendar-day-soft {
-      border-radius: 1.35rem;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      background: rgba(255, 255, 255, 0.055);
-    }
-  }
-  @layer components {
+    .ease-role-shell,
+    .ease-role-content,
+    .bccc-workspace-page,
+    .bccc-workspace-content,
     .bccc-config-page {
-      min-width: 0;
+        min-width: 0;
     }
 
-    .bccc-config-card {
-      border-radius: 1.75rem;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      background:
-        radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 36%),
-        rgba(255, 255, 255, 0.055);
-      padding: 1.25rem;
-      box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
-      backdrop-filter: blur(16px);
+    .ease-role-content > *,
+    .bccc-workspace-content > *,
+    .bccc-config-page > * {
+        min-width: 0;
+    }
+
+    .ease-input,
+    .bccc-backend-input {
+        @apply h-10 w-full rounded-lg border bg-white px-3 text-sm text-slate-900 transition outline-none dark:bg-slate-900 dark:text-slate-100;
+        border-color: #d7dce2;
+    }
+
+    .dark .ease-input,
+    .dark .bccc-backend-input {
+        border-color: #334155;
+    }
+
+    .ease-input:focus,
+    .bccc-backend-input:focus {
+        border-color: #64748b;
+        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.16);
+    }
+
+    .ease-input::placeholder,
+    .bccc-backend-input::placeholder {
+        color: #94a3b8;
+    }
+
+    .bccc-backend-card,
+    .bccc-config-card,
+    .bccc-workspace-card,
+    .bccc-workspace-panel,
+    .bccc-kpi-card {
+        @apply rounded-2xl border bg-white shadow-sm dark:bg-[#0f1720];
+        border-color: #e3e7ec;
+    }
+
+    .dark .bccc-backend-card,
+    .dark .bccc-config-card,
+    .dark .bccc-workspace-card,
+    .dark .bccc-workspace-panel,
+    .dark .bccc-kpi-card {
+        border-color: #1f2937;
     }
 
     .bccc-config-icon {
-      display: inline-flex;
-      height: 2.75rem;
-      width: 2.75rem;
-      flex-shrink: 0;
-      align-items: center;
-      justify-content: center;
-      border-radius: 1rem;
-      border: 1px solid rgba(201, 169, 106, 0.22);
-      background: rgba(201, 169, 106, 0.10);
-      color: #e8d8b5;
+        @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-700 shadow-sm dark:bg-slate-800 dark:text-slate-200;
+        border-color: #e3e7ec;
     }
 
-    .bccc-config-eyebrow {
-      color: #e8d8b5;
-      font-size: 0.68rem;
-      font-weight: 900;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
+    .dark .bccc-config-icon {
+        border-color: #1f2937;
+    }
+
+    .bccc-config-eyebrow,
+    .bccc-config-label {
+        @apply text-[11px] font-bold tracking-[0.16em] text-slate-500 uppercase dark:text-slate-400;
     }
 
     .bccc-config-title {
-      color: #f7f2e8;
-      font-size: 1.25rem;
-      font-weight: 900;
-      letter-spacing: -0.03em;
-    }
-
-    .bccc-config-label {
-      color: rgba(247, 242, 232, 0.48);
-      font-size: 0.68rem;
-      font-weight: 900;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
+        @apply text-lg font-black tracking-[-0.03em] text-slate-950 dark:text-white;
     }
 
     .bccc-config-pill {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 9999px;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      background: rgba(0, 0, 0, 0.12);
-      padding: 0.35rem 0.75rem;
-      color: rgba(247, 242, 232, 0.68);
-      font-size: 0.72rem;
-      font-weight: 900;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+        @apply inline-flex items-center rounded-lg border bg-[#f8fafc] px-3 py-1 text-xs font-semibold tracking-[0.08em] text-slate-600 uppercase dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300;
+        border-color: #e3e7ec;
     }
 
-    .bccc-config-action {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 9999px;
-      border: 1px solid rgba(255, 255, 255, 0.11);
-      background: rgba(255, 255, 255, 0.07);
-      padding: 0.55rem 0.85rem;
-      color: #f7f2e8;
-      font-size: 0.72rem;
-      font-weight: 900;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        transform 0.2s ease;
-    }
-
-    .bccc-config-action:hover {
-      transform: translateY(-1px);
-      border-color: rgba(201, 169, 106, 0.32);
-      background: rgba(201, 169, 106, 0.12);
+    .bccc-config-action,
+    .bccc-config-shortcut,
+    .bccc-backend-button-primary,
+    .bccc-backend-button-secondary {
+        @apply inline-flex min-h-10 items-center justify-center rounded-lg border bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+        border-color: #d7dce2;
     }
 
     .bccc-config-danger {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 9999px;
-      border: 1px solid rgba(252, 165, 165, 0.22);
-      background: rgba(248, 113, 113, 0.10);
-      padding: 0.55rem 0.85rem;
-      color: #fecaca;
-      font-size: 0.72rem;
-      font-weight: 900;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        transform 0.2s ease;
+        @apply inline-flex min-h-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300;
     }
 
-    .bccc-config-danger:hover {
-      transform: translateY(-1px);
-      border-color: rgba(252, 165, 165, 0.35);
-      background: rgba(248, 113, 113, 0.16);
+    .bccc-detail-item,
+    .bccc-summary-card,
+    .bccc-calendar-day-soft {
+        @apply rounded-xl border bg-[#f8fafc] p-4 dark:bg-slate-900/70;
+        border-color: #e3e7ec;
     }
 
-    .bccc-config-shortcut {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      border-radius: 9999px;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      background: rgba(255, 255, 255, 0.065);
-      padding: 0.65rem 1rem;
-      color: #f7f2e8;
-      font-size: 0.875rem;
-      font-weight: 900;
-      transition:
-        transform 0.2s ease,
-        border-color 0.2s ease,
-        background 0.2s ease;
+    .dark .bccc-detail-item,
+    .dark .bccc-summary-card,
+    .dark .bccc-calendar-day-soft {
+        border-color: #1f2937;
+    }
+}
+
+/* =========================================================
+   BCCC BOOKING ENGINE LAYOUT
+   Hotel-booking style:
+   top reservation bar, area cards, left steps, right summary.
+   No special code/rates field.
+   ========================================================= */
+
+@layer components {
+    .bccc-booking-engine {
+        @apply relative space-y-5;
     }
 
-    .bccc-config-shortcut:hover {
-      transform: translateY(-1px);
-      border-color: rgba(201, 169, 106, 0.35);
-      background: rgba(201, 169, 106, 0.12);
+    .bccc-engine-searchbar {
+        @apply sticky z-30 grid gap-0 overflow-hidden rounded-2xl border bg-white shadow-sm dark:bg-[#0f1720];
+        top: 118px;
+        grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(180px, 220px);
+        border-color: #e3e7ec;
     }
 
-    .bccc-content-unifier {
-      color: #f7f2e8;
+    .dark .bccc-engine-searchbar {
+        border-color: #1f2937;
     }
 
-    .bccc-content-unifier h1,
-    .bccc-content-unifier h2,
-    .bccc-content-unifier h3 {
-      color: #f7f2e8;
+    .bccc-engine-search-cell {
+        @apply min-w-0 border-r px-5 py-4 dark:border-slate-800;
+        border-color: #e5e7eb;
     }
 
-    .bccc-content-unifier p,
-    .bccc-content-unifier span,
-    .bccc-content-unifier label {
-      border-color: rgba(255, 255, 255, 0.10);
+    .bccc-engine-search-cell p {
+        @apply text-xs font-black tracking-[0.18em] text-slate-500 uppercase dark:text-slate-400;
     }
 
-    .bccc-content-unifier input,
-    .bccc-content-unifier select,
-    .bccc-content-unifier textarea {
-      border-color: rgba(255, 255, 255, 0.11);
+    .bccc-engine-search-cell strong {
+        @apply mt-1 block truncate text-sm font-black text-slate-950 dark:text-white;
     }
-  }
+
+    .bccc-engine-search-action {
+        @apply flex items-center justify-center p-3;
+    }
+
+    .bccc-engine-layout {
+        @apply grid gap-5;
+        grid-template-columns: 230px minmax(0, 1fr) 330px;
+        align-items: start;
+    }
+
+    .bccc-engine-left,
+    .bccc-engine-summary {
+        @apply sticky space-y-4;
+        top: 210px;
+    }
+
+    .bccc-engine-main {
+        @apply min-w-0 space-y-5;
+    }
+
+    .bccc-engine-stepper {
+        @apply overflow-hidden rounded-2xl border bg-white p-2 shadow-sm dark:bg-[#0f1720];
+        border-color: #e3e7ec;
+    }
+
+    .dark .bccc-engine-stepper {
+        border-color: #1f2937;
+    }
+
+    .bccc-engine-step {
+        @apply flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-slate-600 transition dark:text-slate-300;
+    }
+
+    .bccc-engine-step:hover {
+        @apply bg-slate-50 text-slate-950 dark:bg-slate-900 dark:text-white;
+    }
+
+    .bccc-engine-step:disabled {
+        @apply cursor-not-allowed opacity-50;
+    }
+
+    .bccc-engine-step.is-current {
+        @apply bg-[#20242b] text-white shadow-sm dark:bg-slate-100 dark:text-slate-950;
+    }
+
+    .bccc-engine-step.is-done {
+        @apply bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300;
+    }
+
+    .bccc-engine-step-icon {
+        @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200;
+    }
+
+    .bccc-engine-step.is-current .bccc-engine-step-icon {
+        @apply border-white/20 bg-white/12 text-white dark:border-slate-300 dark:bg-slate-950 dark:text-white;
+    }
+
+    .bccc-engine-step.is-done .bccc-engine-step-icon {
+        @apply border-emerald-200 bg-white text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300;
+    }
+
+    .bccc-engine-help-card {
+        @apply flex gap-3 rounded-2xl border bg-white p-4 shadow-sm dark:bg-[#0f1720];
+        border-color: #e3e7ec;
+    }
+
+    .dark .bccc-engine-help-card {
+        border-color: #1f2937;
+    }
+
+    .bccc-engine-help-card p {
+        @apply text-sm font-black text-slate-950 dark:text-white;
+    }
+
+    .bccc-engine-help-card span {
+        @apply mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400;
+    }
+
+    .bccc-engine-summary-card,
+    .bccc-engine-form-card,
+    .bccc-engine-review-block,
+    .bccc-engine-digital-form {
+        @apply overflow-hidden rounded-2xl border bg-white shadow-sm dark:bg-[#0f1720];
+        border-color: #e3e7ec;
+    }
+
+    .dark .bccc-engine-summary-card,
+    .dark .bccc-engine-form-card,
+    .dark .bccc-engine-review-block,
+    .dark .bccc-engine-digital-form {
+        border-color: #1f2937;
+    }
+
+    .bccc-engine-summary-row,
+    .bccc-engine-summary-total {
+        @apply flex items-center justify-between gap-3 rounded-xl border px-4 py-3 dark:border-slate-800;
+        border-color: #e3e7ec;
+        background: #f8fafc;
+    }
+
+    .dark .bccc-engine-summary-row,
+    .dark .bccc-engine-summary-total {
+        background: rgba(15, 23, 42, 0.7);
+    }
+
+    .bccc-engine-summary-row span,
+    .bccc-engine-summary-total span {
+        @apply text-xs font-bold tracking-[0.16em] text-slate-500 uppercase dark:text-slate-400;
+    }
+
+    .bccc-engine-summary-row strong,
+    .bccc-engine-summary-total strong {
+        @apply text-sm font-black text-slate-950 dark:text-white;
+    }
+
+    .bccc-engine-summary-total {
+        @apply bg-[#20242b] text-white dark:bg-slate-100;
+    }
+
+    .bccc-engine-summary-total span,
+    .bccc-engine-summary-total strong {
+        @apply text-white dark:text-slate-950;
+    }
+
+    .bccc-engine-section-heading {
+        @apply flex flex-col gap-4 rounded-2xl border bg-white p-5 shadow-sm sm:flex-row sm:items-end sm:justify-between dark:bg-[#0f1720];
+        border-color: #e3e7ec;
+    }
+
+    .dark .bccc-engine-section-heading {
+        border-color: #1f2937;
+    }
+
+    .bccc-engine-section-heading p,
+    .bccc-engine-form-header p {
+        @apply text-xs font-black tracking-[0.18em] text-slate-500 uppercase dark:text-slate-400;
+    }
+
+    .bccc-engine-section-heading h2,
+    .bccc-engine-form-header h2 {
+        @apply mt-1 text-2xl font-black tracking-[-0.04em] text-slate-950 dark:text-white;
+    }
+
+    .bccc-engine-section-heading span,
+    .bccc-engine-form-header span {
+        @apply mt-1 block text-sm leading-6 text-slate-500 dark:text-slate-400;
+    }
+
+    .bccc-engine-usage-strip {
+        @apply grid gap-3 md:grid-cols-3;
+    }
+
+    .bccc-engine-usage {
+        @apply rounded-2xl border bg-white p-4 text-left shadow-sm transition dark:bg-[#0f1720];
+        border-color: #e3e7ec;
+    }
+
+    .dark .bccc-engine-usage {
+        border-color: #1f2937;
+    }
+
+    .bccc-engine-usage:hover {
+        @apply -translate-y-0.5 shadow-md;
+    }
+
+    .bccc-engine-usage.is-selected {
+        @apply border-[#20242b] bg-[#20242b] text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950;
+    }
+
+    .bccc-engine-usage span {
+        @apply text-xs font-black tracking-[0.18em] text-slate-500 uppercase dark:text-slate-400;
+    }
+
+    .bccc-engine-usage.is-selected span {
+        @apply text-white/70 dark:text-slate-500;
+    }
+
+    .bccc-engine-usage strong {
+        @apply mt-1 block text-xl font-black tracking-[-0.04em] text-slate-950 dark:text-white;
+    }
+
+    .bccc-engine-usage.is-selected strong {
+        @apply text-white dark:text-slate-950;
+    }
+
+    .bccc-engine-area-list {
+        @apply flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2;
+        scrollbar-width: none;
+    }
+
+    .bccc-engine-area-list::-webkit-scrollbar {
+        display: none;
+    }
+
+    .bccc-engine-area-card {
+        @apply flex max-w-[920px] min-w-[720px] snap-start overflow-hidden rounded-2xl border bg-white shadow-sm transition dark:bg-[#0f1720];
+        border-color: #e3e7ec;
+    }
+
+    .dark .bccc-engine-area-card {
+        border-color: #1f2937;
+    }
+
+    .bccc-engine-area-card:hover {
+        @apply -translate-y-0.5 shadow-md;
+    }
+
+    .bccc-engine-area-card.is-selected {
+        border-color: #20242b;
+        box-shadow: 0 0 0 3px rgba(32, 36, 43, 0.1);
+    }
+
+    .dark .bccc-engine-area-card.is-selected {
+        border-color: #e2e8f0;
+        box-shadow: 0 0 0 3px rgba(226, 232, 240, 0.12);
+    }
+
+    .bccc-engine-area-card.is-disabled {
+        @apply opacity-60;
+    }
+
+    .bccc-engine-card-image {
+        @apply relative h-auto min-h-[270px] w-[290px] shrink-0 overflow-hidden;
+    }
+
+    .bccc-engine-mini-box {
+        @apply rounded-xl border bg-[#f8fafc] p-3 dark:border-slate-800 dark:bg-slate-900/70;
+        border-color: #e3e7ec;
+    }
+
+    .bccc-engine-mini-box span {
+        @apply block text-[11px] font-bold tracking-[0.16em] text-slate-500 uppercase dark:text-slate-400;
+    }
+
+    .bccc-engine-mini-box strong {
+        @apply mt-1 block text-sm font-black text-slate-950 dark:text-white;
+    }
+
+    .bccc-engine-chip {
+        @apply inline-flex items-center gap-1.5 rounded-lg border bg-[#f8fafc] px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300;
+        border-color: #e3e7ec;
+    }
+
+    .bccc-engine-check {
+        @apply flex cursor-pointer items-start gap-3 rounded-xl border bg-[#f8fafc] p-4 dark:border-slate-800 dark:bg-slate-900/70;
+        border-color: #e3e7ec;
+    }
+
+    .bccc-engine-check input {
+        @apply mt-1 h-4 w-4 shrink-0;
+    }
+
+    .bccc-engine-check strong {
+        @apply block text-sm font-black text-slate-950 dark:text-white;
+    }
+
+    .bccc-engine-check small {
+        @apply mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400;
+    }
+
+    .bccc-engine-form-header {
+        @apply flex items-start gap-3 border-b p-5 dark:border-slate-800;
+        border-color: #e5e7eb;
+    }
+
+    .bccc-engine-form-grid {
+        @apply grid gap-4 p-5 md:grid-cols-2;
+    }
+
+    .bccc-engine-field {
+        @apply grid gap-2;
+    }
+
+    .bccc-engine-generated {
+        @apply rounded-xl border bg-[#f8fafc] p-4 dark:border-slate-800 dark:bg-slate-900/70;
+        border-color: #e3e7ec;
+    }
+
+    .bccc-engine-generated p {
+        @apply mt-2 text-sm leading-6 font-semibold text-slate-900 dark:text-white;
+    }
+
+    .bccc-engine-generated strong {
+        @apply mt-2 block text-3xl font-black tracking-[-0.05em] text-slate-950 dark:text-white;
+    }
+
+    .bccc-engine-generated span {
+        @apply mt-1 block text-xs text-slate-500 dark:text-slate-400;
+    }
+
+    .bccc-engine-guidelines {
+        @apply grid gap-4 lg:grid-cols-2;
+    }
+
+    .bccc-engine-guideline-card {
+        @apply rounded-2xl border bg-white p-5 shadow-sm dark:bg-[#0f1720];
+        border-color: #e3e7ec;
+    }
+
+    .dark .bccc-engine-guideline-card {
+        border-color: #1f2937;
+    }
+
+    .bccc-engine-guideline-card h3 {
+        @apply mt-3 text-xl font-black tracking-[-0.035em] text-slate-950 dark:text-white;
+    }
+
+    .bccc-engine-guideline-card ul {
+        @apply mt-4 list-inside list-disc space-y-2 text-sm leading-6 text-slate-600 dark:text-slate-300;
+    }
+
+    .bccc-engine-review-block {
+        @apply rounded-2xl;
+    }
+
+    .bccc-engine-digital-form {
+        @apply p-5;
+    }
+
+    .bccc-engine-notice {
+        @apply flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300;
+    }
+
+    .bccc-engine-footer {
+        @apply sticky bottom-4 z-20 flex items-center gap-3 rounded-2xl border bg-white/95 p-3 shadow-lg backdrop-blur dark:bg-[#0f1720]/95;
+        border-color: #e3e7ec;
+    }
+
+    .dark .bccc-engine-footer {
+        border-color: #1f2937;
+    }
+}
+
+/* =========================================================
+   RESPONSIVE BOOKING ENGINE
+   ========================================================= */
+
+@layer components {
+    @media (max-width: 1280px) {
+        .bccc-engine-searchbar {
+            top: 120px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .bccc-engine-search-action {
+            grid-column: 1 / -1;
+        }
+
+        .bccc-engine-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .bccc-engine-left,
+        .bccc-engine-summary {
+            position: static;
+        }
+
+        .bccc-engine-stepper {
+            @apply flex overflow-x-auto;
+            scrollbar-width: none;
+        }
+
+        .bccc-engine-stepper::-webkit-scrollbar {
+            display: none;
+        }
+
+        .bccc-engine-step {
+            @apply min-w-[180px];
+        }
+
+        .bccc-engine-summary {
+            order: 3;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .public-container {
+            width: min(100% - 1rem, 1500px);
+        }
+
+        .public-section {
+            padding-block: 3rem;
+        }
+
+        .bccc-public-heading {
+            letter-spacing: -0.045em;
+        }
+
+        .bccc-engine-searchbar {
+            position: relative;
+            top: auto;
+            grid-template-columns: 1fr;
+        }
+
+        .bccc-engine-search-cell {
+            @apply border-r-0 border-b;
+        }
+
+        .bccc-engine-area-card {
+            @apply min-w-[88vw] flex-col;
+        }
+
+        .bccc-engine-card-image {
+            @apply h-64 min-h-0 w-full;
+        }
+
+        .bccc-engine-footer {
+            @apply static flex-col items-stretch;
+        }
+
+        .bccc-engine-footer > div {
+            @apply w-full;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .backend-page-frame {
+            @apply px-2 py-3;
+        }
+
+        .backend-booking-card,
+        .bccc-engine-searchbar,
+        .bccc-engine-stepper,
+        .bccc-engine-help-card,
+        .bccc-engine-summary-card,
+        .bccc-engine-form-card,
+        .bccc-engine-review-block,
+        .bccc-engine-digital-form,
+        .bccc-engine-section-heading,
+        .bccc-engine-guideline-card {
+            border-radius: 0.9rem;
+        }
+
+        .bccc-engine-form-grid {
+            @apply grid-cols-1 p-4;
+        }
+
+        .bccc-engine-form-header {
+            @apply p-4;
+        }
+
+        .bccc-engine-search-cell {
+            @apply px-4 py-3;
+        }
+    }
 }

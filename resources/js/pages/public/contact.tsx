@@ -1,7 +1,14 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
+import { motion, useReducedMotion } from 'framer-motion';
 import type { FormEvent } from 'react';
-import { Mail, MapPin, Phone, SendHorizonal } from 'lucide-react';
-import PageHero from '@/components/public/page-hero';
+import {
+  CheckCircle2,
+  Mail,
+  MapPin,
+  Phone,
+  SendHorizonal,
+  Sparkles,
+} from 'lucide-react';
 import PublicLayout, { type SiteSettings } from '@/layouts/public-layout';
 import type { VenueOption } from '@/types/public-content';
 
@@ -31,7 +38,38 @@ const inquiryTypes = [
   'Others',
 ];
 
+const easeLuxury = [0.22, 1, 0.36, 1] as const;
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) {
+    return null;
+  }
+
+  return <p className="mt-2 text-xs font-semibold text-rose-600 dark:text-rose-300">{message}</p>;
+}
+
+function FormField({
+  label,
+  children,
+  error,
+}: {
+  label: string;
+  children: React.ReactNode;
+  error?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
+        {label}
+      </span>
+      {children}
+      <FieldError message={error} />
+    </label>
+  );
+}
+
 export default function ContactPage({ venueOptions = [] }: Props) {
+  const reduceMotion = useReducedMotion();
   const page = usePage<{ siteSettings?: SiteSettings; flash?: { success?: string } }>();
   const settings = page.props.siteSettings;
 
@@ -51,8 +89,9 @@ export default function ContactPage({ venueOptions = [] }: Props) {
     message: '',
   });
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+
     post('/inquiries', {
       preserveScroll: true,
       onSuccess: () => {
@@ -65,135 +104,233 @@ export default function ContactPage({ venueOptions = [] }: Props) {
     <PublicLayout>
       <Head title="Contact" />
 
-      <PageHero
-        eyebrow="Contact"
-        title="Get in touch for venue guidance, inquiries, and public assistance."
-        description="Use the contact details below for general questions, booking guidance, and coordination support. The enquiry form is open to all visitors."
-        backgroundImages={['/marketing/images/branding/sunrise.jpg', '/marketing/images/hero/night.png']}
-        actions={[
-          { label: 'Proceed to Booking', href: '/bookings/create' },
-          { label: 'View Guidelines', href: '/guidelines', variant: 'secondary' },
-        ]}
-      />
+      <section className="relative min-h-[72svh] overflow-hidden bg-[#080806] pt-32 text-white lg:pt-36">
+        <img
+          src="/marketing/images/hero/noon2.jpg"
+          alt="Baguio Convention and Cultural Center contact"
+          className="absolute inset-0 h-full w-full object-cover opacity-70 dark:hidden"
+          draggable={false}
+        />
 
-      <section className="public-container mt-10 grid gap-6 pb-12 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4 rounded-[2rem] border border-black/5 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
-          <h2 className="text-3xl font-semibold text-slate-900 dark:text-white">Contact Details</h2>
+        <img
+          src="/marketing/images/hero/night2.png"
+          alt="Baguio Convention and Cultural Center contact"
+          className="absolute inset-0 hidden h-full w-full object-cover opacity-70 dark:block"
+          draggable={false}
+        />
 
-          <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300">
-            <div className="flex items-start gap-3 rounded-[1.3rem] bg-[#f8f4ea] p-4 dark:bg-slate-900/70">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{settings?.address || 'CH3X+RRW, Baguio, Benguet, Philippines'}</span>
-            </div>
-            <div className="flex items-center gap-3 rounded-[1.3rem] bg-[#f8f4ea] p-4 dark:bg-slate-900/70">
-              <Phone className="h-4 w-4 shrink-0" />
-              <span>{settings?.phone || '(074) 446 2009'}</span>
-            </div>
-            <div className="flex items-center gap-3 rounded-[1.3rem] bg-[#f8f4ea] p-4 dark:bg-slate-900/70">
-              <Mail className="h-4 w-4 shrink-0" />
-              <span>{settings?.email || 'info@bccc-ease.com'}</span>
-            </div>
-          </div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.18)_38%,rgba(0,0,0,0.86)_100%)]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#080806] via-[#080806]/58 to-black/24" />
 
-          <div className="overflow-hidden rounded-[2rem] border border-black/5 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
-            <iframe
-              src={mapEmbedUrl}
-              className="h-[360px] w-full"
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              title="BCCC location map"
-            />
-          </div>
+        <div className="public-container relative z-10 grid min-h-[calc(72svh-9rem)] gap-8 pb-12 lg:grid-cols-[1fr_0.8fr] lg:items-end">
+          <motion.div
+            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 30, filter: 'blur(12px)' }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.78, ease: easeLuxury }}
+          >
+            <div className="inline-flex items-center gap-2 border border-[#f4dfad]/26 bg-[#f4dfad]/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.28em] text-[#f4dfad]">
+              <Mail className="h-3.5 w-3.5" />
+              Contact
+            </div>
+
+            <h1 className="mt-5 max-w-5xl text-[clamp(3rem,8vw,7.5rem)] font-medium leading-[0.88] tracking-[-0.085em] text-white">
+              Coordinate with the BCCC office.
+            </h1>
+          </motion.div>
+
+          <motion.aside
+            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 24, filter: 'blur(10px)' }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.78, ease: easeLuxury, delay: 0.12 }}
+            className="border border-white/12 bg-white/[0.075] p-5 shadow-[0_28px_90px_rgba(0,0,0,0.28)] backdrop-blur-2xl"
+          >
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#f4dfad]">
+              Contact Details
+            </p>
+
+            <div className="mt-5 grid gap-3">
+              <div className="flex items-start gap-3 border border-white/10 bg-white/[0.055] p-4 text-sm leading-7 text-white/68">
+                <MapPin className="mt-1 h-4 w-4 shrink-0 text-[#f4dfad]" />
+                {settings?.address || 'CH3X+RRW, Baguio, Benguet, Philippines'}
+              </div>
+
+              <div className="flex items-center gap-3 border border-white/10 bg-white/[0.055] p-4 text-sm leading-7 text-white/68">
+                <Phone className="h-4 w-4 shrink-0 text-[#f4dfad]" />
+                {settings?.phone || '(074) 446 2009'}
+              </div>
+
+              <div className="flex items-center gap-3 border border-white/10 bg-white/[0.055] p-4 text-sm leading-7 text-white/68">
+                <Mail className="h-4 w-4 shrink-0 text-[#f4dfad]" />
+                {settings?.email || 'info@bccc-ease.com'}
+              </div>
+            </div>
+          </motion.aside>
         </div>
+      </section>
 
-        <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-300">Public Enquiries</div>
-              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">Send an enquiry to the office</h2>
-              <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                This form is open to anyone. Use it for availability clarifications, venue coordination, tourism-related questions, and general concerns.
+      <section className="public-section relative overflow-hidden">
+        <div className="public-container grid gap-6 lg:grid-cols-[0.72fr_1.28fr]">
+          <aside className="space-y-4">
+            <div className="bccc-public-panel p-6">
+              <div className="bccc-section-kicker">
+                <Sparkles className="h-3.5 w-3.5" />
+                Public Enquiries
+              </div>
+
+              <h2 className="mt-4 text-4xl font-semibold tracking-[-0.06em] text-[var(--bccc-text)]">
+                Send an enquiry to the office.
+              </h2>
+
+              <p className="mt-4 text-sm leading-8 text-[var(--bccc-text-muted)]">
+                Use this form for availability clarifications, venue coordination, tourism-related questions, and general concerns.
               </p>
-            </div>
-          </div>
 
-          {page.props.flash?.success ? (
-            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200">
-              {page.props.flash.success}
-            </div>
-          ) : null}
-
-          <form onSubmit={submit} className="mt-6 grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-medium">Full Name</label>
-              <input value={data.name} onChange={(e) => setData('name', e.target.value)} className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5" />
-              {errors.name ? <div className="mt-1 text-xs text-red-600">{errors.name}</div> : null}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">Valid Email</label>
-              <input type="email" value={data.email} onChange={(e) => setData('email', e.target.value)} className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5" />
-              {errors.email ? <div className="mt-1 text-xs text-red-600">{errors.email}</div> : null}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">Phone</label>
-              <input value={data.phone} onChange={(e) => setData('phone', e.target.value)} className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5" />
-              {errors.phone ? <div className="mt-1 text-xs text-red-600">{errors.phone}</div> : null}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">Subject</label>
-              <input value={data.subject} onChange={(e) => setData('subject', e.target.value)} className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5" />
-              {errors.subject ? <div className="mt-1 text-xs text-red-600">{errors.subject}</div> : null}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">Inquiry Type</label>
-              <select value={data.inquiry_type} onChange={(e) => setData('inquiry_type', e.target.value)} className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5">
-                {inquiryTypes.map((item) => (
-                  <option key={item} value={item}>{item}</option>
+              <div className="mt-6 grid gap-3">
+                {[
+                  'Booking guidance and schedule clarification',
+                  'Venue coordination and event preparation',
+                  'Tourism, public information, and general questions',
+                ].map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-start gap-3 border border-[var(--bccc-line)] bg-[var(--bccc-surface-muted)] p-4"
+                  >
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--bccc-gold-700)]" />
+                    <p className="text-sm leading-7 text-[var(--bccc-text-muted)]">{item}</p>
+                  </div>
                 ))}
-              </select>
-              {errors.inquiry_type ? <div className="mt-1 text-xs text-red-600">{errors.inquiry_type}</div> : null}
+              </div>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium">Preferred Event Date</label>
-              <input type="date" value={data.event_date} onChange={(e) => setData('event_date', e.target.value)} className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5" />
-              {errors.event_date ? <div className="mt-1 text-xs text-red-600">{errors.event_date}</div> : null}
+            <div className="overflow-hidden border border-[var(--bccc-line)] bg-[var(--bccc-surface)] shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl">
+              <iframe
+                title="BCCC location map"
+                src={mapEmbedUrl}
+                className="h-[24rem] w-full border-0"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+          </aside>
+
+          <motion.form
+            onSubmit={submit}
+            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 22, filter: 'blur(10px)' }}
+            whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+            viewport={{ once: true, amount: 0.16 }}
+            transition={{ duration: 0.62, ease: easeLuxury }}
+            className="border border-[var(--bccc-line)] bg-[var(--bccc-surface)] p-5 shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl sm:p-6 lg:p-8"
+          >
+            {page.props.flash?.success ? (
+              <div className="mb-5 flex items-start gap-3 border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm leading-7 text-emerald-700 dark:text-emerald-200">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                {page.props.flash.success}
+              </div>
+            ) : null}
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <FormField label="Full Name" error={errors.name}>
+                <input
+                  value={data.name}
+                  onChange={(event) => setData('name', event.target.value)}
+                  className="bccc-inner-input"
+                />
+              </FormField>
+
+              <FormField label="Valid Email" error={errors.email}>
+                <input
+                  type="email"
+                  value={data.email}
+                  onChange={(event) => setData('email', event.target.value)}
+                  className="bccc-inner-input"
+                />
+              </FormField>
+
+              <FormField label="Phone" error={errors.phone}>
+                <input
+                  value={data.phone}
+                  onChange={(event) => setData('phone', event.target.value)}
+                  className="bccc-inner-input"
+                />
+              </FormField>
+
+              <FormField label="Subject" error={errors.subject}>
+                <input
+                  value={data.subject}
+                  onChange={(event) => setData('subject', event.target.value)}
+                  className="bccc-inner-input"
+                />
+              </FormField>
+
+              <FormField label="Inquiry Type" error={errors.inquiry_type}>
+                <select
+                  value={data.inquiry_type}
+                  onChange={(event) => setData('inquiry_type', event.target.value)}
+                  className="bccc-inner-input"
+                >
+                  {inquiryTypes.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+
+              <FormField label="Preferred Event Date" error={errors.event_date}>
+                <input
+                  type="date"
+                  value={data.event_date}
+                  onChange={(event) => setData('event_date', event.target.value)}
+                  className="bccc-inner-input"
+                />
+              </FormField>
+
+              <FormField label="Venue" error={errors.venue}>
+                <select
+                  value={data.venue}
+                  onChange={(event) => setData('venue', event.target.value)}
+                  className="bccc-inner-input"
+                >
+                  <option value="">Select venue</option>
+                  {venueOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+
+              <FormField label="Estimated Guests" error={errors.guest_count}>
+                <input
+                  type="number"
+                  min="1"
+                  value={data.guest_count}
+                  onChange={(event) => setData('guest_count', event.target.value)}
+                  className="bccc-inner-input"
+                />
+              </FormField>
+
+              <div className="md:col-span-2">
+                <FormField label="Message" error={errors.message}>
+                  <textarea
+                    value={data.message}
+                    onChange={(event) => setData('message', event.target.value)}
+                    rows={7}
+                    className="bccc-inner-input resize-none py-4"
+                  />
+                </FormField>
+              </div>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium">Venue</label>
-              <select value={data.venue} onChange={(e) => setData('venue', e.target.value)} className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5">
-                <option value="">Select venue</option>
-                {venueOptions.map((item) => (
-                  <option key={item.value} value={item.value}>{item.label}</option>
-                ))}
-              </select>
-              {errors.venue ? <div className="mt-1 text-xs text-red-600">{errors.venue}</div> : null}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">Estimated Guests</label>
-              <input value={data.guest_count} onChange={(e) => setData('guest_count', e.target.value)} className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5" />
-              {errors.guest_count ? <div className="mt-1 text-xs text-red-600">{errors.guest_count}</div> : null}
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium">Message</label>
-              <textarea value={data.message} onChange={(e) => setData('message', e.target.value)} rows={6} className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5" />
-              {errors.message ? <div className="mt-1 text-xs text-red-600">{errors.message}</div> : null}
-            </div>
-
-            <div className="md:col-span-2">
-              <button type="submit" disabled={processing} className="inline-flex items-center gap-2 rounded-full bg-[#174f40] px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-70 dark:bg-[#294CFF]">
-                <SendHorizonal className="h-4 w-4" />
-                {processing ? 'Sending...' : 'Submit Enquiry'}
-              </button>
-            </div>
-          </form>
+            <button
+              type="submit"
+              disabled={processing}
+              className="mt-6 inline-flex items-center justify-center gap-2 border border-[var(--bccc-line-gold)] bg-[var(--bccc-green-800)] px-6 py-4 text-[11px] font-black uppercase tracking-[0.22em] text-white transition duration-500 hover:-translate-y-0.5 hover:bg-[var(--bccc-green-900)] disabled:cursor-wait disabled:opacity-70"
+            >
+              <SendHorizonal className="h-4 w-4" />
+              {processing ? 'Sending...' : 'Submit Enquiry'}
+            </button>
+          </motion.form>
         </div>
       </section>
     </PublicLayout>
