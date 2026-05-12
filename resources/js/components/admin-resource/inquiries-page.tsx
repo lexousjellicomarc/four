@@ -3,7 +3,6 @@ import {
     ResourcePageShell,
     ResourceSection,
     ResourceStatCard,
-    ResourceToolbar,
 } from '@/components/admin-resource/resource-page-shell';
 import type { BreadcrumbItem } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
@@ -13,6 +12,7 @@ import {
     Mail,
     MessageSquareText,
     Phone,
+    Search,
     Trash2,
     UserRound,
 } from 'lucide-react';
@@ -34,26 +34,41 @@ type Inquiry = {
     created_at?: string | null;
 };
 
-type PageProps = {
-    workspaceRole?: string;
-    inquiries?: unknown;
-    messages?: unknown;
-    filters?: {
-        q?: string;
-        status?: string;
-    };
-};
-
 type PaginationLink = {
     url?: string | null;
     label?: string | null;
     active?: boolean;
 };
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Admin', href: '/admin/dashboard' },
-    { title: 'Public Inquiries', href: '/admin/inquiries' },
-];
+type Paginated<T> = {
+    data?: T[];
+    links?: PaginationLink[];
+};
+
+type PageProps = {
+    workspaceRole?: 'admin' | 'manager' | 'staff' | string;
+    inquiries?: Inquiry[] | Paginated<Inquiry>;
+    filters?: {
+        q?: string;
+        status?: string;
+    };
+};
+
+function collection<T>(value?: T[] | Paginated<T>): T[] {
+    if (Array.isArray(value)) {
+        return value;
+    }
+
+    return value?.data ?? [];
+}
+
+function linksOf<T>(value?: T[] | Paginated<T>): PaginationLink[] {
+    if (value && !Array.isArray(value)) {
+        return value.links ?? [];
+    }
+
+    return [];
+}
 
 function currentRole() {
     const path = window.location.pathname;
@@ -81,24 +96,25 @@ function basePath(role: string) {
     return '/admin/inquiries';
 }
 
-function collection<T>(value: unknown): T[] {
-    if (Array.isArray(value)) {
-        return value as T[];
+function breadcrumbsFor(role: string): BreadcrumbItem[] {
+    if (role === 'manager') {
+        return [
+            { title: 'Manager', href: '/manager/dashboard' },
+            { title: 'Public Inquiries', href: '/manager/inquiries' },
+        ];
     }
 
-    if (value && typeof value === 'object' && Array.isArray((value as { data?: unknown[] }).data)) {
-        return (value as { data: T[] }).data;
+    if (role === 'staff') {
+        return [
+            { title: 'Staff', href: '/staff/dashboard' },
+            { title: 'Public Inquiries', href: '/staff/inquiries' },
+        ];
     }
 
-    return [];
-}
-
-function linksOf(value: unknown): PaginationLink[] {
-    if (value && typeof value === 'object' && Array.isArray((value as { links?: PaginationLink[] }).links)) {
-        return (value as { links: PaginationLink[] }).links;
-    }
-
-    return [];
+    return [
+        { title: 'Admin', href: '/admin/dashboard' },
+        { title: 'Public Inquiries', href: '/admin/inquiries' },
+    ];
 }
 
 function cleanLabel(value?: string | null): string {
@@ -149,15 +165,15 @@ function compactDateTime(value?: string | null) {
 function statusClass(value?: string | null) {
     const status = String(value || 'new').toLowerCase();
 
-    if (['read', 'replied', 'closed'].includes(status)) {
+    if (status === 'closed' || status === 'replied') {
         return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200';
     }
 
-    if (status === 'new') {
-        return 'bg-amber-100 text-amber-700 dark:bg-amber-400/10 dark:text-amber-200';
+    if (status === 'read') {
+        return 'bg-sky-100 text-sky-700 dark:bg-sky-400/10 dark:text-sky-200';
     }
 
-    return 'bg-[#f4ead8] text-[#7a5a24] dark:bg-white/10 dark:text-[#f1d89b]';
+    return 'bg-amber-100 text-amber-700 dark:bg-amber-400/10 dark:text-amber-200';
 }
 
 function paginationLabel(label?: string | null) {
@@ -180,6 +196,7 @@ function Pagination({ links }: { links: PaginationLink[] }) {
                         key={`${link.label}-${index}`}
                         href={link.url}
                         preserveScroll
+                        preserveState
                         className={
                             link.active
                                 ? 'inline-flex h-10 min-w-10 items-center justify-center rounded-full bg-[#2f2517] px-4 text-sm font-semibold text-white dark:bg-white dark:text-[#17120b]'
@@ -201,48 +218,42 @@ function Pagination({ links }: { links: PaginationLink[] }) {
     );
 }
 
+function InfoLine({
+    icon: Icon,
+    label,
+    value,
+}: {
+    icon: typeof UserRound;
+    label: string;
+    value: string;
+}) {
+    return (
+        <div className="rounded-[1rem] border border-[#eadcc2]/80 bg-white/70 p-3 dark:border-white/10 dark:bg-white/[0.035]">
+            <Icon className="h-4 w-4 text-[#9d7b3d] dark:text-[#f1d89b]" />
+            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9d7b3d] dark:text-[#f1d89b]">
+                {label}
+            </p>
+            <p className="mt-1 line-clamp-2 text-sm font-semibold text-[#21180d] dark:text-white">
+                {value}
+            </p>
+        </div>
+    );
+}
+
 export function InquiriesPage() {
     const { props } = usePage<PageProps>();
-    const role = String(props.workspaceRole || currentRole());
+    const role = props.workspaceRole || currentRole();
     const path = basePath(role);
 
-    const raw = props.inquiries ?? props.messages;
-
-    const allInquiries = useMemo(() => collection<Inquiry>(raw), [raw]);
-    const pageLinks = useMemo(() => linksOf(raw), [raw]);
+    const rows = useMemo(() => collection<Inquiry>(props.inquiries), [props.inquiries]);
+    const pageLinks = useMemo(() => linksOf<Inquiry>(props.inquiries), [props.inquiries]);
 
     const [q, setQ] = useState(String(props.filters?.q ?? ''));
     const [status, setStatus] = useState(String(props.filters?.status ?? ''));
 
-    const inquiries = useMemo(() => {
-        const needle = q.toLowerCase().trim();
-
-        return allInquiries.filter((inquiry) => {
-            const matchesSearch =
-                !needle ||
-                [
-                    inquiry.name,
-                    inquiry.email,
-                    inquiry.phone,
-                    inquiry.subject,
-                    inquiry.inquiry_type,
-                    inquiry.venue,
-                    inquiry.message,
-                ]
-                    .join(' ')
-                    .toLowerCase()
-                    .includes(needle);
-
-            const matchesStatus =
-                !status || String(inquiry.status || '').toLowerCase() === status.toLowerCase();
-
-            return matchesSearch && matchesStatus;
-        });
-    }, [allInquiries, q, status]);
-
-    const unread = allInquiries.filter((item) => String(item.status || '').toLowerCase() === 'new').length;
-    const replied = allInquiries.filter((item) => String(item.status || '').toLowerCase() === 'replied').length;
-    const closed = allInquiries.filter((item) => String(item.status || '').toLowerCase() === 'closed').length;
+    const newCount = rows.filter((item) => String(item.status || 'new').toLowerCase() === 'new').length;
+    const readCount = rows.filter((item) => String(item.status || '').toLowerCase() === 'read').length;
+    const repliedCount = rows.filter((item) => String(item.status || '').toLowerCase() === 'replied').length;
 
     function search() {
         router.get(
@@ -263,7 +274,9 @@ export function InquiriesPage() {
         router.put(
             `${path}/${inquiry.id}`,
             { status: nextStatus },
-            { preserveScroll: true },
+            {
+                preserveScroll: true,
+            },
         );
     }
 
@@ -272,7 +285,9 @@ export function InquiriesPage() {
             return;
         }
 
-        router.delete(`${path}/${inquiry.id}`, { preserveScroll: true });
+        router.delete(`${path}/${inquiry.id}`, {
+            preserveScroll: true,
+        });
     }
 
     return (
@@ -280,38 +295,41 @@ export function InquiriesPage() {
             title="Public Inquiries"
             eyebrow="Public Website"
             icon={MessageSquareText}
-            breadcrumbs={breadcrumbs}
+            breadcrumbs={breadcrumbsFor(role)}
             subtitle="Centralized messages from the public contact page, including booking questions, preferred dates, venue details, and follow-up status."
             actions={
-                <ResourceActionButton href="/contact">
+                <Link
+                    href="/contact"
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[#d9c7a6]/70 bg-white px-5 text-sm font-semibold text-[#2f2517] transition hover:-translate-y-0.5 hover:bg-[#f7f0e3] dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12"
+                >
                     Public Contact Page
-                </ResourceActionButton>
+                </Link>
             }
         >
             <div className="grid gap-3 md:grid-cols-4">
                 <ResourceStatCard
                     label="Loaded"
-                    value={allInquiries.length}
-                    description="Total loaded inquiries from the current page."
+                    value={rows.length}
+                    description="Total inquiries on the current page."
                     icon={MessageSquareText}
                 />
                 <ResourceStatCard
                     label="New"
-                    value={unread}
+                    value={newCount}
                     description="Messages requiring first review."
                     icon={Mail}
                 />
                 <ResourceStatCard
-                    label="Replied"
-                    value={replied}
-                    description="Messages already answered by staff."
+                    label="Read"
+                    value={readCount}
+                    description="Messages reviewed by staff."
                     icon={Eye}
                 />
                 <ResourceStatCard
-                    label="Closed"
-                    value={closed}
-                    description="Resolved or archived inquiry records."
-                    icon={Trash2}
+                    label="Replied"
+                    value={repliedCount}
+                    description="Messages already answered."
+                    icon={Phone}
                 />
             </div>
 
@@ -319,14 +337,19 @@ export function InquiriesPage() {
                 <ResourceSection
                     title="Inquiry inbox"
                     eyebrow="Messages"
-                    description={`${inquiries.length} visible inquiry${inquiries.length === 1 ? '' : 'ies'}.`}
+                    description="Search, review, update status, or delete public inquiries."
                 >
                     <div className="mb-4 grid gap-3 rounded-[1.25rem] border border-[#d9c7a6]/70 bg-[#fffaf0]/70 p-3 dark:border-white/10 dark:bg-white/[0.035] lg:grid-cols-[1fr_13rem_auto]">
                         <div className="flex min-h-11 items-center gap-2 rounded-full border border-[#d9c7a6]/70 bg-white px-4 dark:border-white/10 dark:bg-white/7">
-                            <MessageSquareText className="h-4 w-4 shrink-0 text-[#9d7b3d] dark:text-[#f1d89b]" />
+                            <Search className="h-4 w-4 shrink-0 text-[#9d7b3d] dark:text-[#f1d89b]" />
                             <input
                                 value={q}
                                 onChange={(event) => setQ(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                        search();
+                                    }
+                                }}
                                 className="min-w-0 flex-1 bg-transparent text-sm text-[#21180d] outline-none placeholder:text-[#8a7a63] dark:text-white dark:placeholder:text-white/42"
                                 placeholder="Search inquiries..."
                             />
@@ -353,9 +376,9 @@ export function InquiriesPage() {
                         </button>
                     </div>
 
-                    {inquiries.length > 0 ? (
+                    {rows.length > 0 ? (
                         <div className="grid gap-3">
-                            {inquiries.map((inquiry) => (
+                            {rows.map((inquiry) => (
                                 <article
                                     key={inquiry.id}
                                     className="rounded-[1.35rem] border border-[#d9c7a6]/70 bg-[#fffaf0]/72 p-4 shadow-[0_14px_40px_rgba(47,37,23,0.06)] dark:border-white/10 dark:bg-white/[0.035]"
@@ -385,10 +408,26 @@ export function InquiriesPage() {
                                             </p>
 
                                             <div className="mt-4 grid gap-2 text-sm md:grid-cols-2 xl:grid-cols-4">
-                                                <InfoLine icon={UserRound} label="Sender" value={`${inquiry.name || 'No name'} · ${inquiry.email || 'No email'}`} />
-                                                <InfoLine icon={Phone} label="Phone" value={inquiry.phone || 'Not set'} />
-                                                <InfoLine icon={CalendarDays} label="Preferred Date" value={compactDate(inquiry.event_date)} />
-                                                <InfoLine icon={MessageSquareText} label="Venue / Guests" value={`${inquiry.venue || 'Not set'} · ${inquiry.guest_count || 'Not set'}`} />
+                                                <InfoLine
+                                                    icon={UserRound}
+                                                    label="Sender"
+                                                    value={`${inquiry.name || 'No name'} · ${inquiry.email || 'No email'}`}
+                                                />
+                                                <InfoLine
+                                                    icon={Phone}
+                                                    label="Phone"
+                                                    value={inquiry.phone || 'Not set'}
+                                                />
+                                                <InfoLine
+                                                    icon={CalendarDays}
+                                                    label="Preferred Date"
+                                                    value={compactDate(inquiry.event_date)}
+                                                />
+                                                <InfoLine
+                                                    icon={MessageSquareText}
+                                                    label="Venue / Guests"
+                                                    value={`${inquiry.venue || 'Not set'} · ${inquiry.guest_count || 'Not set'}`}
+                                                />
                                             </div>
 
                                             <p className="mt-3 text-xs text-[#8a7a63] dark:text-white/42">
@@ -443,44 +482,5 @@ export function InquiriesPage() {
                 </ResourceSection>
             </div>
         </ResourcePageShell>
-    );
-}
-
-function InfoLine({
-    icon: Icon,
-    label,
-    value,
-}: {
-    icon: typeof UserRound;
-    label: string;
-    value: string;
-}) {
-    return (
-        <div className="rounded-[1rem] border border-[#eadcc2]/80 bg-white/70 p-3 dark:border-white/10 dark:bg-white/[0.035]">
-            <Icon className="h-4 w-4 text-[#9d7b3d] dark:text-[#f1d89b]" />
-            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9d7b3d] dark:text-[#f1d89b]">
-                {label}
-            </p>
-            <p className="mt-1 line-clamp-2 text-sm font-semibold text-[#21180d] dark:text-white">
-                {value}
-            </p>
-        </div>
-    );
-}
-
-function ResourceActionButton({
-    href,
-    children,
-}: {
-    href: string;
-    children: React.ReactNode;
-}) {
-    return (
-        <Link
-            href={href}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[#d9c7a6]/70 bg-white px-5 text-sm font-semibold text-[#2f2517] transition hover:-translate-y-0.5 hover:bg-[#f7f0e3] dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12"
-        >
-            {children}
-        </Link>
     );
 }

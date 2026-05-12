@@ -21,8 +21,6 @@ type PublicSiteSettings = {
     city_seal_url?: string | null;
     baguio_logo_url?: string | null;
     breathe_baguio_logo_url?: string | null;
-    visitaUrl?: string | null;
-    visita_url?: string | null;
     creativeBaguioUrl?: string | null;
     creative_baguio_url?: string | null;
     arts_url?: string | null;
@@ -170,27 +168,7 @@ function ExternalMiniLinks({
 }) {
     return (
         <div className="hidden items-center gap-2 2xl:flex">
-            <a
-                href={visitaUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-10 items-center gap-2 rounded-full border border-black/10 bg-white/72 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#332616] shadow-[0_10px_28px_rgba(54,39,20,0.08)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5 hover:border-[#b08d48]/45 hover:bg-white dark:border-white/10 dark:bg-white/8 dark:text-white dark:hover:bg-white/14"
-            >
-                <Landmark className="h-3.5 w-3.5" />
-                VISITA
-                <ExternalLink className="h-3 w-3 opacity-60" />
-            </a>
 
-            <a
-                href={artsUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-10 items-center gap-2 rounded-full border border-black/10 bg-white/72 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#332616] shadow-[0_10px_28px_rgba(54,39,20,0.08)] backdrop-blur-xl transition duration-300 hover:-translate-y-0.5 hover:border-[#b08d48]/45 hover:bg-white dark:border-white/10 dark:bg-white/8 dark:text-white dark:hover:bg-white/14"
-            >
-                <Palette className="h-3.5 w-3.5" />
-                Arts
-                <ExternalLink className="h-3 w-3 opacity-60" />
-            </a>
         </div>
     );
 }

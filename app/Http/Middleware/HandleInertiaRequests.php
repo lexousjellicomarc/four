@@ -2,130 +2,217 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\Inquiry;
-use App\Models\SiteSetting;
-use App\Models\UserNotification;
+use App\Models\Booking;
+use App\Models\PublicInquiry;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
     /**
+     * The root template that is loaded on the first page visit.
+     *
      * @var string
      */
     protected $rootView = 'app';
 
+    /**
+     * Determine the current asset version.
+     */
     public function version(Request $request): ?string
     {
         return parent::version($request);
     }
 
     /**
+     * Define the props that are shared by default.
+     *
      * @return array<string, mixed>
      */
     public function share(Request $request): array
     {
-        $user = $request->user();
-        $settings = SiteSetting::query()->first();
-
-        return array_merge(parent::share($request), [
-            'survey' => [
-                'url' => config('survey.url'),
-                'qr_image_url' => config('survey.qr_image_url'),
-            ],
-
-            'support' => [
-                'phone' => $settings?->phone ?: '(074) 446 2009',
-                'email' => $settings?->email ?: 'info@bccc-ease.com',
-            ],
-
-            'features' => [
-                'googleAuthEnabled' => filled(config('services.google.client_id'))
-                    && filled(config('services.google.client_secret'))
-                    && filled(config('services.google.redirect')),
-            ],
+        return [
+            ...parent::share($request),
 
             'auth' => [
-                'user' => $user
+                'user' => $request->user()
                     ? [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'display_name' => $user->display_name,
-                        'first_name' => $user->first_name,
-                        'middle_name' => $user->middle_name,
-                        'last_name' => $user->last_name,
-                        'email' => $user->email,
-                        'phone_number' => $user->phone_number,
-                        'organization_name' => $user->organization_name,
-                        'organization_type' => $user->organization_type,
-                        'position_title' => $user->position_title,
-                        'address_line1' => $user->address_line1,
-                        'barangay' => $user->barangay,
-                        'city_municipality' => $user->city_municipality,
-                        'province' => $user->province,
-                        'postal_code' => $user->postal_code,
-                        'country' => $user->country,
-                        'google_avatar' => $user->google_avatar,
-                        'email_verified_at' => optional($user->email_verified_at)->toIso8601String(),
-                        'last_login_at' => optional($user->last_login_at)->toIso8601String(),
+                        'id' => $request->user()->id,
+                        'name' => $request->user()->name,
+                        'email' => $request->user()->email,
+                        'role' => $this->userRole($request),
+                        'role_name' => $this->userRole($request),
+                        'roles' => $this->userRoles($request),
+                        'permissions' => $this->userPermissions($request),
                     ]
                     : null,
-                'roles' => $user
-                    ? $user->getRoleNames()->toArray()
-                    : [],
-                'permissions' => $user
-                    ? $user->getAllPermissions()->pluck('name')->toArray()
-                    : [],
+
+                'roles' => $this->userRoles($request),
+                'permissions' => $this->userPermissions($request),
             ],
-
-            'notifications' => function () use ($user) {
-                if (! $user) {
-                    return [
-                        'unread_count' => 0,
-                        'latest' => [],
-                    ];
-                }
-
-                $notifications = $user->notifications()
-                    ->latest()
-                    ->limit(10)
-                    ->get()
-                    ->map(function (UserNotification $notification) {
-                        return [
-                            'id' => $notification->id,
-                            'type' => $notification->type,
-                            'title' => $notification->title,
-                            'message' => $notification->message,
-                            'link' => $notification->link,
-                            'read_at' => optional($notification->read_at)->toIso8601String(),
-                            'created_at' => optional($notification->created_at)->toIso8601String(),
-                        ];
-                    });
-
-                return [
-                    'unread_count' => $user->notifications()->whereNull('read_at')->count(),
-                    'latest' => $notifications,
-                ];
-            },
-
-            'adminInquiryCounts' => function () use ($user) {
-                if (! $user || ! $user->hasAnyRole(['admin', 'manager'])) {
-                    return [
-                        'total' => 0,
-                        'new' => 0,
-                    ];
-                }
-
-                return [
-                    'total' => Inquiry::query()->count(),
-                    'new' => Inquiry::query()->where('status', 'new')->count(),
-                ];
-            },
 
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
+                'status' => fn () => $request->session()->get('status'),
+                'message' => fn () => $request->session()->get('message'),
             ],
-        ]);
+
+            'notificationSummary' => fn () => $this->notificationSummary($request),
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function userRoles(Request $request): array
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return [];
+        }
+
+        if (method_exists($user, 'getRoleNames')) {
+            return $user->getRoleNames()->values()->all();
+        }
+
+        if (isset($user->role) && filled($user->role)) {
+            return [(string) $user->role];
+        }
+
+        if (isset($user->role_name) && filled($user->role_name)) {
+            return [(string) $user->role_name];
+        }
+
+        return [];
+    }
+
+    private function userRole(Request $request): ?string
+    {
+        $roles = $this->userRoles($request);
+
+        if (count($roles) > 0) {
+            return $roles[0];
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function userPermissions(Request $request): array
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return [];
+        }
+
+        if (method_exists($user, 'getAllPermissions')) {
+            return $user
+                ->getAllPermissions()
+                ->pluck('name')
+                ->values()
+                ->all();
+        }
+
+        if (property_exists($user, 'permissions') && is_array($user->permissions)) {
+            return $user->permissions;
+        }
+
+        return [];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function notificationSummary(Request $request): array
+    {
+        if (! $request->user()) {
+            return [
+                'totalUnread' => 0,
+                'newInquiries' => 0,
+                'pendingBookings' => 0,
+                'pendingPayments' => 0,
+            ];
+        }
+
+        $newInquiries = $this->newInquiryCount();
+        $pendingBookings = $this->pendingBookingCount();
+        $pendingPayments = $this->pendingPaymentCount();
+
+        return [
+            'totalUnread' => $newInquiries + $pendingBookings + $pendingPayments,
+            'newInquiries' => $newInquiries,
+            'pendingBookings' => $pendingBookings,
+            'pendingPayments' => $pendingPayments,
+        ];
+    }
+
+    private function newInquiryCount(): int
+    {
+        if (! class_exists(PublicInquiry::class) || ! Schema::hasTable('public_inquiries')) {
+            return 0;
+        }
+
+        return PublicInquiry::query()
+            ->when(
+                Schema::hasColumn('public_inquiries', 'status'),
+                fn ($query) => $query->where(function ($builder): void {
+                    $builder
+                        ->whereNull('status')
+                        ->orWhere('status', '')
+                        ->orWhere('status', 'new');
+                }),
+                fn ($query) => $query
+            )
+            ->count();
+    }
+
+    private function pendingBookingCount(): int
+    {
+        if (! class_exists(Booking::class) || ! Schema::hasTable('bookings')) {
+            return 0;
+        }
+
+        if (! Schema::hasColumn('bookings', 'booking_status')) {
+            return 0;
+        }
+
+        return Booking::query()
+            ->whereIn('booking_status', [
+                'pending',
+                'pencil_booked',
+                'pencil-booked',
+                'for_review',
+                'for review',
+                'submitted',
+            ])
+            ->count();
+    }
+
+    private function pendingPaymentCount(): int
+    {
+        if (! class_exists(Booking::class) || ! Schema::hasTable('bookings')) {
+            return 0;
+        }
+
+        if (! Schema::hasColumn('bookings', 'payment_status')) {
+            return 0;
+        }
+
+        return Booking::query()
+            ->whereIn('payment_status', [
+                'pending',
+                'submitted',
+                'for_review',
+                'for review',
+                'awaiting_review',
+                'awaiting review',
+            ])
+            ->count();
     }
 }

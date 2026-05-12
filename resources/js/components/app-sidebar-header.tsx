@@ -1,3 +1,4 @@
+import BackendNotificationBell from '@/components/backend/backend-notification-bell';
 import {
     backendBookingCreateHref,
     backendCalendarHref,
@@ -24,7 +25,6 @@ import {
     LogOut,
     Menu,
     Moon,
-    Search,
     Sun,
     X,
 } from 'lucide-react';
@@ -214,9 +214,7 @@ function MobileSection({
                     ) : null}
                 </span>
 
-                {active && !open ? (
-                    <span className="h-2 w-2 rounded-full bg-[#f1d89b]" />
-                ) : null}
+                {active && !open ? <span className="h-2 w-2 rounded-full bg-[#f1d89b]" /> : null}
 
                 <ChevronDown className={cx('h-4 w-4 transition', open && 'rotate-180')} />
             </button>
@@ -339,7 +337,10 @@ export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: Breadcrum
                                     return (
                                         <span key={`${item.title}-${index}`} className="inline-flex items-center gap-1">
                                             {item.href && !last ? (
-                                                <Link href={item.href} className="transition hover:text-[#9d7b3d] dark:hover:text-[#f1d89b]">
+                                                <Link
+                                                    href={item.href}
+                                                    className="transition hover:text-[#9d7b3d] dark:hover:text-[#f1d89b]"
+                                                >
                                                     {item.title}
                                                 </Link>
                                             ) : (
@@ -382,72 +383,67 @@ export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: Breadcrum
                         </Link>
                     </div>
 
-                    <ThemeToggleButton />
+                    <div className="flex shrink-0 items-center gap-2">
+                        <BackendNotificationBell />
+                        <ThemeToggleButton />
 
-                    <button
-                        type="button"
-                        className="hidden h-11 w-11 place-items-center rounded-full border border-[#d9c7a6]/70 bg-white/78 text-[#2f2517] shadow-[0_14px_34px_rgba(47,37,23,0.09)] transition hover:-translate-y-0.5 hover:border-[#b08d48]/70 hover:bg-white dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12 sm:grid"
-                        aria-label="Search"
-                    >
-                        <Search className="h-4 w-4" />
-                    </button>
+                        <div className="relative">
+                            <button
+                                type="button"
+                                onClick={() => setAccountOpen((prev) => !prev)}
+                                className="inline-flex h-11 items-center gap-2 rounded-full border border-[#d9c7a6]/70 bg-white/78 px-2.5 text-[#2f2517] shadow-[0_14px_34px_rgba(47,37,23,0.09)] transition hover:-translate-y-0.5 hover:border-[#b08d48]/70 hover:bg-white dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12"
+                                aria-expanded={accountOpen}
+                                aria-label="Open account menu"
+                            >
+                                <span className="grid h-8 w-8 place-items-center rounded-full bg-[#efe2c8] text-xs font-bold text-[#7a5a24] dark:bg-white/10 dark:text-[#f1d89b]">
+                                    {initials(user?.name)}
+                                </span>
 
-                    <div className="relative">
-                        <button
-                            type="button"
-                            onClick={() => setAccountOpen((prev) => !prev)}
-                            className="inline-flex h-11 items-center gap-2 rounded-full border border-[#d9c7a6]/70 bg-white/78 px-2.5 text-[#2f2517] shadow-[0_14px_34px_rgba(47,37,23,0.09)] transition hover:-translate-y-0.5 hover:border-[#b08d48]/70 hover:bg-white dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12"
-                            aria-expanded={accountOpen}
-                            aria-label="Open account menu"
-                        >
-                            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#efe2c8] text-xs font-bold text-[#7a5a24] dark:bg-white/10 dark:text-[#f1d89b]">
-                                {initials(user?.name)}
-                            </span>
+                                <span className="hidden max-w-[9rem] truncate text-sm font-semibold lg:block">
+                                    {user?.name || backendRoleLabel(role)}
+                                </span>
 
-                            <span className="hidden max-w-[9rem] truncate text-sm font-semibold lg:block">
-                                {user?.name || backendRoleLabel(role)}
-                            </span>
+                                <ChevronDown className={cx('h-4 w-4 transition', accountOpen && 'rotate-180')} />
+                            </button>
 
-                            <ChevronDown className={cx('h-4 w-4 transition', accountOpen && 'rotate-180')} />
-                        </button>
-
-                        <AnimatePresence>
-                            {accountOpen ? (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                                    transition={{ duration: 0.18, ease }}
-                                    className="absolute right-0 top-full mt-2 w-72 overflow-hidden rounded-[1.35rem] border border-[#d9c7a6]/70 bg-white/95 p-2 shadow-[0_24px_70px_rgba(47,37,23,0.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#101419]/95"
-                                >
-                                    <div className="rounded-[1rem] bg-[#f7f0e3] p-3 dark:bg-white/7">
-                                        <p className="truncate text-sm font-semibold text-[#21180d] dark:text-white">
-                                            {user?.name || backendRoleLabel(role)}
-                                        </p>
-                                        <p className="truncate text-xs text-[#7a6b55] dark:text-white/48">
-                                            {user?.email || 'BCCC workspace'}
-                                        </p>
-                                    </div>
-
-                                    <Link
-                                        href="/"
-                                        className="mt-2 flex items-center gap-3 rounded-[1rem] px-3 py-2.5 text-sm font-semibold text-[#2f2517] transition hover:bg-[#f7f0e3] dark:text-white dark:hover:bg-white/8"
+                            <AnimatePresence>
+                                {accountOpen ? (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                                        transition={{ duration: 0.18, ease }}
+                                        className="absolute right-0 top-full mt-2 w-72 overflow-hidden rounded-[1.35rem] border border-[#d9c7a6]/70 bg-white/95 p-2 shadow-[0_24px_70px_rgba(47,37,23,0.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#101419]/95"
                                     >
-                                        <Globe2 className="h-4 w-4 text-[#9d7b3d]" />
-                                        Public Website
-                                    </Link>
+                                        <div className="rounded-[1rem] bg-[#f7f0e3] p-3 dark:bg-white/7">
+                                            <p className="truncate text-sm font-semibold text-[#21180d] dark:text-white">
+                                                {user?.name || backendRoleLabel(role)}
+                                            </p>
+                                            <p className="truncate text-xs text-[#7a6b55] dark:text-white/48">
+                                                {user?.email || 'BCCC workspace'}
+                                            </p>
+                                        </div>
 
-                                    <button
-                                        type="button"
-                                        onClick={logout}
-                                        className="flex w-full items-center gap-3 rounded-[1rem] px-3 py-2.5 text-left text-sm font-semibold text-rose-700 transition hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-400/10"
-                                    >
-                                        <LogOut className="h-4 w-4" />
-                                        Logout
-                                    </button>
-                                </motion.div>
-                            ) : null}
-                        </AnimatePresence>
+                                        <Link
+                                            href="/"
+                                            className="mt-2 flex items-center gap-3 rounded-[1rem] px-3 py-2.5 text-sm font-semibold text-[#2f2517] transition hover:bg-[#f7f0e3] dark:text-white dark:hover:bg-white/8"
+                                        >
+                                            <Globe2 className="h-4 w-4 text-[#9d7b3d]" />
+                                            Public Website
+                                        </Link>
+
+                                        <button
+                                            type="button"
+                                            onClick={logout}
+                                            className="flex w-full items-center gap-3 rounded-[1rem] px-3 py-2.5 text-left text-sm font-semibold text-rose-700 transition hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-400/10"
+                                        >
+                                            <LogOut className="h-4 w-4" />
+                                            Logout
+                                        </button>
+                                    </motion.div>
+                                ) : null}
+                            </AnimatePresence>
+                        </div>
                     </div>
                 </div>
             </header>

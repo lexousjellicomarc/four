@@ -1,305 +1,238 @@
-import { Head, Link } from '@inertiajs/react';
-import { motion, useReducedMotion } from 'framer-motion';
+import FacilitiesLayeredShowcase from '@/components/public/facilities-layered-showcase';
 import {
-  ArrowRight,
-  Building2,
-  CheckCircle2,
-  MapPin,
-  Search,
-  Sparkles,
-  Users,
+    EditorialFrame,
+    EmptyPublicPanel,
+    SectionIntro,
+    cx,
+    descriptionOf,
+    imageOf,
+    titleOf,
+    visibleRecords,
+    type PublicImageRecord,
+} from '@/components/public/public-display-system';
+import { Head, Link, usePage } from '@inertiajs/react';
+import {
+    ArrowRight,
+    Building2,
+    CheckCircle2,
+    LayoutGrid,
+    MapPin,
+    Sparkles,
+    UsersRound,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import PublicLayout from '@/layouts/public-layout';
-import type { PublicSpaceItem } from '@/types/public-content';
+import { useMemo } from 'react';
 
-const easeLuxury = [0.22, 1, 0.36, 1] as const;
+type FacilitiesPageProps = {
+    spaces?: PublicImageRecord[];
+    venueSpaces?: PublicImageRecord[];
+    facilities?: PublicImageRecord[];
+};
 
-function cx(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(' ');
+function capacityOf(item: PublicImageRecord) {
+    return item.capacity ? String(item.capacity) : 'Flexible capacity';
 }
 
-function getSpaceImage(space?: PublicSpaceItem | null, dark = false) {
-  if (!space) {
-    return dark ? '/marketing/images/hero/night2.png' : '/marketing/images/hero/noon2.jpg';
-  }
+function facilityUrl(item: PublicImageRecord) {
+    const slug = item.slug || item.id;
 
-  if (dark) {
-    return space.darkImage || space.image || space.lightImage || '/marketing/images/hero/night2.png';
-  }
-
-  return space.lightImage || space.image || space.darkImage || '/marketing/images/hero/noon2.jpg';
+    return slug ? `/facilities/${slug}` : '/facilities';
 }
 
-function FacilityCard({ space, index }: { space: PublicSpaceItem; index: number }) {
-  const reduceMotion = useReducedMotion();
-  const reversed = index % 2 === 1;
-  const details = space.details?.length
-    ? space.details.slice(0, 3)
-    : [space.shortDescription || space.summary || 'Space details may be updated from the admin content area.'];
+export default function FacilitiesPage() {
+    const { props } = usePage<FacilitiesPageProps>();
 
-  return (
-    <motion.article
-      initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 28, filter: 'blur(10px)' }}
-      whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
-      viewport={{ once: true, amount: 0.16 }}
-      transition={{ duration: 0.68, ease: easeLuxury, delay: Math.min(index * 0.055, 0.28) }}
-      className="group relative grid overflow-hidden border border-[var(--bccc-line)] bg-[var(--bccc-surface)] shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl transition duration-500 hover:-translate-y-1 hover:border-[var(--bccc-line-gold)] hover:shadow-[var(--bccc-shadow-medium)] lg:grid-cols-2"
-    >
-      <div className={cx('relative min-h-[23rem] overflow-hidden bg-[#080806]', reversed && 'lg:order-2')}>
-        <img
-          src={getSpaceImage(space, false)}
-          alt={space.title}
-          className="absolute inset-0 h-full w-full object-cover transition duration-[1300ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.055] dark:hidden"
-          draggable={false}
-        />
-
-        <img
-          src={getSpaceImage(space, true)}
-          alt={space.title}
-          className="absolute inset-0 hidden h-full w-full object-cover transition duration-[1300ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.055] dark:block"
-          draggable={false}
-        />
-
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.10)_40%,rgba(0,0,0,0.72)_100%)]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/86 via-black/16 to-black/12" />
-
-        <div className="absolute left-5 top-5 border border-white/16 bg-black/30 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.24em] text-[#f4dfad] backdrop-blur-xl">
-          {space.category || 'Venue Space'}
-        </div>
-
-        {space.featured ? (
-          <div className="absolute right-5 top-5 border border-[#f4dfad]/35 bg-[#f4dfad]/14 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-[#f4dfad] backdrop-blur-xl">
-            Featured
-          </div>
-        ) : null}
-
-        <div className="absolute bottom-5 left-5 right-5">
-          <div className="inline-flex items-center gap-2 border border-white/12 bg-white/[0.08] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/78 backdrop-blur-xl">
-            <Users className="h-3.5 w-3.5 text-[#f4dfad]" />
-            {space.capacity || 'Flexible capacity'}
-          </div>
-        </div>
-      </div>
-
-      <div className="relative flex min-h-[23rem] flex-col justify-between p-6 sm:p-8 lg:p-10">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
-            Signature Space
-          </p>
-
-          <h2 className="mt-4 text-4xl font-semibold leading-[0.95] tracking-[-0.065em] text-[var(--bccc-text)] sm:text-5xl">
-            {space.title}
-          </h2>
-
-          <p className="mt-5 text-sm leading-8 text-[var(--bccc-text-muted)]">
-            {space.summary || space.shortDescription || 'Explore this facility for event planning, scheduling, and coordination.'}
-          </p>
-
-          <div className="mt-6 grid gap-3">
-            {details.map((detail, detailIndex) => (
-              <div
-                key={`${space.id}-detail-${detailIndex}`}
-                className="flex items-start gap-3 border border-[var(--bccc-line)] bg-[var(--bccc-surface-muted)] p-4"
-              >
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--bccc-gold-700)]" />
-                <span className="text-sm leading-7 text-[var(--bccc-text-muted)]">{detail}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-7 flex flex-wrap gap-3">
-          <Link
-            href={`/facilities/${space.slug}`}
-            className="bccc-button-primary"
-          >
-            {space.ctaLabel || 'View Space'}
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-
-          <Link
-            href={`/bookings/create?venue=${encodeURIComponent(space.title)}`}
-            className="bccc-button-secondary"
-          >
-            Reserve this venue
-          </Link>
-        </div>
-      </div>
-    </motion.article>
-  );
-}
-
-export default function FacilitiesPage({ spaces = [] }: { spaces?: PublicSpaceItem[] }) {
-  const reduceMotion = useReducedMotion();
-  const [search, setSearch] = useState('');
-
-  const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return spaces;
-    }
-
-    return spaces.filter((item) =>
-      [
-        item.title,
-        item.category,
-        item.capacity,
-        item.summary,
-        item.shortDescription,
-        ...(item.details ?? []),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(keyword),
+    const spaces = useMemo(
+        () => visibleRecords([
+            ...(props.spaces ?? []),
+            ...(props.venueSpaces ?? []),
+            ...(props.facilities ?? []),
+        ]),
+        [props.spaces, props.venueSpaces, props.facilities],
     );
-  }, [search, spaces]);
 
-  const featured = filtered[0] ?? spaces[0] ?? null;
+    const featured = spaces[0];
+    const secondary = spaces.slice(1, 7);
 
-  return (
-    <PublicLayout>
-      <Head title="Facilities" />
+    return (
+        <>
+            <Head title="Facilities" />
 
-      <section className="relative min-h-[76svh] overflow-hidden bg-[#080806] pt-32 text-white lg:pt-36">
-        <img
-          src={getSpaceImage(featured, false)}
-          alt={featured?.title || 'BCCC Facilities'}
-          className="absolute inset-0 h-full w-full object-cover opacity-72 dark:hidden"
-          draggable={false}
-        />
+            <main className="public-display-page min-h-screen">
+                <section className="public-section-shell py-16 lg:py-20">
+                    <EditorialFrame
+                        label="Facilities"
+                        left={
+                            <div className="space-y-3">
+                                <p className="public-frame-label green">Nav</p>
 
-        <img
-          src={getSpaceImage(featured, true)}
-          alt={featured?.title || 'BCCC Facilities'}
-          className="absolute inset-0 hidden h-full w-full object-cover opacity-72 dark:block"
-          draggable={false}
-        />
+                                {spaces.slice(0, 6).map((space, index) => (
+                                    <a
+                                        key={space.id ?? index}
+                                        href={`#space-${space.id ?? index}`}
+                                        className="block rounded-full border border-[#d9c7a6]/70 bg-white/65 px-4 py-2 text-sm font-semibold text-[#2f2517] transition hover:bg-[#f7f0e3] dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12"
+                                    >
+                                        {titleOf(space, `Space ${index + 1}`)}
+                                    </a>
+                                ))}
 
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.18)_38%,rgba(0,0,0,0.84)_100%)]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#080806] via-[#080806]/52 to-black/28" />
+                                {spaces.length === 0 ? (
+                                    <p className="text-sm leading-7 text-[#6e604c] dark:text-white/56">
+                                        Venue spaces from the Content Manager will appear here.
+                                    </p>
+                                ) : null}
+                            </div>
+                        }
+                        main={
+                            <div>
+                                <SectionIntro
+                                    kicker="Our Spaces"
+                                    title="Facilities designed for civic, cultural, and convention use"
+                                    description="Explore BCCC spaces through a large image-led layout with layered supporting cards and readable descriptions."
+                                />
 
-        <div className="public-container relative z-10 grid min-h-[calc(76svh-9rem)] gap-8 pb-12 lg:grid-cols-[0.82fr_1.18fr] lg:items-end">
-          <motion.div
-            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 28, filter: 'blur(12px)' }}
-            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
-            transition={{ duration: 0.78, ease: easeLuxury }}
-          >
-            <div className="inline-flex items-center gap-2 border border-[#f4dfad]/26 bg-[#f4dfad]/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.28em] text-[#f4dfad]">
-              <Building2 className="h-3.5 w-3.5" />
-              Facilities
-            </div>
+                                <div className="mt-8 grid gap-3 md:grid-cols-3">
+                                    <MiniStat icon={Building2} label="Spaces" value={spaces.length.toString()} />
+                                    <MiniStat icon={LayoutGrid} label="Layout" value="Layered" />
+                                    <MiniStat icon={Sparkles} label="Display" value="Premium" />
+                                </div>
+                            </div>
+                        }
+                        right={
+                            <div className="space-y-3">
+                                <p className="public-frame-label">Featured</p>
 
-            <h1 className="mt-5 max-w-4xl text-[clamp(3rem,8vw,7.5rem)] font-medium leading-[0.88] tracking-[-0.085em] text-white">
-              Spaces designed for polished city events.
-            </h1>
-          </motion.div>
+                                {featured ? (
+                                    <article className="overflow-hidden rounded-[1.2rem] border border-[#eadcc2]/80 bg-white/70 dark:border-white/10 dark:bg-white/[0.035]">
+                                        {imageOf(featured) ? (
+                                            <img
+                                                src={imageOf(featured)}
+                                                alt={titleOf(featured, 'Featured facility')}
+                                                className="h-40 w-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className="grid h-40 place-items-center bg-[#f4ead8] text-[#8b672d] dark:bg-white/10 dark:text-[#f1d89b]">
+                                                <Building2 className="h-10 w-10" />
+                                            </div>
+                                        )}
 
-          <motion.div
-            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 24, filter: 'blur(10px)' }}
-            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
-            transition={{ duration: 0.78, ease: easeLuxury, delay: 0.12 }}
-            className="border border-white/12 bg-white/[0.07] p-5 shadow-[0_28px_90px_rgba(0,0,0,0.28)] backdrop-blur-2xl"
-          >
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#f4dfad]">
-              Featured Space
+                                        <div className="p-4">
+                                            <h3 className="text-lg font-semibold tracking-[-0.045em] text-[#21180d] dark:text-white">
+                                                {titleOf(featured, 'Featured facility')}
+                                            </h3>
+                                            <p className="mt-2 text-sm leading-6 text-[#6e604c] dark:text-white/56">
+                                                {capacityOf(featured)}
+                                            </p>
+                                        </div>
+                                    </article>
+                                ) : (
+                                    <p className="text-sm leading-7 text-[#6e604c] dark:text-white/56">
+                                        Create facilities from the Content Manager.
+                                    </p>
+                                )}
+                            </div>
+                        }
+                        footer={
+                            <p className="public-readable text-sm text-[#6e604c] dark:text-white/58">
+                                Body text is kept left-aligned with comfortable line height and readable line width, while visual browsing uses smooth layered movement.
+                            </p>
+                        }
+                    />
+                </section>
+
+                <FacilitiesLayeredShowcase items={spaces} />
+
+                <section className="public-section-shell py-16">
+                    <SectionIntro
+                        kicker="Venue Directory"
+                        title="All public facility cards"
+                        description="Each card links to a detailed facility page. Keep descriptions clear and concise for faster scanning."
+                    />
+
+                    {spaces.length > 0 ? (
+                        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            {spaces.map((space, index) => (
+                                <article
+                                    key={space.id ?? index}
+                                    id={`space-${space.id ?? index}`}
+                                    className="public-smooth-card overflow-hidden rounded-[1.5rem] border border-[#d9c7a6]/70 bg-white/78 shadow-[0_20px_60px_rgba(47,37,23,0.08)] dark:border-white/10 dark:bg-white/[0.05]"
+                                >
+                                    {imageOf(space) ? (
+                                        <img
+                                            src={imageOf(space)}
+                                            alt={titleOf(space, 'Facility')}
+                                            className="h-64 w-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="grid h-64 place-items-center bg-[#f4ead8] text-[#8b672d] dark:bg-white/10 dark:text-[#f1d89b]">
+                                            <Building2 className="h-12 w-12" />
+                                        </div>
+                                    )}
+
+                                    <div className="p-5">
+                                        <div className="flex flex-wrap gap-2">
+                                            <span className="inline-flex items-center gap-2 rounded-full bg-[#f4ead8] px-3 py-1.5 text-xs font-bold text-[#7a5a24] dark:bg-white/10 dark:text-[#f1d89b]">
+                                                <UsersRound className="h-3.5 w-3.5" />
+                                                {capacityOf(space)}
+                                            </span>
+
+                                            <span className="inline-flex items-center gap-2 rounded-full bg-[#f4ead8] px-3 py-1.5 text-xs font-bold text-[#7a5a24] dark:bg-white/10 dark:text-[#f1d89b]">
+                                                <MapPin className="h-3.5 w-3.5" />
+                                                BCCC
+                                            </span>
+                                        </div>
+
+                                        <h3 className="mt-4 text-2xl font-semibold tracking-[-0.055em] text-[#21180d] dark:text-white">
+                                            {titleOf(space, 'Facility')}
+                                        </h3>
+
+                                        <p className="public-readable mt-3 line-clamp-4 text-sm text-[#6e604c] dark:text-white/56">
+                                            {descriptionOf(space, 'A BCCC venue space available for public events, programs, and reservations.')}
+                                        </p>
+
+                                        <Link
+                                            href={facilityUrl(space)}
+                                            className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#2f2517] px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#4a3921] dark:bg-white dark:text-[#17120b]"
+                                        >
+                                            View Facility
+                                            <ArrowRight className="h-4 w-4" />
+                                        </Link>
+                                    </div>
+                                </article>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="mt-8">
+                            <EmptyPublicPanel
+                                icon={Building2}
+                                title="No facilities configured"
+                                description="Facilities created in the Content Manager will appear on this page."
+                            />
+                        </div>
+                    )}
+                </section>
+            </main>
+        </>
+    );
+}
+
+function MiniStat({
+    icon: Icon,
+    label,
+    value,
+}: {
+    icon: typeof Building2;
+    label: string;
+    value: string;
+}) {
+    return (
+        <article className="rounded-[1.15rem] border border-[#eadcc2]/80 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.035]">
+            <Icon className="h-5 w-5 text-[#9d7b3d] dark:text-[#f1d89b]" />
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#9d7b3d] dark:text-[#f1d89b]">
+                {label}
             </p>
-
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.055em]">
-              {featured?.title || 'BCCC Facility'}
-            </h2>
-
-            <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/68">
-              <span className="inline-flex items-center gap-2 border border-white/10 bg-white/[0.06] px-3 py-2">
-                <MapPin className="h-3.5 w-3.5 text-[#f4dfad]" />
-                {featured?.category || 'Venue Space'}
-              </span>
-
-              <span className="inline-flex items-center gap-2 border border-white/10 bg-white/[0.06] px-3 py-2">
-                <Users className="h-3.5 w-3.5 text-[#f4dfad]" />
-                {featured?.capacity || 'Flexible capacity'}
-              </span>
-            </div>
-
-            <p className="mt-4 text-sm leading-7 text-white/66">
-              {featured?.summary ||
-                featured?.shortDescription ||
-                'Discover BCCC venue spaces through a more immersive public presentation.'}
+            <p className="mt-1 text-xl font-semibold tracking-[-0.045em] text-[#21180d] dark:text-white">
+                {value}
             </p>
-
-            {featured ? (
-              <Link
-                href={`/facilities/${featured.slug}`}
-                className="mt-5 inline-flex items-center gap-2 border border-[#f4dfad]/36 bg-[#f4dfad] px-5 py-3 text-[11px] font-black uppercase tracking-[0.2em] text-[#17120a] transition duration-500 hover:-translate-y-0.5 hover:bg-white"
-              >
-                View Featured Space
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            ) : null}
-          </motion.div>
-        </div>
-      </section>
-
-      <section className="relative overflow-hidden bg-[var(--bccc-bg)] py-10">
-        <div className="public-container">
-          <div className="flex flex-col gap-4 border border-[var(--bccc-line)] bg-[var(--bccc-surface)] p-4 shadow-[var(--bccc-shadow-soft)] backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--bccc-gold-800)] dark:text-[var(--bccc-gold-300)]">
-                Search Facilities
-              </p>
-              <p className="mt-2 text-sm text-[var(--bccc-text-muted)]">
-                Filter by space name, category, capacity, or details.
-              </p>
-            </div>
-
-            <label className="flex min-h-12 w-full items-center gap-3 border border-[var(--bccc-line)] bg-[var(--bccc-surface-muted)] px-4 lg:max-w-xl">
-              <Search className="h-4 w-4 shrink-0 text-[var(--bccc-gold-700)]" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search facilities"
-                className="min-w-0 flex-1 bg-transparent text-sm font-medium text-[var(--bccc-text)] outline-none placeholder:text-[var(--bccc-text-muted)]/55"
-              />
-            </label>
-          </div>
-        </div>
-      </section>
-
-      <section className="public-section relative overflow-hidden">
-        <div className="public-container">
-          <div className="mb-8 grid gap-5 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
-            <div>
-              <div className="bccc-section-kicker">
-                <Sparkles className="h-3.5 w-3.5" />
-                Venue Collection
-              </div>
-
-              <h2 className="mt-4 bccc-section-title-sm">
-                Browse each facility with clear venue information.
-              </h2>
-            </div>
-
-            <p className="bccc-section-copy lg:justify-self-end">
-              The facility list is intentionally image-led and editorial, making each space easier to understand before proceeding to booking.
-            </p>
-          </div>
-
-          {filtered.length === 0 ? (
-            <div className="bccc-public-panel p-8 text-center">
-              <p className="text-sm text-[var(--bccc-text-muted)]">
-                No facilities matched your search.
-              </p>
-            </div>
-          ) : (
-            <div className="grid gap-5 lg:gap-7">
-              {filtered.map((space, index) => (
-                <FacilityCard key={space.id} space={space} index={index} />
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-    </PublicLayout>
-  );
+        </article>
+    );
 }

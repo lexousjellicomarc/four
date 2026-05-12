@@ -1,13 +1,13 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
-Schedule::command('bookings:sync-lifecycle')
-    ->everyFiveMinutes()
-    ->withoutOverlapping();
-
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
+Artisan::command('inspire', function (): void {
+    $this->comment(\Illuminate\Foundation\Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Schedule::command('bookings:expire-deadlines')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();

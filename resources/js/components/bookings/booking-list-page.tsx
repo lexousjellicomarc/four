@@ -34,6 +34,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
+import BookingDeadlineBadge from '@/components/bookings/booking-deadline-badge';
 
 type PaginationLink = {
   url?: string | null;
@@ -413,9 +414,10 @@ function BookingCard({
           </div>
 
           <div className="flex flex-wrap gap-2 xl:justify-end">
-            <BookingStatusBadge value={booking.booking_status} />
-            <BookingStatusBadge value={booking.payment_status} compact />
-          </div>
+  <BookingStatusBadge value={booking.booking_status} />
+  <BookingStatusBadge value={booking.payment_status} compact />
+  <BookingDeadlineBadge booking={booking} compact />
+</div>
         </div>
 
         <div className="booking-list-detail-grid">

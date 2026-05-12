@@ -1,157 +1,200 @@
-import { ResourcePageShell } from '@/components/admin-resource/resource-page-shell';
+import BookingDeadlineBadge from '@/components/bookings/booking-deadline-badge';
+import {
+    ResourceEmptyState,
+    ResourcePageShell,
+    ResourceSection,
+    ResourceStatCard,
+    ResourceToolbar,
+} from '@/components/admin-resource/resource-page-shell';
+import type { BreadcrumbItem } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
-    AlertTriangle,
+    Banknote,
+    CalendarClock,
     CheckCircle2,
     Clock3,
     CreditCard,
-    ExternalLink,
     Eye,
-    Filter,
-    Loader2,
-    Search,
-    ShieldAlert,
-    Wallet,
-    X,
+    FileImage,
+    Mail,
+    MessageSquareText,
+    ReceiptText,
+    ShieldCheck,
+    TimerOff,
+    UserRound,
     XCircle,
 } from 'lucide-react';
-import { FormEvent, ReactNode, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
-type PaymentRecord = {
+type PaymentStatus =
+    | 'pending'
+    | 'submitted'
+    | 'for_review'
+    | 'approved'
+    | 'verified'
+    | 'paid'
+    | 'rejected'
+    | 'declined'
+    | 'expired'
+    | string;
+
+type BookingLike = {
     id: number | string;
-    booking_id?: number | string | null;
-    booking?: {
-        id?: number | string;
-        client_name?: string | null;
-        company_name?: string | null;
-        client_email?: string | null;
-        type_of_event?: string | null;
-        booking_status?: string | null;
-        payment_status?: string | null;
-        booking_date_from?: string | null;
-        booking_date_to?: string | null;
-    } | null;
-    amount?: number | string | null;
-    status?: string | null;
-    payment_method?: string | null;
-    payment_gateway?: string | null;
-    payment_type?: string | null;
-    transaction_reference?: string | null;
-    remarks?: string | null;
-    payer_name?: string | null;
-    card_holder_name?: string | null;
-    card_last_four?: string | null;
-    proof_image_url?: string | null;
-    paid_at?: string | null;
-    created_at?: string | null;
-    updated_at?: string | null;
-    deadline?: {
-        state?: string | null;
-        label?: string | null;
-        submitted_total?: number | string | null;
-        confirmed_total?: number | string | null;
-    } | null;
+    client_name?: string | null;
+    company_name?: string | null;
+    client_email?: string | null;
+    type_of_event?: string | null;
+    booking_status?: string | null;
+    payment_status?: string | null;
+    booking_date_from?: string | null;
+    booking_date_to?: string | null;
+
+    expired_at?: string | null;
+    payment_balance_due_at?: string | null;
+    auto_declined_at?: string | null;
+    auto_decline_reason?: string | null;
+    deadline_at?: string | null;
+    deadline_state?: string | null;
+    deadline_label?: string | null;
+
     totals?: {
         items_total?: number | string | null;
+        payments_total?: number | string | null;
         submitted_payments_total?: number | string | null;
         confirmed_payments_total?: number | string | null;
         remaining_balance?: number | string | null;
     } | null;
+
+    service?: {
+        name?: string | null;
+        service_type?: {
+            name?: string | null;
+        } | null;
+        serviceType?: {
+            name?: string | null;
+        } | null;
+    } | null;
+};
+
+type PaymentRecord = {
+    id: number | string;
+    booking_id?: number | string | null;
+    amount?: number | string | null;
+    status?: PaymentStatus | null;
+    payment_status?: PaymentStatus | null;
+    payment_method?: string | null;
+    payment_gateway?: string | null;
+    payment_type?: string | null;
+    transaction_reference?: string | null;
+    reference_number?: string | null;
+    proof_image_url?: string | null;
+    proof_image?: string | null;
+    receipt_url?: string | null;
+    remarks?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+    booking?: BookingLike | null;
+};
+
+type Paginated<T> = {
+    data?: T[];
+    links?: Array<{
+        url?: string | null;
+        label?: string | null;
+        active?: boolean;
+    }>;
 };
 
 type PageProps = {
     workspaceRole?: string;
-    payments?: unknown;
-    paymentProofs?: unknown;
-    records?: unknown;
+    payments?: PaymentRecord[] | Paginated<PaymentRecord>;
+    paymentProofs?: PaymentRecord[] | Paginated<PaymentRecord>;
+    records?: PaymentRecord[] | Paginated<PaymentRecord>;
     filters?: {
         q?: string;
         status?: string;
-        gateway?: string;
-        payment_type?: string;
-        booking_status?: string;
-        deadline?: string;
-    };
-    stats?: {
-        all?: number;
-        pending?: number;
-        confirmed?: number;
-        failed?: number;
-        declined?: number;
-        refunded?: number;
-        review_needed?: number;
-        due_soon?: number;
-        overdue?: number;
     };
 };
 
-type PaginationLink = {
-    url?: string | null;
-    label?: string | null;
-    active?: boolean;
-};
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Admin', href: '/admin/dashboard' },
+    { title: 'Payment Review', href: '/admin/payments/review' },
+];
 
-function currentWorkspaceRole() {
-    const path = window.location.pathname;
+function collection<T>(value?: T[] | Paginated<T>): T[] {
+    if (Array.isArray(value)) {
+        return value;
+    }
 
-    if (path.startsWith('/manager')) return 'manager';
-    if (path.startsWith('/staff')) return 'staff';
-
-    return 'admin';
+    return value?.data ?? [];
 }
 
-function normalizeRole(role?: string | null) {
-    const value = String(role || currentWorkspaceRole()).toLowerCase();
-
-    if (value.includes('manager')) return 'manager';
-    if (value.includes('staff')) return 'staff';
-
-    return 'admin';
-}
-
-function collection<T>(value: unknown): T[] {
-    if (Array.isArray(value)) return value as T[];
-
-    if (
-        value &&
-        typeof value === 'object' &&
-        Array.isArray((value as { data?: unknown[] }).data)
-    ) {
-        return (value as { data: T[] }).data;
+function linksOf<T>(value?: T[] | Paginated<T>) {
+    if (value && !Array.isArray(value)) {
+        return value.links ?? [];
     }
 
     return [];
 }
 
-function linksOf(value: unknown): PaginationLink[] {
-    if (
-        value &&
-        typeof value === 'object' &&
-        Array.isArray((value as { links?: PaginationLink[] }).links)
-    ) {
-        return (value as { links: PaginationLink[] }).links;
+function currentRoleBase(role?: string) {
+    const normalized = String(role || '').toLowerCase();
+
+    if (normalized === 'manager' || window.location.pathname.startsWith('/manager')) {
+        return '/manager';
     }
 
-    return [];
+    if (normalized === 'staff' || window.location.pathname.startsWith('/staff')) {
+        return '/staff';
+    }
+
+    return '/admin';
 }
 
-function money(value: unknown): string {
-    const parsed = Number(value ?? 0);
+function paymentReviewPath(role?: string) {
+    const base = currentRoleBase(role);
+
+    if (base === '/staff') {
+        return '/staff/bookings';
+    }
+
+    return `${base}/payments/review`;
+}
+
+function bookingShowPath(role: string | undefined, bookingId: number | string) {
+    const base = currentRoleBase(role);
+
+    if (base === '/manager') {
+        return `/manager/bookings/${bookingId}`;
+    }
+
+    if (base === '/staff') {
+        return `/staff/bookings/${bookingId}`;
+    }
+
+    return `/admin/bookings/${bookingId}`;
+}
+
+function formatMoney(value?: number | string | null) {
+    const numeric = Number(value ?? 0);
 
     return new Intl.NumberFormat('en-PH', {
         style: 'currency',
         currency: 'PHP',
-        minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-    }).format(Number.isFinite(parsed) ? parsed : 0);
+    }).format(Number.isFinite(numeric) ? numeric : 0);
 }
 
-function compactDateTime(value?: string | null): string {
-    if (!value) return '—';
+function formatDateTime(value?: string | null) {
+    if (!value) {
+        return 'Not set';
+    }
 
     const date = new Date(value);
 
-    if (Number.isNaN(date.getTime())) return value;
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
 
     return new Intl.DateTimeFormat('en-PH', {
         month: 'short',
@@ -162,234 +205,144 @@ function compactDateTime(value?: string | null): string {
     }).format(date);
 }
 
-function cleanLabel(value?: string | null): string {
-    return String(value || '—')
+function cleanLabel(value?: string | null) {
+    return String(value || 'Not set')
         .replaceAll('_', ' ')
         .replaceAll('-', ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function numberValue(value: unknown): number {
-    const parsed = Number(value ?? 0);
-    return Number.isFinite(parsed) ? parsed : 0;
+function statusOf(payment: PaymentRecord) {
+    return String(payment.status || payment.payment_status || 'pending').toLowerCase();
 }
 
-function statusClass(value?: string | null) {
-    const status = String(value || '').toLowerCase();
+function statusClass(status?: string | null) {
+    const normalized = String(status || '').toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
 
-    if (['confirmed', 'paid', 'verified', 'approved'].includes(status)) {
-        return 'is-good';
+    if (['approved', 'verified', 'paid', 'completed', 'settled'].includes(normalized)) {
+        return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200';
     }
 
-    if (
-        ['pending', 'submitted', 'for_review', 'partial', 'unpaid'].includes(
-            status,
-        )
-    ) {
-        return 'is-warn';
+    if (['rejected', 'declined', 'failed', 'expired'].includes(normalized)) {
+        return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-200';
     }
 
-    if (
-        ['failed', 'declined', 'rejected', 'cancelled', 'overdue'].includes(
-            status,
-        )
-    ) {
-        return 'is-bad';
-    }
-
-    if (['due_soon', 'first_due_soon', 'final_due_soon'].includes(status)) {
-        return 'is-public';
-    }
-
-    return '';
+    return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200';
 }
 
-function basePath(role: string) {
-    if (role === 'manager') return '/manager/payments/review';
-    if (role === 'staff') return '/staff/payments/review';
-
-    return '/admin/payments/review';
+function proofUrl(payment: PaymentRecord) {
+    return payment.proof_image_url || payment.proof_image || payment.receipt_url || '';
 }
 
-function bookingBase(role: string) {
-    if (role === 'manager') return '/manager/bookings';
-    if (role === 'staff') return '/staff/bookings';
-
-    return '/admin/bookings';
+function clientName(booking?: BookingLike | null) {
+    return booking?.company_name || booking?.client_name || 'Client not set';
 }
 
-function operationsPath(role: string) {
-    if (role === 'manager') return '/manager/bookings/operations';
-
-    return '/admin/bookings/operations';
-}
-
-function bookingHref(role: string, payment: PaymentRecord): string {
-    const bookingId = payment.booking_id ?? payment.booking?.id;
-
-    if (!bookingId) return '#';
-
-    return `${bookingBase(role)}/${bookingId}`;
-}
-
-function proofHref(role: string, payment: PaymentRecord): string {
-    if (payment.proof_image_url) return String(payment.proof_image_url);
-
-    const bookingId = payment.booking_id ?? payment.booking?.id;
-
-    if (!bookingId) return '#';
-
-    return `${bookingBase(role)}/${bookingId}/payments/${payment.id}/proof`;
-}
-
-function paymentReviewTitle(payment: PaymentRecord) {
+function serviceName(booking?: BookingLike | null) {
     return (
-        payment.booking?.type_of_event ||
-        payment.booking?.company_name ||
-        payment.booking?.client_name ||
-        `Payment #${payment.id}`
+        booking?.service?.service_type?.name ||
+        booking?.service?.serviceType?.name ||
+        booking?.service?.name ||
+        'Venue not set'
     );
 }
 
-function paymentClient(payment: PaymentRecord) {
-    return (
-        payment.booking?.company_name ||
-        payment.booking?.client_name ||
-        payment.payer_name ||
-        'No client'
-    );
+function remainingBalance(booking?: BookingLike | null) {
+    const explicit = booking?.totals?.remaining_balance;
+
+    if (explicit !== null && explicit !== undefined) {
+        return Number(explicit);
+    }
+
+    const total = Number(booking?.totals?.items_total ?? 0);
+    const paid = Number(booking?.totals?.confirmed_payments_total ?? booking?.totals?.payments_total ?? 0);
+
+    return Math.max(total - paid, 0);
 }
 
-function paginationLabel(label?: string | null) {
-    return String(label || '')
-        .replace(/<[^>]*>/g, '')
-        .replace(/&laquo;|&raquo;/g, '')
-        .trim();
-}
-
-function KpiCard({
-    label,
-    value,
-    helper,
-    icon: Icon,
+function Pagination({
+    links,
 }: {
-    label: string;
-    value: ReactNode;
-    helper: string;
-    icon: typeof CreditCard;
+    links: Array<{
+        url?: string | null;
+        label?: string | null;
+        active?: boolean;
+    }>;
 }) {
-    return (
-        <article className="ops-review-kpi">
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <p className="backend-booking-label">{label}</p>
-                    <strong>{value}</strong>
-                </div>
-
-                <div className="alh-admin-kpi-icon">
-                    <Icon className="h-5 w-5" />
-                </div>
-            </div>
-
-            <p>{helper}</p>
-        </article>
-    );
-}
-
-function StatusChip({
-    value,
-    prefix,
-}: {
-    value?: string | null;
-    prefix?: string;
-}) {
-    return (
-        <span className={`alh-status-chip ${statusClass(value)}`}>
-            {prefix ? `${prefix}: ` : ''}
-            {cleanLabel(value)}
-        </span>
-    );
-}
-
-function Pagination({ links }: { links: PaginationLink[] }) {
-    if (!links.length) return null;
+    if (!links.length) {
+        return null;
+    }
 
     return (
-        <div className="flex flex-wrap gap-2 border-t border-slate-200 p-5 dark:border-slate-800">
-            {links.map((link, index) =>
-                link.url ? (
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {links.map((link, index) => {
+                const label = String(link.label || '')
+                    .replace(/<[^>]*>/g, '')
+                    .replace(/«|»/g, '')
+                    .trim();
+
+                if (!link.url) {
+                    return (
+                        <span
+                            key={`${label}-${index}`}
+                            className="inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-[#d9c7a6]/40 bg-[#fffaf0]/50 px-4 text-sm font-semibold text-[#8a7a63] dark:border-white/10 dark:bg-white/[0.035] dark:text-white/35"
+                        >
+                            {label}
+                        </span>
+                    );
+                }
+
+                return (
                     <Link
-                        key={`${link.label}-${index}`}
+                        key={`${label}-${index}`}
                         href={link.url}
                         preserveScroll
-                        className={`rounded-lg border px-3 py-2 text-xs font-bold ${
+                        preserveState
+                        className={
                             link.active
-                                ? 'border-[#20242b] bg-[#20242b] text-white dark:border-white dark:bg-white dark:text-slate-950'
-                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
-                        }`}
-                        aria-label={paginationLabel(link.label)}
-                        dangerouslySetInnerHTML={{ __html: link.label || '' }}
-                    />
-                ) : (
-                    <span
-                        key={`${link.label}-${index}`}
-                        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-400 dark:border-slate-800 dark:bg-slate-900/60"
-                        dangerouslySetInnerHTML={{ __html: link.label || '' }}
-                    />
-                ),
-            )}
+                                ? 'inline-flex h-10 min-w-10 items-center justify-center rounded-full bg-[#2f2517] px-4 text-sm font-semibold text-white dark:bg-white dark:text-[#17120b]'
+                                : 'inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-[#d9c7a6]/70 bg-white px-4 text-sm font-semibold text-[#2f2517] transition hover:bg-[#f7f0e3] dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12'
+                        }
+                    >
+                        {label}
+                    </Link>
+                );
+            })}
         </div>
     );
 }
 
 export function PaymentReviewPage() {
-    const { props } = usePage() as unknown as { props: PageProps };
-    const role = normalizeRole(props.workspaceRole);
-    const path = basePath(role);
-    const rawPayments = props.payments ?? props.paymentProofs ?? props.records;
+    const { props } = usePage<PageProps>();
+    const role = props.workspaceRole || 'admin';
 
-    const payments = useMemo(
-        () => collection<PaymentRecord>(rawPayments),
-        [rawPayments],
-    );
-    const pageLinks = useMemo(() => linksOf(rawPayments), [rawPayments]);
+    const raw = props.payments ?? props.paymentProofs ?? props.records;
+    const records = useMemo(() => collection<PaymentRecord>(raw), [raw]);
+    const links = useMemo(() => linksOf<PaymentRecord>(raw), [raw]);
 
     const [q, setQ] = useState(String(props.filters?.q ?? ''));
     const [status, setStatus] = useState(String(props.filters?.status ?? ''));
-    const [gateway, setGateway] = useState(
-        String(props.filters?.gateway ?? ''),
-    );
-    const [paymentType, setPaymentType] = useState(
-        String(props.filters?.payment_type ?? ''),
-    );
-    const [bookingStatus, setBookingStatus] = useState(
-        String(props.filters?.booking_status ?? ''),
-    );
-    const [deadline, setDeadline] = useState(
-        String(props.filters?.deadline ?? ''),
-    );
-    const [processingId, setProcessingId] = useState<string | number | null>(
-        null,
-    );
 
-    const visibleAmount = payments.reduce(
-        (sum, payment) => sum + numberValue(payment.amount),
-        0,
-    );
-    const stats = props.stats ?? {};
+    const pendingCount = records.filter((payment) =>
+        ['pending', 'submitted', 'for_review', 'awaiting_review'].includes(statusOf(payment).replaceAll(' ', '_')),
+    ).length;
 
-    function applyFilters(event?: FormEvent<HTMLFormElement>) {
-        event?.preventDefault();
+    const approvedCount = records.filter((payment) =>
+        ['approved', 'verified', 'paid', 'completed', 'settled'].includes(statusOf(payment)),
+    ).length;
 
+    const rejectedCount = records.filter((payment) =>
+        ['rejected', 'declined', 'failed', 'expired'].includes(statusOf(payment)),
+    ).length;
+
+    const totalAmount = records.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
+
+    function search() {
         router.get(
-            path,
+            paymentReviewPath(role),
             {
                 q: q || undefined,
                 status: status || undefined,
-                gateway: gateway || undefined,
-                payment_type: paymentType || undefined,
-                booking_status: bookingStatus || undefined,
-                deadline: deadline || undefined,
             },
             {
                 preserveScroll: true,
@@ -399,460 +352,343 @@ export function PaymentReviewPage() {
         );
     }
 
-    function resetFilters() {
-        setQ('');
-        setStatus('');
-        setGateway('');
-        setPaymentType('');
-        setBookingStatus('');
-        setDeadline('');
+    function updatePayment(payment: PaymentRecord, nextStatus: 'approved' | 'rejected') {
+        const label = nextStatus === 'approved' ? 'approve' : 'reject';
 
-        router.get(
-            path,
-            {},
-            {
-                preserveScroll: true,
-                preserveState: true,
-                replace: true,
-            },
-        );
-    }
-
-    function updatePayment(
-        payment: PaymentRecord,
-        nextStatus: 'confirmed' | 'failed' | 'declined',
-    ) {
-        const bookingId = payment.booking_id ?? payment.booking?.id;
-
-        if (!bookingId) return;
-
-        const verb =
-            nextStatus === 'confirmed'
-                ? 'confirm'
-                : nextStatus === 'failed'
-                  ? 'mark as failed'
-                  : 'decline';
-
-        if (!window.confirm(`Are you sure you want to ${verb} this payment?`))
+        if (!window.confirm(`Are you sure you want to ${label} this payment proof?`)) {
             return;
-
-        setProcessingId(payment.id);
+        }
 
         router.put(
-            `${bookingBase(role)}/${bookingId}/payments/${payment.id}`,
+            `${paymentReviewPath(role)}/${payment.id}`,
             {
                 status: nextStatus,
-                payment_status: nextStatus,
-                payment_method: payment.payment_method || 'manual',
-                payment_gateway: payment.payment_gateway || 'manual',
-                payment_type: payment.payment_type || 'down',
-                amount: payment.amount || 0,
-                transaction_reference: payment.transaction_reference || '',
-                payer_name: payment.payer_name || '',
-                card_holder_name: payment.card_holder_name || '',
-                remarks:
-                    nextStatus === 'confirmed'
-                        ? 'Payment proof reviewed and confirmed.'
-                        : nextStatus === 'failed'
-                          ? 'Payment proof reviewed and marked failed.'
-                          : 'Payment proof reviewed and declined.',
             },
             {
                 preserveScroll: true,
-                onFinish: () => setProcessingId(null),
             },
         );
     }
 
     return (
         <ResourcePageShell
-            role={props.workspaceRole}
-            current="Payment Review"
-            eyebrow="Payment Compliance"
             title="Payment Review"
-            description="Review submitted payment proof, transaction references, payment deadlines, and related booking records."
+            eyebrow="Finance Review"
+            icon={CreditCard}
+            breadcrumbs={breadcrumbs}
+            subtitle="Review submitted payment proofs, compare remaining balances, verify deadline status, and approve or reject payment records."
+            actions={
+                <Link
+                    href={`${currentRoleBase(role)}/bookings`}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[#d9c7a6]/70 bg-white px-5 text-sm font-semibold text-[#2f2517] transition hover:-translate-y-0.5 hover:bg-[#f7f0e3] dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12"
+                >
+                    <ReceiptText className="h-4 w-4" />
+                    Booking Records
+                </Link>
+            }
         >
-            <div className="space-y-5">
-                <section className="ops-review-hero">
-                    <div>
-                        <p className="backend-booking-label">
-                            Payment Review Center
-                        </p>
-                        <h1>Confirm, decline, and monitor payment proof.</h1>
-                        <span>
-                            This page is optimized for daily payment review.
-                            Keep the queue clean, verify proof, then open the
-                            booking only when deeper review is needed.
-                        </span>
-                    </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <ResourceStatCard
+                    label="For Review"
+                    value={pendingCount}
+                    description="Payment proofs needing action."
+                    icon={Clock3}
+                />
 
-                    <div className="flex flex-wrap gap-2">
-                        <Link
-                            href={operationsPath(role)}
-                            className="alh-secondary-button"
-                        >
-                            Operations Center
-                        </Link>
+                <ResourceStatCard
+                    label="Approved"
+                    value={approvedCount}
+                    description="Verified payment records."
+                    icon={CheckCircle2}
+                />
 
-                        <Link
-                            href={bookingBase(role)}
-                            className="alh-primary-button"
-                        >
-                            Bookings
-                        </Link>
-                    </div>
-                </section>
+                <ResourceStatCard
+                    label="Rejected"
+                    value={rejectedCount}
+                    description="Declined or invalid proofs."
+                    icon={XCircle}
+                />
 
-                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <KpiCard
-                        label="Review Queue"
-                        value={
-                            stats.review_needed ??
-                            stats.pending ??
-                            payments.filter(
-                                (p) =>
-                                    String(p.status).toLowerCase() ===
-                                    'pending',
-                            ).length
-                        }
-                        helper="Payments marked pending or waiting for validation."
-                        icon={Clock3}
-                    />
-                    <KpiCard
-                        label="Confirmed"
-                        value={
-                            stats.confirmed ??
-                            payments.filter(
-                                (p) =>
-                                    String(p.status).toLowerCase() ===
-                                    'confirmed',
-                            ).length
-                        }
-                        helper="Payment records already confirmed."
-                        icon={CheckCircle2}
-                    />
-                    <KpiCard
-                        label="Deadline Risk"
-                        value={(stats.due_soon ?? 0) + (stats.overdue ?? 0)}
-                        helper={`${stats.due_soon ?? 0} due soon · ${stats.overdue ?? 0} overdue.`}
-                        icon={ShieldAlert}
-                    />
-                    <KpiCard
-                        label="Visible Amount"
-                        value={money(visibleAmount)}
-                        helper="Total from the currently loaded page."
-                        icon={Wallet}
-                    />
-                </section>
+                <ResourceStatCard
+                    label="Loaded Amount"
+                    value={formatMoney(totalAmount)}
+                    description="Total amount from loaded records."
+                    icon={Banknote}
+                />
+            </div>
 
-                <section className="ops-review-panel overflow-hidden">
-                    <div className="ops-review-panel-header">
-                        <div>
-                            <p className="backend-booking-label">
-                                Payment Submissions
-                            </p>
-                            <h2>
-                                {payments.length} visible record
-                                {payments.length === 1 ? '' : 's'}
-                            </h2>
-                            <span>
-                                Use filters to narrow payment proof by status,
-                                channel, payment type, booking status, and
-                                deadline risk.
-                            </span>
-                        </div>
-                    </div>
+            <div className="mt-5">
+                <ResourceSection
+                    title="Payment proof queue"
+                    eyebrow="Review Desk"
+                    description="Each card includes the proof image, payment metadata, linked booking, and current deadline state."
+                >
+                    <ResourceToolbar
+                        searchPlaceholder="Search client, reference, event, or payment status..."
+                        right={
+                            <div className="flex flex-wrap gap-2">
+                                <select
+                                    value={status}
+                                    onChange={(event) => setStatus(event.target.value)}
+                                    className="min-h-11 rounded-full border border-[#d9c7a6]/70 bg-white px-4 text-sm font-semibold text-[#2f2517] outline-none dark:border-white/10 dark:bg-white/7 dark:text-white"
+                                >
+                                    <option value="">All statuses</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="submitted">Submitted</option>
+                                    <option value="for_review">For review</option>
+                                    <option value="approved">Approved</option>
+                                    <option value="rejected">Rejected</option>
+                                    <option value="expired">Expired</option>
+                                </select>
 
-                    <form
-                        onSubmit={applyFilters}
-                        className="ops-review-filter-grid"
-                    >
-                        <div className="relative lg:col-span-2">
-                            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                                value={q}
-                                onChange={(event) => setQ(event.target.value)}
-                                className="backend-booking-input pl-10"
-                                placeholder="Search payer, reference, remarks, booking, client..."
-                            />
-                        </div>
-
-                        <select
-                            value={status}
-                            onChange={(event) => setStatus(event.target.value)}
-                            className="backend-booking-input"
-                        >
-                            <option value="">All payment statuses</option>
-                            <option value="pending">Pending</option>
-                            <option value="confirmed">Confirmed</option>
-                            <option value="failed">Failed</option>
-                            <option value="declined">Declined</option>
-                            <option value="refunded">Refunded</option>
-                        </select>
-
-                        <select
-                            value={gateway}
-                            onChange={(event) => setGateway(event.target.value)}
-                            className="backend-booking-input"
-                        >
-                            <option value="">All gateways</option>
-                            <option value="manual">Manual</option>
-                            <option value="gcash">GCash</option>
-                            <option value="maya">Maya</option>
-                            <option value="bank">Bank</option>
-                            <option value="cash">Cash</option>
-                            <option value="card">Card</option>
-                            <option value="paypal">PayPal</option>
-                        </select>
-
-                        <select
-                            value={paymentType}
-                            onChange={(event) =>
-                                setPaymentType(event.target.value)
-                            }
-                            className="backend-booking-input"
-                        >
-                            <option value="">All payment types</option>
-                            <option value="down">Down Payment</option>
-                            <option value="balance">Balance</option>
-                            <option value="full">Full Payment</option>
-                            <option value="bond">Bond / Deposit</option>
-                            <option value="additional">
-                                Additional Charges
-                            </option>
-                        </select>
-
-                        <select
-                            value={bookingStatus}
-                            onChange={(event) =>
-                                setBookingStatus(event.target.value)
-                            }
-                            className="backend-booking-input"
-                        >
-                            <option value="">All booking statuses</option>
-                            <option value="pending">Pending</option>
-                            <option value="confirmed">Confirmed</option>
-                            <option value="active">Active</option>
-                            <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
-                            <option value="declined">Declined</option>
-                        </select>
-
-                        <select
-                            value={deadline}
-                            onChange={(event) =>
-                                setDeadline(event.target.value)
-                            }
-                            className="backend-booking-input"
-                        >
-                            <option value="">All deadline states</option>
-                            <option value="review">Needs Review</option>
-                            <option value="due_soon">Due Soon</option>
-                            <option value="overdue">Overdue</option>
-                        </select>
-
-                        <button
-                            type="submit"
-                            className="alh-primary-button justify-center"
-                        >
-                            <Filter className="h-4 w-4" />
-                            Apply
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={resetFilters}
-                            className="alh-secondary-button justify-center"
-                        >
-                            <X className="h-4 w-4" />
-                            Reset
-                        </button>
-                    </form>
-
-                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                        {payments.length > 0 ? (
-                            payments.map((payment) => {
-                                const isBusy = processingId === payment.id;
-                                const deadlineState = payment.deadline?.state;
-                                const balance =
-                                    payment.totals?.remaining_balance;
-
-                                return (
-                                    <article
-                                        key={payment.id}
-                                        className="ops-payment-row"
-                                    >
-                                        <div className="min-w-0">
-                                            <div className="flex flex-wrap gap-2">
-                                                <StatusChip
-                                                    value={payment.status}
-                                                />
-                                                <StatusChip
-                                                    value={
-                                                        payment.booking
-                                                            ?.booking_status
-                                                    }
-                                                    prefix="Booking"
-                                                />
-                                                {deadlineState ? (
-                                                    <span
-                                                        className={`alh-status-chip ${statusClass(deadlineState)}`}
-                                                    >
-                                                        {payment.deadline
-                                                            ?.label ||
-                                                            cleanLabel(
-                                                                deadlineState,
-                                                            )}
-                                                    </span>
-                                                ) : null}
-                                                <span className="booking-mini-pill">
-                                                    {cleanLabel(
-                                                        payment.payment_gateway ||
-                                                            payment.payment_method ||
-                                                            'manual',
-                                                    )}
-                                                </span>
-                                                <span className="booking-mini-pill">
-                                                    {cleanLabel(
-                                                        payment.payment_type ||
-                                                            'payment',
-                                                    )}
-                                                </span>
-                                            </div>
-
-                                            <h3>
-                                                {paymentReviewTitle(payment)}
-                                            </h3>
-                                            <p>
-                                                {paymentClient(payment)} ·{' '}
-                                                {money(payment.amount)} ·
-                                                Submitted{' '}
-                                                {compactDateTime(
-                                                    payment.created_at ||
-                                                        payment.paid_at,
-                                                )}
-                                            </p>
-
-                                            <div className="mt-4 grid gap-3 md:grid-cols-4">
-                                                <div className="alh-admin-mini-box">
-                                                    <span>Reference</span>
-                                                    <strong>
-                                                        {payment.transaction_reference ||
-                                                            'No reference'}
-                                                    </strong>
-                                                </div>
-                                                <div className="alh-admin-mini-box">
-                                                    <span>Payer</span>
-                                                    <strong>
-                                                        {payment.payer_name ||
-                                                            payment.card_holder_name ||
-                                                            'Not set'}
-                                                    </strong>
-                                                </div>
-                                                <div className="alh-admin-mini-box">
-                                                    <span>Booking Total</span>
-                                                    <strong>
-                                                        {money(
-                                                            payment.totals
-                                                                ?.items_total,
-                                                        )}
-                                                    </strong>
-                                                </div>
-                                                <div className="alh-admin-mini-box">
-                                                    <span>Remaining</span>
-                                                    <strong>
-                                                        {money(balance)}
-                                                    </strong>
-                                                </div>
-                                            </div>
-
-                                            {payment.remarks ? (
-                                                <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-500 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-400">
-                                                    {payment.remarks}
-                                                </p>
-                                            ) : null}
-                                        </div>
-
-                                        <div className="flex flex-wrap gap-2 xl:justify-end">
-                                            <Link
-                                                href={bookingHref(
-                                                    role,
-                                                    payment,
-                                                )}
-                                                className="alh-admin-neutral-button"
-                                            >
-                                                <Eye className="h-4 w-4" />
-                                                Booking
-                                            </Link>
-
-                                            <a
-                                                href={proofHref(role, payment)}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="alh-admin-neutral-button"
-                                            >
-                                                <ExternalLink className="h-4 w-4" />
-                                                Proof
-                                            </a>
-
-                                            {String(
-                                                payment.status || '',
-                                            ).toLowerCase() === 'pending' ? (
-                                                <>
-                                                    <button
-                                                        type="button"
-                                                        disabled={isBusy}
-                                                        onClick={() =>
-                                                            updatePayment(
-                                                                payment,
-                                                                'confirmed',
-                                                            )
-                                                        }
-                                                        className="ops-review-confirm-button"
-                                                    >
-                                                        {isBusy ? (
-                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                        ) : (
-                                                            <CheckCircle2 className="h-4 w-4" />
-                                                        )}
-                                                        Confirm
-                                                    </button>
-
-                                                    <button
-                                                        type="button"
-                                                        disabled={isBusy}
-                                                        onClick={() =>
-                                                            updatePayment(
-                                                                payment,
-                                                                'declined',
-                                                            )
-                                                        }
-                                                        className="ops-review-decline-button"
-                                                    >
-                                                        <XCircle className="h-4 w-4" />
-                                                        Decline
-                                                    </button>
-                                                </>
-                                            ) : null}
-                                        </div>
-                                    </article>
-                                );
-                            })
-                        ) : (
-                            <div className="ops-empty-state">
-                                <AlertTriangle className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-700" />
-                                <h3>No payment records found</h3>
-                                <p>
-                                    Clear filters or wait for new payment proof
-                                    submissions.
-                                </p>
+                                <button
+                                    type="button"
+                                    onClick={search}
+                                    className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#2f2517] px-5 text-sm font-semibold text-white shadow-[0_18px_44px_rgba(47,37,23,0.18)] transition hover:-translate-y-0.5 hover:bg-[#4a3921] dark:bg-white dark:text-[#17120b]"
+                                >
+                                    Search
+                                </button>
                             </div>
-                        )}
-                    </div>
+                        }
+                    />
 
-                    <Pagination links={pageLinks} />
-                </section>
+                    {records.length === 0 ? (
+                        <ResourceEmptyState
+                            icon={CreditCard}
+                            title="No payment proofs for review"
+                            description="Submitted payment proofs will appear here when clients upload them."
+                        />
+                    ) : (
+                        <div className="grid gap-4">
+                            {records.map((payment) => (
+                                <PaymentReviewCard
+                                    key={payment.id}
+                                    payment={payment}
+                                    role={role}
+                                    onApprove={() => updatePayment(payment, 'approved')}
+                                    onReject={() => updatePayment(payment, 'rejected')}
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    <Pagination links={links} />
+                </ResourceSection>
             </div>
         </ResourcePageShell>
     );
 }
+
+function PaymentReviewCard({
+    payment,
+    role,
+    onApprove,
+    onReject,
+}: {
+    payment: PaymentRecord;
+    role?: string;
+    onApprove: () => void;
+    onReject: () => void;
+}) {
+    const booking = payment.booking;
+    const status = statusOf(payment);
+    const proof = proofUrl(payment);
+
+    return (
+        <article className="overflow-hidden rounded-[1.45rem] border border-[#d9c7a6]/70 bg-[#fffaf0]/72 shadow-[0_18px_58px_rgba(47,37,23,0.08)] dark:border-white/10 dark:bg-white/[0.035]">
+            <div className="grid gap-0 xl:grid-cols-[18rem_1fr]">
+                <div className="border-b border-[#eadcc2]/80 bg-white/60 p-3 dark:border-white/10 dark:bg-white/[0.035] xl:border-b-0 xl:border-r">
+                    {proof ? (
+                        <a
+                            href={proof}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="group block overflow-hidden rounded-[1.1rem] border border-[#eadcc2]/80 bg-white dark:border-white/10 dark:bg-white/[0.035]"
+                        >
+                            <img
+                                src={proof}
+                                alt="Payment proof"
+                                className="h-72 w-full object-cover transition duration-300 group-hover:scale-[1.03] xl:h-full"
+                            />
+
+                            <div className="flex items-center justify-between gap-3 border-t border-[#eadcc2]/80 p-3 text-sm font-semibold text-[#2f2517] dark:border-white/10 dark:text-white">
+                                <span className="inline-flex items-center gap-2">
+                                    <Eye className="h-4 w-4" />
+                                    View proof
+                                </span>
+                                <FileImage className="h-4 w-4 text-[#9d7b3d] dark:text-[#f1d89b]" />
+                            </div>
+                        </a>
+                    ) : (
+                        <div className="grid h-72 place-items-center rounded-[1.1rem] border border-dashed border-[#d9c7a6]/80 bg-[#fffaf0]/72 p-6 text-center dark:border-white/10 dark:bg-white/[0.035]">
+                            <div>
+                                <FileImage className="mx-auto h-10 w-10 text-[#b08d48] dark:text-[#f1d89b]" />
+                                <p className="mt-3 text-sm font-semibold text-[#21180d] dark:text-white">
+                                    No proof image
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-[#6e604c] dark:text-white/52">
+                                    This record has no uploaded proof image.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-5">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${statusClass(status)}`}
+                                >
+                                    <ShieldCheck className="h-3.5 w-3.5" />
+                                    {cleanLabel(status)}
+                                </span>
+
+                                {booking ? <BookingDeadlineBadge booking={booking} compact /> : null}
+
+                                <span className="rounded-full border border-[#d9c7a6]/70 bg-white px-3 py-1.5 text-xs font-bold text-[#7a5a24] dark:border-white/10 dark:bg-white/7 dark:text-[#f1d89b]">
+                                    Payment #{payment.id}
+                                </span>
+                            </div>
+
+                            <h3 className="mt-4 text-2xl font-semibold tracking-[-0.05em] text-[#21180d] dark:text-white">
+                                {clientName(booking)}
+                            </h3>
+
+                            <p className="mt-2 text-sm leading-7 text-[#6e604c] dark:text-white/56">
+                                {booking?.type_of_event || 'No event title'} · {serviceName(booking)}
+                            </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 lg:justify-end">
+                            {booking?.id ? (
+                                <Link
+                                    href={bookingShowPath(role, booking.id)}
+                                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[#d9c7a6]/70 bg-white px-4 text-sm font-semibold text-[#2f2517] transition hover:bg-[#f7f0e3] dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12"
+                                >
+                                    <ReceiptText className="h-4 w-4" />
+                                    Open Booking
+                                </Link>
+                            ) : null}
+
+                            {!['approved', 'verified', 'paid', 'completed', 'settled'].includes(status) ? (
+                                <button
+                                    type="button"
+                                    onClick={onApprove}
+                                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                                >
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    Approve
+                                </button>
+                            ) : null}
+
+                            {!['rejected', 'declined', 'failed'].includes(status) ? (
+                                <button
+                                    type="button"
+                                    onClick={onReject}
+                                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-rose-600 px-4 text-sm font-semibold text-white transition hover:bg-rose-700"
+                                >
+                                    <XCircle className="h-4 w-4" />
+                                    Reject
+                                </button>
+                            ) : null}
+                        </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <InfoBox
+                            icon={Banknote}
+                            label="Amount"
+                            value={formatMoney(payment.amount)}
+                        />
+
+                        <InfoBox
+                            icon={CreditCard}
+                            label="Method"
+                            value={payment.payment_method || payment.payment_gateway || 'Not set'}
+                        />
+
+                        <InfoBox
+                            icon={MessageSquareText}
+                            label="Reference"
+                            value={payment.transaction_reference || payment.reference_number || 'Not set'}
+                        />
+
+                        <InfoBox
+                            icon={Clock3}
+                            label="Submitted"
+                            value={formatDateTime(payment.created_at)}
+                        />
+                    </div>
+
+                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <InfoBox
+                            icon={UserRound}
+                            label="Client"
+                            value={booking?.client_name || booking?.company_name || 'Not set'}
+                        />
+
+                        <InfoBox
+                            icon={Mail}
+                            label="Email"
+                            value={booking?.client_email || 'Not set'}
+                        />
+
+                        <InfoBox
+                            icon={CalendarClock}
+                            label="Event Date"
+                            value={formatDateTime(booking?.booking_date_from)}
+                        />
+
+                        <InfoBox
+                            icon={TimerOff}
+                            label="Remaining Balance"
+                            value={formatMoney(remainingBalance(booking))}
+                        />
+                    </div>
+
+                    {payment.remarks ? (
+                        <div className="mt-4 rounded-[1.1rem] border border-[#eadcc2]/80 bg-white/70 p-4 text-sm leading-7 text-[#6e604c] dark:border-white/10 dark:bg-white/[0.035] dark:text-white/56">
+                            <strong className="font-semibold text-[#21180d] dark:text-white">Remarks:</strong>{' '}
+                            {payment.remarks}
+                        </div>
+                    ) : null}
+
+                    {booking?.auto_decline_reason ? (
+                        <div className="mt-4 rounded-[1.1rem] border border-rose-200 bg-rose-50 p-4 text-sm leading-7 text-rose-800 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-100">
+                            <strong className="font-semibold">Deadline note:</strong>{' '}
+                            {booking.auto_decline_reason}
+                        </div>
+                    ) : null}
+                </div>
+            </div>
+        </article>
+    );
+}
+
+function InfoBox({
+    icon: Icon,
+    label,
+    value,
+}: {
+    icon: typeof Banknote;
+    label: string;
+    value: string;
+}) {
+    return (
+        <div className="rounded-[1rem] border border-[#eadcc2]/80 bg-white/70 p-3 dark:border-white/10 dark:bg-white/[0.035]">
+            <Icon className="h-4 w-4 text-[#9d7b3d] dark:text-[#f1d89b]" />
+
+            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9d7b3d] dark:text-[#f1d89b]">
+                {label}
+            </p>
+
+            <p className="mt-1 line-clamp-2 text-sm font-semibold text-[#21180d] dark:text-white">
+                {value}
+            </p>
+        </div>
+    );
+}
+
+export default PaymentReviewPage;

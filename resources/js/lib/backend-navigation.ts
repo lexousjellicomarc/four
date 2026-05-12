@@ -149,15 +149,15 @@ export function backendRoleLabel(role: BackendRole): string {
 
 export function backendRoleEyebrow(role: BackendRole): string {
     if (role === 'admin') {
-        return 'Executive Control';
+        return 'Admin Workspace';
     }
 
     if (role === 'manager') {
-        return 'Management Review';
+        return 'Manager Workspace';
     }
 
     if (role === 'staff') {
-        return 'Operations Desk';
+        return 'Staff Workspace';
     }
 
     return 'Client Portal';

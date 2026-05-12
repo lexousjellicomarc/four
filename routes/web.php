@@ -6,6 +6,7 @@ use App\Http\Controllers\AdminPublicContentController;
 use App\Http\Controllers\AdminSortController;
 use App\Http\Controllers\BookingAnalyticsController;
 use App\Http\Controllers\BookingAuditController;
+use App\Http\Controllers\BookingAvailabilityController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BookingOperationsController;
 use App\Http\Controllers\CalendarAnalyticsController;
@@ -24,10 +25,10 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserRoleController;
 use App\Http\Controllers\WorkspaceCalendarController;
 use App\Http\Controllers\WorkspaceHomeController;
-use App\Http\Controllers\BookingAvailabilityController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+
 /*
 |--------------------------------------------------------------------------
 | Public Marketing Routes
@@ -73,7 +74,6 @@ Route::get('/contact', [PublicSiteController::class, 'contact'])
 
 Route::get('/guidelines', [PublicSiteController::class, 'guidelines'])
     ->name('guidelines');
-
 
 /*
 |--------------------------------------------------------------------------
@@ -141,7 +141,6 @@ Route::middleware(['auth', 'verified', 'role:admin'])
         Route::get('/calendar', WorkspaceCalendarController::class)
             ->name('calendar');
 
-
         Route::get('/calendar/manage', [CalendarManagementController::class, 'index'])
             ->name('calendar.manage');
 
@@ -161,9 +160,11 @@ Route::middleware(['auth', 'verified', 'role:admin'])
             ->name('calendar-blocks.bulk-store');
 
         Route::put('/calendar-blocks/{calendarBlock}', [CalendarBlockController::class, 'update'])
+            ->whereNumber('calendarBlock')
             ->name('calendar-blocks.update');
 
         Route::delete('/calendar-blocks/{calendarBlock}', [CalendarBlockController::class, 'destroy'])
+            ->whereNumber('calendarBlock')
             ->name('calendar-blocks.destroy');
 
         Route::get('/bookings/availability', [BookingController::class, 'availability'])
@@ -182,12 +183,15 @@ Route::middleware(['auth', 'verified', 'role:admin'])
             ->name('bookings.operations');
 
         Route::post('/bookings/operations/payments/{payment}/approve', [BookingOperationsController::class, 'approvePayment'])
+            ->whereNumber('payment')
             ->name('bookings.operations.payments.approve');
 
         Route::post('/bookings/operations/payments/{payment}/decline', [BookingOperationsController::class, 'declinePayment'])
+            ->whereNumber('payment')
             ->name('bookings.operations.payments.decline');
 
         Route::post('/bookings/operations/payments/{payment}/fail', [BookingOperationsController::class, 'failPayment'])
+            ->whereNumber('payment')
             ->name('bookings.operations.payments.fail');
 
         Route::prefix('/bookings/audit')
@@ -230,8 +234,32 @@ Route::middleware(['auth', 'verified', 'role:admin'])
         Route::resource('/bookings', BookingController::class)
             ->where(['booking' => '[0-9]+']);
 
+        /*
+        |--------------------------------------------------------------------------
+        | Admin Payment Review
+        |--------------------------------------------------------------------------
+        */
+
         Route::get('/payments/review', [PaymentReviewController::class, 'index'])
             ->name('payments.review');
+
+        Route::put('/payments/review/{payment}', [PaymentReviewController::class, 'update'])
+            ->whereNumber('payment')
+            ->name('payments.review.update');
+
+        Route::post('/payments/review/{payment}/approve', [PaymentReviewController::class, 'approve'])
+            ->whereNumber('payment')
+            ->name('payments.review.approve');
+
+        Route::post('/payments/review/{payment}/reject', [PaymentReviewController::class, 'reject'])
+            ->whereNumber('payment')
+            ->name('payments.review.reject');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Admin MICE Registry
+        |--------------------------------------------------------------------------
+        */
 
         Route::get('/reports/mice-registry', [MiceRegistryController::class, 'index'])
             ->name('reports.mice-registry');
@@ -260,11 +288,19 @@ Route::middleware(['auth', 'verified', 'role:admin'])
             ->whereNumber('miceRecord')
             ->name('reports.mice-registry.destroy');
 
+        /*
+        |--------------------------------------------------------------------------
+        | Admin Setup Resources
+        |--------------------------------------------------------------------------
+        */
+
         Route::resource('/venue-areas', ServiceTypeController::class)
-            ->where(['venue_area' => '[0-9]+']);
+            ->parameters(['venue-areas' => 'serviceType'])
+            ->where(['serviceType' => '[0-9]+']);
 
         Route::resource('/rental-options', ServiceController::class)
-            ->where(['rental_option' => '[0-9]+']);
+            ->parameters(['rental-options' => 'service'])
+            ->where(['service' => '[0-9]+']);
 
         Route::get('/users/roles', [UserRoleController::class, 'index'])
             ->name('users.roles');
@@ -275,6 +311,12 @@ Route::middleware(['auth', 'verified', 'role:admin'])
 
         Route::resource('/users', UserController::class)
             ->where(['user' => '[0-9]+']);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Admin Inquiries + Guidelines
+        |--------------------------------------------------------------------------
+        */
 
         Route::get('/inquiries', [AdminInquiryController::class, 'index'])
             ->name('inquiries.index');
@@ -292,6 +334,12 @@ Route::middleware(['auth', 'verified', 'role:admin'])
 
         Route::post('/guidelines-contacts', [AdminGuidelinesContactController::class, 'update'])
             ->name('guidelines-contacts.update');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Admin Public Content Sorting + CRUD
+        |--------------------------------------------------------------------------
+        */
 
         Route::prefix('sort')
             ->name('sort.')
@@ -313,45 +361,55 @@ Route::middleware(['auth', 'verified', 'role:admin'])
             ->name('tourism-members.store');
 
         Route::put('/tourism-members/{tourismMember}', [AdminPublicContentController::class, 'updateTourismMember'])
+            ->whereNumber('tourismMember')
             ->name('tourism-members.update');
 
         Route::delete('/tourism-members/{tourismMember}', [AdminPublicContentController::class, 'destroyTourismMember'])
+            ->whereNumber('tourismMember')
             ->name('tourism-members.destroy');
 
         Route::post('/events', [AdminPublicContentController::class, 'storeEvent'])
             ->name('events.store');
 
         Route::put('/events/{publicEvent}', [AdminPublicContentController::class, 'updateEvent'])
+            ->whereNumber('publicEvent')
             ->name('events.update');
 
         Route::delete('/events/{publicEvent}', [AdminPublicContentController::class, 'destroyEvent'])
+            ->whereNumber('publicEvent')
             ->name('events.destroy');
 
         Route::post('/packages', [AdminPublicContentController::class, 'storePackage'])
             ->name('packages.store');
 
         Route::put('/packages/{featurePackage}', [AdminPublicContentController::class, 'updatePackage'])
+            ->whereNumber('featurePackage')
             ->name('packages.update');
 
         Route::delete('/packages/{featurePackage}', [AdminPublicContentController::class, 'destroyPackage'])
+            ->whereNumber('featurePackage')
             ->name('packages.destroy');
 
         Route::post('/spaces', [AdminPublicContentController::class, 'storeSpace'])
             ->name('spaces.store');
 
         Route::put('/spaces/{venueSpace}', [AdminPublicContentController::class, 'updateSpace'])
+            ->whereNumber('venueSpace')
             ->name('spaces.update');
 
         Route::delete('/spaces/{venueSpace}', [AdminPublicContentController::class, 'destroySpace'])
+            ->whereNumber('venueSpace')
             ->name('spaces.destroy');
 
         Route::post('/stats', [AdminPublicContentController::class, 'storeStat'])
             ->name('stats.store');
 
         Route::put('/stats/{homepageStat}', [AdminPublicContentController::class, 'updateStat'])
+            ->whereNumber('homepageStat')
             ->name('stats.update');
 
         Route::delete('/stats/{homepageStat}', [AdminPublicContentController::class, 'destroyStat'])
+            ->whereNumber('homepageStat')
             ->name('stats.destroy');
 
         Route::put('/site-settings', [AdminPublicContentController::class, 'updateSiteSettings'])
@@ -384,9 +442,11 @@ Route::middleware(['auth', 'verified', 'role:manager'])
             ->name('calendar-blocks.bulk-store');
 
         Route::put('/calendar-blocks/{calendarBlock}', [CalendarBlockController::class, 'update'])
+            ->whereNumber('calendarBlock')
             ->name('calendar-blocks.update');
 
         Route::delete('/calendar-blocks/{calendarBlock}', [CalendarBlockController::class, 'destroy'])
+            ->whereNumber('calendarBlock')
             ->name('calendar-blocks.destroy');
 
         Route::get('/calendar/analytics', [CalendarAnalyticsController::class, 'index'])
@@ -454,8 +514,26 @@ Route::middleware(['auth', 'verified', 'role:manager'])
             ->only(['index', 'show', 'edit', 'update'])
             ->where(['booking' => '[0-9]+']);
 
+        /*
+        |--------------------------------------------------------------------------
+        | Manager Payment Review
+        |--------------------------------------------------------------------------
+        */
+
         Route::get('/payments/review', [PaymentReviewController::class, 'index'])
             ->name('payments.review');
+
+        Route::put('/payments/review/{payment}', [PaymentReviewController::class, 'update'])
+            ->whereNumber('payment')
+            ->name('payments.review.update');
+
+        Route::post('/payments/review/{payment}/approve', [PaymentReviewController::class, 'approve'])
+            ->whereNumber('payment')
+            ->name('payments.review.approve');
+
+        Route::post('/payments/review/{payment}/reject', [PaymentReviewController::class, 'reject'])
+            ->whereNumber('payment')
+            ->name('payments.review.reject');
 
         Route::get('/reports/mice-registry', [MiceRegistryController::class, 'index'])
             ->name('reports.mice-registry');
@@ -472,6 +550,10 @@ Route::middleware(['auth', 'verified', 'role:manager'])
         Route::put('/inquiries/{inquiry}', [AdminInquiryController::class, 'update'])
             ->whereNumber('inquiry')
             ->name('inquiries.update');
+
+        Route::delete('/inquiries/{inquiry}', [AdminInquiryController::class, 'destroy'])
+            ->whereNumber('inquiry')
+            ->name('inquiries.destroy');
 
         Route::get('/guidelines-contacts', [AdminGuidelinesContactController::class, 'index'])
             ->name('guidelines-contacts');
@@ -495,7 +577,6 @@ Route::middleware(['auth', 'verified', 'role:staff'])
 
         Route::get('/calendar', WorkspaceCalendarController::class)
             ->name('calendar');
-
 
         Route::get('/bookings/availability', [BookingController::class, 'availability'])
             ->name('bookings.availability');
@@ -535,6 +616,10 @@ Route::middleware(['auth', 'verified', 'role:staff'])
             ->whereNumber('inquiry')
             ->name('inquiries.update');
 
+        Route::delete('/inquiries/{inquiry}', [AdminInquiryController::class, 'destroy'])
+            ->whereNumber('inquiry')
+            ->name('inquiries.destroy');
+
         Route::get('/guidelines-contacts', [AdminGuidelinesContactController::class, 'index'])
             ->name('guidelines-contacts');
     });
@@ -561,7 +646,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/my-bookings/{booking}', [BookingController::class, 'show'])
         ->whereNumber('booking')
         ->name('user.bookings.show');
-
 
     Route::get('/my-bookings/{booking}/survey', [BookingController::class, 'survey'])
         ->whereNumber('booking')
@@ -606,6 +690,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('notifications.summary');
 
     Route::get('/notifications/{notification}/open', [NotificationController::class, 'open'])
+        ->whereNumber('notification')
         ->name('notifications.open');
 
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead'])
@@ -649,10 +734,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::put('/calendar-blocks/{calendarBlock}', [CalendarBlockController::class, 'update'])
         ->middleware('role:admin|manager')
+        ->whereNumber('calendarBlock')
         ->name('calendar-blocks.update');
 
     Route::delete('/calendar-blocks/{calendarBlock}', [CalendarBlockController::class, 'destroy'])
         ->middleware('role:admin|manager')
+        ->whereNumber('calendarBlock')
         ->name('calendar-blocks.destroy');
 
     Route::get('/bookings/availability', [BookingController::class, 'availability'])
@@ -677,14 +764,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/bookings/operations/payments/{payment}/approve', [BookingOperationsController::class, 'approvePayment'])
         ->middleware('permission:payments.manage')
+        ->whereNumber('payment')
         ->name('bookings.operations.payments.approve');
 
     Route::post('/bookings/operations/payments/{payment}/decline', [BookingOperationsController::class, 'declinePayment'])
         ->middleware('permission:payments.manage')
+        ->whereNumber('payment')
         ->name('bookings.operations.payments.decline');
 
     Route::post('/bookings/operations/payments/{payment}/fail', [BookingOperationsController::class, 'failPayment'])
         ->middleware('permission:payments.manage')
+        ->whereNumber('payment')
         ->name('bookings.operations.payments.fail');
 
     Route::prefix('/bookings/audit')
@@ -763,9 +853,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->whereNumber('booking')
         ->name('bookings.destroy');
 
+    /*
+    |--------------------------------------------------------------------------
+    | Legacy Payment Review Compatibility
+    |--------------------------------------------------------------------------
+    */
+
     Route::get('/payments/review', [PaymentReviewController::class, 'index'])
         ->middleware('permission:payments.manage')
         ->name('payments.review');
+
+    Route::put('/payments/review/{payment}', [PaymentReviewController::class, 'update'])
+        ->middleware('permission:payments.manage')
+        ->whereNumber('payment')
+        ->name('payments.review.update');
+
+    Route::post('/payments/review/{payment}/approve', [PaymentReviewController::class, 'approve'])
+        ->middleware('permission:payments.manage')
+        ->whereNumber('payment')
+        ->name('payments.review.approve');
+
+    Route::post('/payments/review/{payment}/reject', [PaymentReviewController::class, 'reject'])
+        ->middleware('permission:payments.manage')
+        ->whereNumber('payment')
+        ->name('payments.review.reject');
 
     Route::get('/reports/mice-registry', [MiceRegistryController::class, 'index'])
         ->middleware('permission:bookings.view')
@@ -820,8 +931,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('users', UserController::class)
         ->middleware('permission:users.manage')
         ->where(['user' => '[0-9]+']);
-
-
 });
 
 require __DIR__ . '/settings.php';

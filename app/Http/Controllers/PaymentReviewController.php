@@ -2,438 +2,284 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Booking;
 use App\Models\BookingPayment;
-use App\Support\WorkspaceAccess;
+use App\Services\PaymentReviewService;
 use App\Support\WorkspacePage;
-use Carbon\Carbon;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator as LengthAwarePaginatorContract;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class PaymentReviewController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, PaymentReviewService $service): Response
     {
-        abort_unless($request->user(), 403);
-        abort_unless(WorkspaceAccess::canManagePayments($request), 403);
-
-        $filters = [
-            'q' => trim((string) $request->string('q')->value('')),
-            'status' => trim((string) $request->string('status')->value('')),
-            'gateway' => trim((string) $request->string('gateway')->value('')),
-            'payment_type' => trim((string) $request->string('payment_type')->value('')),
-            'booking_status' => trim((string) $request->string('booking_status')->value('')),
-            'deadline' => trim((string) $request->string('deadline')->value('')),
-            'proof' => trim((string) $request->string('proof')->value('')),
-        ];
-
         $query = BookingPayment::query()
             ->with([
-                'booking' => function ($query) {
-                    $query->with([
-                        'service.serviceType',
-                        'bookingServices.service.serviceType',
-                        'payments',
-                        'createdBy',
-                    ]);
-                },
+                'booking',
+                'booking.service',
+                'booking.service.serviceType',
+                'booking.payments',
+                'booking.bookingServices',
             ])
-            ->latest('created_at');
+            ->latest();
 
-        $this->applyDirectFilters($query, $filters);
+        if ($request->filled('q')) {
+            $search = trim((string) $request->input('q'));
 
-        $directMatches = $query->get();
+            $query->where(function ($builder) use ($search): void {
+                foreach ([
+                    'transaction_reference',
+                    'reference_number',
+                    'payment_method',
+                    'payment_gateway',
+                    'payment_type',
+                    'status',
+                    'payment_status',
+                    'remarks',
+                ] as $column) {
+                    if (Schema::hasColumn('booking_payments', $column)) {
+                        $builder->orWhere($column, 'like', "%{$search}%");
+                    }
+                }
 
-        $visiblePayments = $directMatches
-            ->filter(fn (BookingPayment $payment) => $this->matchesDerivedFilters($payment, $filters))
-            ->values();
+                $builder->orWhereHas('booking', function ($bookingQuery) use ($search): void {
+                    foreach ([
+                        'client_name',
+                        'company_name',
+                        'client_email',
+                        'type_of_event',
+                        'booking_status',
+                        'payment_status',
+                    ] as $column) {
+                        if (Schema::hasColumn('bookings', $column)) {
+                            $bookingQuery->orWhere($column, 'like', "%{$search}%");
+                        }
+                    }
+                });
+            });
+        }
 
-        $paginator = $this->paginateCollection(
-            $visiblePayments,
-            max(1, (int) $request->integer('page', 1)),
-            10,
-            $request,
-        );
+        if ($request->filled('status')) {
+            $status = $request->string('status')->toString();
 
-        $paginator->setCollection(
-            $paginator
-                ->getCollection()
-                ->map(fn (BookingPayment $payment) => $this->transformPayment($request, $payment))
-                ->values()
-        );
+            $query->where(function ($builder) use ($status): void {
+                if (Schema::hasColumn('booking_payments', 'status')) {
+                    $builder->orWhere('status', $status);
+                }
 
-        $statsBase = BookingPayment::query()
-            ->with([
-                'booking' => function ($query) {
-                    $query->with([
-                        'service.serviceType',
-                        'bookingServices.service.serviceType',
-                        'payments',
-                        'createdBy',
-                    ]);
-                },
-            ]);
+                if (Schema::hasColumn('booking_payments', 'payment_status')) {
+                    $builder->orWhere('payment_status', $status);
+                }
+            });
+        } else {
+            $query->where(function ($builder): void {
+                $reviewStatuses = [
+                    'pending',
+                    'submitted',
+                    'for_review',
+                    'for review',
+                    'awaiting_review',
+                    'awaiting review',
+                ];
 
-        $this->applyDirectFilters($statsBase, array_merge($filters, [
-            'status' => '',
-            'deadline' => '',
-            'proof' => '',
-        ]));
+                if (Schema::hasColumn('booking_payments', 'status')) {
+                    $builder->orWhereIn('status', $reviewStatuses);
+                }
 
-        $statsPayments = $statsBase->get();
+                if (Schema::hasColumn('booking_payments', 'payment_status')) {
+                    $builder->orWhereIn('payment_status', $reviewStatuses);
+                }
+            });
+        }
 
-        $statusCounts = $statsPayments
-            ->groupBy(fn (BookingPayment $payment) => strtolower((string) ($payment->status ?? 'unknown')))
-            ->map(fn (Collection $rows) => $rows->count());
+        $payments = $query
+            ->paginate(12)
+            ->withQueryString()
+            ->through(fn (BookingPayment $payment): array => $this->serializePayment($payment, $service));
 
-        $reviewNeeded = $statsPayments
-            ->filter(fn (BookingPayment $payment) => strtolower((string) $payment->status) === 'pending')
-            ->count();
-
-        $dueSoon = $statsPayments
-            ->filter(fn (BookingPayment $payment) => $this->deadlineBucket($payment) === 'due_soon')
-            ->count();
-
-        $overdue = $statsPayments
-            ->filter(fn (BookingPayment $payment) => $this->deadlineBucket($payment) === 'overdue')
-            ->count();
-
-        $withProof = $statsPayments
-            ->filter(fn (BookingPayment $payment) => ! empty($payment->proof_image_path))
-            ->count();
-
-        return Inertia::render(WorkspacePage::resolve($request, 'payments/review'), [
-            'workspaceRole' => WorkspaceAccess::role($request),
-            'isStaffWorkspace' => WorkspaceAccess::isStaffLike($request),
-            'filters' => $filters,
-            'payments' => $paginator,
-            'stats' => [
-                'all' => $statsPayments->count(),
-                'pending' => (int) ($statusCounts['pending'] ?? 0),
-                'confirmed' => (int) ($statusCounts['confirmed'] ?? 0),
-                'verified' => (int) ($statusCounts['verified'] ?? 0),
-                'paid' => (int) ($statusCounts['paid'] ?? 0),
-                'failed' => (int) ($statusCounts['failed'] ?? 0),
-                'declined' => (int) ($statusCounts['declined'] ?? 0),
-                'refunded' => (int) ($statusCounts['refunded'] ?? 0),
-                'review_needed' => $reviewNeeded,
-                'due_soon' => $dueSoon,
-                'overdue' => $overdue,
-                'with_proof' => $withProof,
+        return Inertia::render(WorkspacePage::resolve($request, 'admin/payments/review'), [
+            'workspaceRole' => $this->workspaceRole($request),
+            'payments' => $payments,
+            'filters' => [
+                'q' => $request->input('q', ''),
+                'status' => $request->input('status', ''),
             ],
         ]);
     }
 
-    protected function applyDirectFilters(Builder $query, array $filters): void
-    {
-        $query->when($filters['q'] ?? null, function (Builder $builder, string $search) {
-            $builder->where(function (Builder $nested) use ($search) {
-                $nested
-                    ->where('transaction_reference', 'like', "%{$search}%")
-                    ->orWhere('payer_name', 'like', "%{$search}%")
-                    ->orWhere('remarks', 'like', "%{$search}%")
-                    ->orWhereHas('booking', function (Builder $booking) use ($search) {
-                        $booking
-                            ->where('client_name', 'like', "%{$search}%")
-                            ->orWhere('company_name', 'like', "%{$search}%")
-                            ->orWhere('client_email', 'like', "%{$search}%")
-                            ->orWhere('type_of_event', 'like', "%{$search}%");
-                    });
-            });
-        });
+    public function update(
+        Request $request,
+        BookingPayment $payment,
+        PaymentReviewService $service
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:approved,rejected'],
+            'remarks' => ['nullable', 'string', 'max:1000'],
+        ]);
 
-        $query->when($filters['status'] ?? null, fn (Builder $builder, string $status) => $builder->where('status', $status));
+        if ($validated['status'] === 'approved') {
+            $service->approve($payment, $request->user()?->id);
 
-        $query->when($filters['gateway'] ?? null, fn (Builder $builder, string $gateway) => $builder->where('payment_gateway', $gateway));
+            return back()->with('success', 'Payment proof approved successfully.');
+        }
 
-        $query->when($filters['payment_type'] ?? null, fn (Builder $builder, string $type) => $builder->where('payment_type', $type));
+        $service->reject(
+            payment: $payment,
+            userId: $request->user()?->id,
+            remarks: $validated['remarks'] ?? null
+        );
 
-        $query->when($filters['booking_status'] ?? null, function (Builder $builder, string $status) {
-            $builder->whereHas('booking', fn (Builder $booking) => $booking->where('booking_status', $status));
-        });
+        return back()->with('success', 'Payment proof rejected successfully.');
     }
 
-    protected function matchesDerivedFilters(BookingPayment $payment, array $filters): bool
-    {
-        $deadline = $filters['deadline'] ?? '';
+    public function approve(
+        Request $request,
+        BookingPayment $payment,
+        PaymentReviewService $service
+    ): RedirectResponse {
+        $service->approve($payment, $request->user()?->id);
 
-        if ($deadline !== '') {
-            if ($deadline === 'review' && strtolower((string) $payment->status) !== 'pending') {
-                return false;
-            }
-
-            if ($deadline !== 'review' && $this->deadlineBucket($payment) !== $deadline) {
-                return false;
-            }
-        }
-
-        $proof = $filters['proof'] ?? '';
-
-        if ($proof === 'with_proof' && empty($payment->proof_image_path)) {
-            return false;
-        }
-
-        if ($proof === 'without_proof' && ! empty($payment->proof_image_path)) {
-            return false;
-        }
-
-        return true;
+        return back()->with('success', 'Payment proof approved successfully.');
     }
 
-    protected function deadlineBucket(BookingPayment $payment): string
-    {
-        $summary = $this->bookingDeadlineSummary($payment->booking);
+    public function reject(
+        Request $request,
+        BookingPayment $payment,
+        PaymentReviewService $service
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'remarks' => ['nullable', 'string', 'max:1000'],
+        ]);
 
-        return match ($summary['state'] ?? 'not_applicable') {
-            'first_due_soon',
-            'final_due_soon' => 'due_soon',
+        $service->reject(
+            payment: $payment,
+            userId: $request->user()?->id,
+            remarks: $validated['remarks'] ?? null
+        );
 
-            'first_overdue',
-            'final_overdue' => 'overdue',
-
-            'fulfilled',
-            'not_applicable' => 'closed',
-
-            default => 'normal',
-        };
+        return back()->with('success', 'Payment proof rejected successfully.');
     }
 
-    protected function bookingDeadlineSummary(?Booking $booking): array
-    {
-        if (! $booking) {
-            return ['state' => 'not_applicable'];
-        }
-
-        $itemsTotal = $this->itemsTotal($booking);
-        $submittedTotal = $this->submittedPaymentsTotal($booking);
-        $confirmedTotal = $this->confirmedPaymentsTotal($booking);
-
-        $status = strtolower((string) ($booking->booking_status ?? 'pending'));
-
-        if (in_array($status, ['cancelled', 'declined', 'completed'], true)) {
-            return ['state' => 'not_applicable'];
-        }
-
-        $createdAt = $booking->created_at instanceof Carbon
-            ? $booking->created_at->copy()
-            : ($booking->created_at ? Carbon::parse($booking->created_at) : null);
-
-        if (! $createdAt || $itemsTotal <= 0 || $confirmedTotal + 0.00001 >= $itemsTotal) {
-            return [
-                'state' => 'fulfilled',
-                'submitted_total' => $submittedTotal,
-                'confirmed_total' => $confirmedTotal,
-            ];
-        }
-
-        $firstDeadline = $createdAt->copy()->addHours(24);
-        $finalDeadline = $createdAt->copy()->addHours(48);
-        $now = now();
-        $halfRequired = round($itemsTotal * 0.5, 2);
-
-        if ($confirmedTotal + 0.00001 < $halfRequired) {
-            if ($now->greaterThan($firstDeadline)) {
-                return [
-                    'state' => 'first_overdue',
-                    'down_deadline' => $firstDeadline->toIso8601String(),
-                    'full_deadline' => $finalDeadline->toIso8601String(),
-                    'submitted_total' => $submittedTotal,
-                    'confirmed_total' => $confirmedTotal,
-                ];
-            }
-
-            if ($now->diffInHours($firstDeadline, false) <= 6) {
-                return [
-                    'state' => 'first_due_soon',
-                    'down_deadline' => $firstDeadline->toIso8601String(),
-                    'full_deadline' => $finalDeadline->toIso8601String(),
-                    'submitted_total' => $submittedTotal,
-                    'confirmed_total' => $confirmedTotal,
-                ];
-            }
-
-            return [
-                'state' => 'monitoring',
-                'down_deadline' => $firstDeadline->toIso8601String(),
-                'full_deadline' => $finalDeadline->toIso8601String(),
-                'submitted_total' => $submittedTotal,
-                'confirmed_total' => $confirmedTotal,
-            ];
-        }
-
-        if ($confirmedTotal + 0.00001 < $itemsTotal) {
-            if ($now->greaterThan($finalDeadline)) {
-                return [
-                    'state' => 'final_overdue',
-                    'down_deadline' => $firstDeadline->toIso8601String(),
-                    'full_deadline' => $finalDeadline->toIso8601String(),
-                    'submitted_total' => $submittedTotal,
-                    'confirmed_total' => $confirmedTotal,
-                ];
-            }
-
-            if ($now->diffInHours($finalDeadline, false) <= 8) {
-                return [
-                    'state' => 'final_due_soon',
-                    'down_deadline' => $firstDeadline->toIso8601String(),
-                    'full_deadline' => $finalDeadline->toIso8601String(),
-                    'submitted_total' => $submittedTotal,
-                    'confirmed_total' => $confirmedTotal,
-                ];
-            }
-        }
-
-        return [
-            'state' => 'monitoring',
-            'down_deadline' => $firstDeadline->toIso8601String(),
-            'full_deadline' => $finalDeadline->toIso8601String(),
-            'submitted_total' => $submittedTotal,
-            'confirmed_total' => $confirmedTotal,
-        ];
-    }
-
-    protected function transformPayment(Request $request, BookingPayment $payment): array
+    private function serializePayment(BookingPayment $payment, PaymentReviewService $service): array
     {
         $booking = $payment->booking;
 
-        $itemsTotal = $booking ? $this->itemsTotal($booking) : 0.0;
-        $submittedTotal = $booking ? $this->submittedPaymentsTotal($booking) : 0.0;
-        $confirmedTotal = $booking ? $this->confirmedPaymentsTotal($booking) : 0.0;
-        $deadline = $this->bookingDeadlineSummary($booking);
-
         return [
             'id' => $payment->id,
-            'status' => $payment->status,
-            'payment_method' => $payment->payment_method,
-            'payment_gateway' => $payment->payment_gateway,
-            'payment_type' => $payment->payment_type,
-            'amount' => (float) $payment->amount,
-            'transaction_reference' => $payment->transaction_reference,
-            'remarks' => $payment->remarks,
-            'payer_name' => $payment->payer_name,
-            'card_holder_name' => $payment->card_holder_name,
-            'card_last_four' => $payment->card_last_four,
-            'marketing_consent' => (bool) $payment->marketing_consent,
-            'proof_image_url' => $this->paymentProofUrl($request, $payment),
-            'paid_at' => optional($payment->paid_at)->toIso8601String(),
-            'verified_at' => optional($payment->verified_at)->toIso8601String(),
-            'approved_at' => optional($payment->approved_at)->toIso8601String(),
-            'declined_at' => optional($payment->declined_at)->toIso8601String(),
-            'failed_at' => optional($payment->failed_at)->toIso8601String(),
-            'created_at' => optional($payment->created_at)->toIso8601String(),
-            'updated_at' => optional($payment->updated_at)->toIso8601String(),
-
-            'booking' => $booking ? [
-                'id' => $booking->id,
-                'company_name' => $booking->company_name,
-                'client_name' => $booking->client_name,
-                'client_email' => $booking->client_email,
-                'type_of_event' => $booking->type_of_event,
-                'booking_status' => $booking->booking_status,
-                'payment_status' => $booking->payment_status,
-                'booking_date_from' => optional($booking->booking_date_from)->toIso8601String(),
-                'booking_date_to' => optional($booking->booking_date_to)->toIso8601String(),
-                'created_at' => optional($booking->created_at)->toIso8601String(),
-                'created_by_name' => $booking->createdBy?->name,
-                'service_name' => $booking->service?->name,
-                'service_type_name' => $booking->service?->serviceType?->name,
-                'items' => $this->bookingItems($booking),
-                'totals' => [
-                    'items_total' => round($itemsTotal, 2),
-                    'submitted_payments_total' => round($submittedTotal, 2),
-                    'confirmed_payments_total' => round($confirmedTotal, 2),
-                    'remaining_balance' => round(max(0, $itemsTotal - $confirmedTotal), 2),
-                    'down_payment_required' => round($itemsTotal * 0.5, 2),
-                ],
-                'deadline' => $deadline,
-            ] : null,
+            'booking_id' => $payment->booking_id,
+            'amount' => $payment->amount ?? 0,
+            'status' => $payment->status ?? $payment->payment_status ?? 'pending',
+            'payment_status' => $payment->payment_status ?? $payment->status ?? 'pending',
+            'payment_method' => $this->safeAttribute($payment, 'payment_method'),
+            'payment_gateway' => $this->safeAttribute($payment, 'payment_gateway'),
+            'payment_type' => $this->safeAttribute($payment, 'payment_type'),
+            'transaction_reference' => $this->safeAttribute($payment, 'transaction_reference'),
+            'reference_number' => $this->safeAttribute($payment, 'reference_number'),
+            'proof_image_url' => $this->paymentProofUrl($payment),
+            'proof_image' => $this->safeAttribute($payment, 'proof_image'),
+            'receipt_url' => $this->safeAttribute($payment, 'receipt_url'),
+            'remarks' => $this->safeAttribute($payment, 'remarks'),
+            'created_at' => optional($payment->created_at)->toDateTimeString(),
+            'updated_at' => optional($payment->updated_at)->toDateTimeString(),
+            'booking' => $booking ? $this->serializeBooking($booking, $service) : null,
         ];
     }
 
-    protected function bookingItems(Booking $booking): array
+    private function serializeBooking($booking, PaymentReviewService $service): array
     {
-        return collect($booking->bookingServices ?? [])
-            ->map(function ($item) {
-                $service = $item->service;
-                $serviceType = $service?->serviceType;
-                $quantity = max(1, (int) ($item->quantity ?? 1));
-                $unitPrice = (float) ($item->unit_price ?? $item->price ?? $service?->price ?? 0);
+        $itemsTotal = $service->bookingTotalCharges($booking);
+        $confirmedPayments = $service->approvedPaymentTotal($booking);
+        $submittedPayments = $service->submittedPaymentTotal($booking);
 
-                return [
-                    'id' => $item->id,
-                    'service_id' => $item->service_id,
-                    'service_name' => $service?->name,
-                    'area' => $serviceType?->name,
-                    'quantity' => $quantity,
-                    'unit_price' => round($unitPrice, 2),
-                    'line_total' => round($unitPrice * $quantity, 2),
-                ];
-            })
-            ->values()
-            ->all();
-    }
+        return [
+            'id' => $booking->id,
+            'client_name' => $booking->client_name,
+            'company_name' => $booking->company_name,
+            'client_email' => $booking->client_email,
+            'type_of_event' => $booking->type_of_event,
+            'booking_status' => $booking->booking_status,
+            'payment_status' => $booking->payment_status,
+            'booking_date_from' => optional($booking->booking_date_from)->toDateTimeString(),
+            'booking_date_to' => optional($booking->booking_date_to)->toDateTimeString(),
 
-    protected function itemsTotal(Booking $booking): float
-    {
-        return collect($this->bookingItems($booking))
-            ->reduce(fn (float $sum, array $item) => $sum + (float) ($item['line_total'] ?? 0), 0.0);
-    }
+            'expired_at' => optional($booking->expired_at)->toDateTimeString(),
+            'payment_balance_due_at' => optional($booking->payment_balance_due_at)->toDateTimeString(),
+            'auto_declined_at' => optional($booking->auto_declined_at)->toDateTimeString(),
+            'auto_decline_reason' => $booking->auto_decline_reason,
 
-    protected function submittedPaymentsTotal(Booking $booking): float
-    {
-        return collect($booking->payments ?? [])
-            ->filter(fn ($payment) => in_array(strtolower((string) $payment->status), ['pending', 'confirmed', 'verified', 'paid'], true))
-            ->reduce(fn (float $sum, $payment) => $sum + (float) ($payment->amount ?? 0), 0.0);
-    }
+            'deadline_at' => $booking->deadline_at,
+            'deadline_state' => $booking->deadline_state,
+            'deadline_label' => $booking->deadline_label,
 
-    protected function confirmedPaymentsTotal(Booking $booking): float
-    {
-        return collect($booking->payments ?? [])
-            ->filter(fn ($payment) => in_array(strtolower((string) $payment->status), ['confirmed', 'verified', 'paid'], true))
-            ->reduce(fn (float $sum, $payment) => $sum + (float) ($payment->amount ?? 0), 0.0);
-    }
+            'service' => $booking->service ? [
+                'id' => $booking->service->id,
+                'name' => $booking->service->name ?? null,
+                'service_type' => $booking->service->serviceType ? [
+                    'id' => $booking->service->serviceType->id,
+                    'name' => $booking->service->serviceType->name ?? null,
+                ] : null,
+                'serviceType' => $booking->service->serviceType ? [
+                    'id' => $booking->service->serviceType->id,
+                    'name' => $booking->service->serviceType->name ?? null,
+                ] : null,
+            ] : null,
 
-    protected function paymentProofUrl(Request $request, BookingPayment $payment): ?string
-    {
-        if (empty($payment->proof_image_path) || empty($payment->id) || empty($payment->booking_id)) {
-            return null;
-        }
-
-        try {
-            $routeName = WorkspacePage::routeName($request, 'bookings.payments.proof');
-
-            $base = route($routeName, [
-                'booking' => $payment->booking_id,
-                'payment' => $payment->id,
-            ], false);
-
-            $version = $payment->updated_at?->timestamp ?? $payment->created_at?->timestamp ?? time();
-
-            return $base . '?v=' . $version;
-        } catch (\Throwable) {
-            return $payment->proof_image_url;
-        }
-    }
-
-    protected function paginateCollection(Collection $items, int $page, int $perPage, Request $request): LengthAwarePaginator
-    {
-        $page = max(1, $page);
-        $results = $items->forPage($page, $perPage)->values();
-
-        return new LengthAwarePaginator(
-            $results,
-            $items->count(),
-            $perPage,
-            $page,
-            [
-                'path' => $request->url(),
-                'query' => $request->query(),
+            'totals' => [
+                'items_total' => $itemsTotal,
+                'payments_total' => $confirmedPayments,
+                'submitted_payments_total' => $submittedPayments,
+                'confirmed_payments_total' => $confirmedPayments,
+                'remaining_balance' => max($itemsTotal - $confirmedPayments, 0),
             ],
-        );
+        ];
+    }
+
+    private function paymentProofUrl(BookingPayment $payment): ?string
+    {
+        foreach (['proof_image_url', 'receipt_url'] as $attribute) {
+            if (filled($this->safeAttribute($payment, $attribute))) {
+                return (string) $this->safeAttribute($payment, $attribute);
+            }
+        }
+
+        foreach (['proof_image_path', 'proof_image', 'receipt_path'] as $attribute) {
+            $value = $this->safeAttribute($payment, $attribute);
+
+            if (blank($value)) {
+                continue;
+            }
+
+            $text = (string) $value;
+
+            if (str_starts_with($text, 'http://') || str_starts_with($text, 'https://') || str_starts_with($text, '/')) {
+                return $text;
+            }
+
+            return asset('storage/' . ltrim($text, '/'));
+        }
+
+        return null;
+    }
+
+    private function safeAttribute($model, string $key): mixed
+    {
+        return array_key_exists($key, $model->getAttributes()) ? $model->{$key} : null;
+    }
+
+    private function workspaceRole(Request $request): string
+    {
+        $path = $request->path();
+
+        if (str_starts_with($path, 'manager/')) {
+            return 'manager';
+        }
+
+        if (str_starts_with($path, 'staff/')) {
+            return 'staff';
+        }
+
+        return 'admin';
     }
 }

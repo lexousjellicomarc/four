@@ -1,146 +1,209 @@
-import { ResourcePageShell } from '@/components/admin-resource/resource-page-shell';
+import {
+    ResourceActionLink,
+    ResourceEmptyState,
+    ResourcePageShell,
+    ResourceSection,
+    ResourceStatCard,
+    ResourceToolbar,
+} from '@/components/admin-resource/resource-page-shell';
+import type { BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
-    ArrowLeft,
     BarChart3,
+    Building2,
     CalendarDays,
     Download,
     Edit3,
-    FileBarChart,
-    Plus,
+    FileSpreadsheet,
+    Globe2,
+    Mail,
+    MapPin,
     Printer,
-    Save,
+    ReceiptText,
     Search,
+    ShieldCheck,
     Trash2,
-    Users,
+    UsersRound,
 } from 'lucide-react';
-import { FormEvent, ReactNode, useMemo, useState } from 'react';
-
-type PaginationLink = {
-    url?: string | null;
-    label?: string | null;
-    active?: boolean;
-};
+import { useMemo, useState } from 'react';
 
 type MiceRecord = {
-    id?: number | string;
-    booking_id?: number | string | null;
+    id: number | string;
+    record_no?: string | number | null;
+    year_recorded?: string | number | null;
+    enterprise_group?: string | null;
+    btc_group_code?: string | null;
+
+    establishment_name?: string | null;
     event_name?: string | null;
+    event_category?: string | null;
     type_of_event?: string | null;
-    organizer_name?: string | null;
-    company_name?: string | null;
     venue_area?: string | null;
-    venue?: string | null;
-    event_date?: string | null;
     event_date_from?: string | null;
     event_date_to?: string | null;
-    mice_category?: string | null;
-    event_type?: string | null;
-    local_participants?: number | string | null;
-    foreign_participants?: number | string | null;
-    participants_local?: number | string | null;
-    participants_foreign?: number | string | null;
-    total_participants?: number | string | null;
-    room_nights?: number | string | null;
-    revenue?: number | string | null;
-    economic_impact?: number | string | null;
+
+    organization_name?: string | null;
+    organizer_name?: string | null;
+    organizer_type?: string | null;
+    contact_person?: string | null;
+    contact_number?: string | null;
+    email?: string | null;
+    address?: string | null;
+
+    local_male_participants?: number | string | null;
+    local_female_participants?: number | string | null;
+    domestic_male_participants?: number | string | null;
+    domestic_female_participants?: number | string | null;
+    foreign_male_participants?: number | string | null;
+    foreign_female_participants?: number | string | null;
+
+    main_origin_country?: string | null;
+    main_origin_province?: string | null;
+    main_origin_city?: string | null;
+
+    same_day_visitors?: number | string | null;
+    overnight_visitors?: number | string | null;
+    estimated_room_nights?: number | string | null;
+    estimated_tourism_receipts?: number | string | null;
+
+    total_employees?: number | string | null;
+    female_employees?: number | string | null;
+    male_employees?: number | string | null;
+
+    permit_to_engage?: boolean | number | string | null;
+    dot_accredited?: boolean | number | string | null;
+    active_member?: boolean | number | string | null;
+
     remarks?: string | null;
+    event_days?: number | string | null;
+    total_participants?: number | string | null;
+    status?: string | null;
+    submitted_at?: string | null;
     created_at?: string | null;
+    updated_at?: string | null;
+
+    booking?: {
+        id?: number | string;
+        client_name?: string | null;
+        company_name?: string | null;
+        type_of_event?: string | null;
+        booking_status?: string | null;
+        payment_status?: string | null;
+    } | null;
 };
 
-type BookingOption = {
-    id: number | string;
-    type_of_event?: string | null;
-    company_name?: string | null;
-    client_name?: string | null;
-    booking_date_from?: string | null;
+type Paginated<T> = {
+    data?: T[];
+    links?: Array<{
+        url?: string | null;
+        label?: string | null;
+        active?: boolean;
+    }>;
+    meta?: unknown;
 };
 
-type Props = {
-    records?: unknown;
-    miceRecords?: unknown;
-    registry?: unknown;
-    miceRecord?: MiceRecord;
-    record?: MiceRecord;
-    bookings?: BookingOption[];
+type MicePageProps = {
+    workspaceRole?: 'admin' | 'manager' | string;
+    miceRecords?: MiceRecord[] | Paginated<MiceRecord>;
+    records?: MiceRecord[] | Paginated<MiceRecord>;
+    registry?: MiceRecord[] | Paginated<MiceRecord>;
+    summary?: {
+        total_records?: number;
+        totalRecords?: number;
+        total_participants?: number;
+        totalParticipants?: number;
+        total_events?: number;
+        totalEvents?: number;
+        total_room_nights?: number;
+        totalRoomNights?: number;
+        total_receipts?: number | string;
+        totalReceipts?: number | string;
+    };
     filters?: {
         q?: string;
-        date_from?: string;
-        date_to?: string;
-        mice_category?: string;
-        event_type?: string;
+        year?: string | number;
+        status?: string;
     };
-    stats?: Record<string, number | string>;
-    generated_at?: string;
 };
 
-function currentRole() {
-    if (window.location.pathname.startsWith('/manager')) return 'manager';
+const adminBreadcrumbs: BreadcrumbItem[] = [
+    { title: 'Admin', href: '/admin/dashboard' },
+    { title: 'MICE Registry', href: '/admin/reports/mice-registry' },
+];
+
+const managerBreadcrumbs: BreadcrumbItem[] = [
+    { title: 'Manager', href: '/manager/dashboard' },
+    { title: 'MICE Registry', href: '/manager/reports/mice-registry' },
+];
+
+function collection<T>(value?: T[] | Paginated<T>): T[] {
+    if (Array.isArray(value)) {
+        return value;
+    }
+
+    return value?.data ?? [];
+}
+
+function linksOf<T>(value?: T[] | Paginated<T>) {
+    if (value && !Array.isArray(value)) {
+        return value.links ?? [];
+    }
+
+    return [];
+}
+
+function currentRole(role?: string) {
+    if (role === 'manager' || window.location.pathname.startsWith('/manager')) {
+        return 'manager';
+    }
 
     return 'admin';
 }
 
-function basePath() {
-    return currentRole() === 'manager'
+function basePath(role?: string) {
+    return currentRole(role) === 'manager'
         ? '/manager/reports/mice-registry'
         : '/admin/reports/mice-registry';
 }
 
-function collection<T>(value: unknown): T[] {
-    if (Array.isArray(value)) return value as T[];
-
-    if (
-        value &&
-        typeof value === 'object' &&
-        Array.isArray((value as { data?: unknown[] }).data)
-    ) {
-        return (value as { data: T[] }).data;
-    }
-
-    return [];
+function breadcrumbsFor(role?: string): BreadcrumbItem[] {
+    return currentRole(role) === 'manager' ? managerBreadcrumbs : adminBreadcrumbs;
 }
 
-function linksOf(value: unknown): PaginationLink[] {
-    if (
-        value &&
-        typeof value === 'object' &&
-        Array.isArray((value as { links?: PaginationLink[] }).links)
-    ) {
-        return (value as { links: PaginationLink[] }).links;
-    }
-
-    return [];
-}
-
-function numberValue(value: unknown): number {
+function numberValue(value?: number | string | null): number {
     const parsed = Number(value ?? 0);
+
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function money(value: unknown): string {
+function textValue(value?: string | number | null, fallback = '—'): string {
+    if (value === null || value === undefined || String(value).trim() === '') {
+        return fallback;
+    }
+
+    return String(value);
+}
+
+function money(value?: number | string | null): string {
     const parsed = Number(value ?? 0);
 
     return new Intl.NumberFormat('en-PH', {
         style: 'currency',
         currency: 'PHP',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        maximumFractionDigits: 0,
     }).format(Number.isFinite(parsed) ? parsed : 0);
 }
 
-function cleanLabel(value?: string | null): string {
-    return String(value || '—')
-        .replaceAll('_', ' ')
-        .replaceAll('-', ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function compactDate(value?: string | null) {
-    if (!value) return '—';
+function formatDate(value?: string | null): string {
+    if (!value) {
+        return '—';
+    }
 
     const date = new Date(value);
 
-    if (Number.isNaN(date.getTime())) return value;
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
 
     return new Intl.DateTimeFormat('en-PH', {
         month: 'short',
@@ -149,151 +212,173 @@ function compactDate(value?: string | null) {
     }).format(date);
 }
 
+function formatDateTime(value?: string | null): string {
+    if (!value) {
+        return '—';
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
+
+    return new Intl.DateTimeFormat('en-PH', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    }).format(date);
+}
+
+function cleanLabel(value?: string | null): string {
+    return String(value || 'Not set')
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function yesNo(value?: boolean | number | string | null): string {
+    return value === true || value === 1 || value === '1' || value === 'true' ? 'Yes' : 'No';
+}
+
 function recordTitle(record: MiceRecord): string {
-    return String(
+    return (
         record.event_name ||
-            record.type_of_event ||
-            `MICE Record #${record.id}`,
+        record.type_of_event ||
+        record.establishment_name ||
+        record.organization_name ||
+        `MICE Record #${record.id}`
     );
 }
 
-function organizer(record: MiceRecord): string {
-    return String(
-        record.organizer_name || record.company_name || 'No organizer',
-    );
-}
-
-function venue(record: MiceRecord): string {
-    return String(record.venue_area || record.venue || 'No venue');
-}
-
-function localParticipants(record: MiceRecord): number {
-    return numberValue(record.local_participants ?? record.participants_local);
-}
-
-function foreignParticipants(record: MiceRecord): number {
-    return numberValue(
-        record.foreign_participants ?? record.participants_foreign,
-    );
-}
-
-function totalParticipants(record: MiceRecord): number {
+function participantTotal(record: MiceRecord): number {
     const explicit = numberValue(record.total_participants);
 
-    if (explicit > 0) return explicit;
+    if (explicit > 0) {
+        return explicit;
+    }
 
-    return localParticipants(record) + foreignParticipants(record);
-}
-
-function paginationLabel(label?: string | null) {
-    return String(label || '')
-        .replace(/<[^>]*>/g, '')
-        .replace(/&laquo;|&raquo;/g, '')
-        .trim();
-}
-
-function MiceKpi({
-    label,
-    value,
-    helper,
-    icon: Icon,
-}: {
-    label: string;
-    value: ReactNode;
-    helper: string;
-    icon: typeof FileBarChart;
-}) {
     return (
-        <article className="mice-kpi">
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <p className="backend-booking-label">{label}</p>
-                    <strong>{value}</strong>
-                </div>
-                <div className="alh-admin-kpi-icon">
-                    <Icon className="h-5 w-5" />
-                </div>
-            </div>
-            <p>{helper}</p>
-        </article>
+        numberValue(record.local_male_participants) +
+        numberValue(record.local_female_participants) +
+        numberValue(record.domestic_male_participants) +
+        numberValue(record.domestic_female_participants) +
+        numberValue(record.foreign_male_participants) +
+        numberValue(record.foreign_female_participants)
     );
 }
 
-function Pagination({ links }: { links: PaginationLink[] }) {
-    if (!links.length) return null;
+function statusClass(status?: string | null) {
+    const normalized = String(status || '').toLowerCase();
+
+    if (['submitted', 'approved', 'final', 'completed'].includes(normalized)) {
+        return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200';
+    }
+
+    if (['draft', 'pending', 'for_review'].includes(normalized)) {
+        return 'bg-amber-100 text-amber-700 dark:bg-amber-400/10 dark:text-amber-200';
+    }
+
+    return 'bg-[#f4ead8] text-[#7a5a24] dark:bg-white/10 dark:text-[#f1d89b]';
+}
+
+function Pagination({
+    links,
+}: {
+    links: Array<{
+        url?: string | null;
+        label?: string | null;
+        active?: boolean;
+    }>;
+}) {
+    if (!links.length) {
+        return null;
+    }
 
     return (
-        <div className="flex flex-wrap gap-2 border-t border-slate-200 p-5 dark:border-slate-800">
-            {links.map((link, index) =>
-                link.url ? (
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {links.map((link, index) => {
+                const label = String(link.label || '')
+                    .replace(/<[^>]*>/g, '')
+                    .replace(/«|»/g, '')
+                    .trim();
+
+                if (!link.url) {
+                    return (
+                        <span
+                            key={`${label}-${index}`}
+                            className="inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-[#d9c7a6]/40 bg-[#fffaf0]/50 px-4 text-sm font-semibold text-[#8a7a63] dark:border-white/10 dark:bg-white/[0.035] dark:text-white/35"
+                        >
+                            {label}
+                        </span>
+                    );
+                }
+
+                return (
                     <Link
-                        key={`${link.label}-${index}`}
+                        key={`${label}-${index}`}
                         href={link.url}
                         preserveScroll
-                        className={`rounded-lg border px-3 py-2 text-xs font-bold ${
+                        preserveState
+                        className={
                             link.active
-                                ? 'border-[#20242b] bg-[#20242b] text-white dark:border-white dark:bg-white dark:text-slate-950'
-                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
-                        }`}
-                        aria-label={paginationLabel(link.label)}
-                        dangerouslySetInnerHTML={{ __html: link.label || '' }}
-                    />
-                ) : (
-                    <span
-                        key={`${link.label}-${index}`}
-                        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-400 dark:border-slate-800 dark:bg-slate-900/60"
-                        dangerouslySetInnerHTML={{ __html: link.label || '' }}
-                    />
-                ),
-            )}
+                                ? 'inline-flex h-10 min-w-10 items-center justify-center rounded-full bg-[#2f2517] px-4 text-sm font-semibold text-white dark:bg-white dark:text-[#17120b]'
+                                : 'inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-[#d9c7a6]/70 bg-white px-4 text-sm font-semibold text-[#2f2517] transition hover:bg-[#f7f0e3] dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12'
+                        }
+                    >
+                        {label}
+                    </Link>
+                );
+            })}
         </div>
     );
 }
 
-export function MiceRegistryIndexPage() {
-    const { props } = usePage() as unknown as { props: Props };
-    const path = basePath();
-    const raw = props.records ?? props.miceRecords ?? props.registry;
+function useMiceRecords() {
+    const { props } = usePage<MicePageProps>();
+    const raw = props.miceRecords ?? props.records ?? props.registry;
     const records = useMemo(() => collection<MiceRecord>(raw), [raw]);
-    const links = useMemo(() => linksOf(raw), [raw]);
+    const links = useMemo(() => linksOf<MiceRecord>(raw), [raw]);
+
+    return {
+        props,
+        records,
+        links,
+        role: currentRole(props.workspaceRole),
+        path: basePath(props.workspaceRole),
+    };
+}
+
+export function MiceRegistryReportPage() {
+    const { props, records, links, role, path } = useMiceRecords();
 
     const [q, setQ] = useState(String(props.filters?.q ?? ''));
-    const [dateFrom, setDateFrom] = useState(
-        String(props.filters?.date_from ?? ''),
-    );
-    const [dateTo, setDateTo] = useState(String(props.filters?.date_to ?? ''));
-    const [category, setCategory] = useState(
-        String(props.filters?.mice_category ?? ''),
-    );
-    const [eventType, setEventType] = useState(
-        String(props.filters?.event_type ?? ''),
-    );
+    const [year, setYear] = useState(String(props.filters?.year ?? ''));
+    const [status, setStatus] = useState(String(props.filters?.status ?? ''));
 
-    const participants = records.reduce(
-        (sum, record) => sum + totalParticipants(record),
-        0,
-    );
-    const revenue = records.reduce(
-        (sum, record) =>
-            sum + numberValue(record.revenue ?? record.economic_impact),
-        0,
-    );
-    const roomNights = records.reduce(
-        (sum, record) => sum + numberValue(record.room_nights),
-        0,
-    );
+    const totalRecords = props.summary?.total_records ?? props.summary?.totalRecords ?? records.length;
+    const totalParticipants =
+        props.summary?.total_participants ??
+        props.summary?.totalParticipants ??
+        records.reduce((sum, record) => sum + participantTotal(record), 0);
+    const totalRoomNights =
+        props.summary?.total_room_nights ??
+        props.summary?.totalRoomNights ??
+        records.reduce((sum, record) => sum + numberValue(record.estimated_room_nights), 0);
+    const totalReceipts =
+        props.summary?.total_receipts ??
+        props.summary?.totalReceipts ??
+        records.reduce((sum, record) => sum + numberValue(record.estimated_tourism_receipts), 0);
 
-    function applyFilters(event?: FormEvent) {
-        event?.preventDefault();
-
+    function search() {
         router.get(
             path,
             {
                 q: q || undefined,
-                date_from: dateFrom || undefined,
-                date_to: dateTo || undefined,
-                mice_category: category || undefined,
-                event_type: eventType || undefined,
+                year: year || undefined,
+                status: status || undefined,
             },
             {
                 preserveScroll: true,
@@ -303,797 +388,422 @@ export function MiceRegistryIndexPage() {
         );
     }
 
-    function resetFilters() {
-        setQ('');
-        setDateFrom('');
-        setDateTo('');
-        setCategory('');
-        setEventType('');
-
-        router.get(
-            path,
-            {},
-            { preserveScroll: true, preserveState: true, replace: true },
-        );
-    }
-
     function destroy(record: MiceRecord) {
-        if (!record.id) return;
-
-        if (!window.confirm(`Delete MICE record "${recordTitle(record)}"?`))
+        if (!window.confirm(`Delete MICE record "${recordTitle(record)}"?`)) {
             return;
+        }
 
         router.delete(`${path}/${record.id}`, {
             preserveScroll: true,
         });
     }
 
-    const query = new URLSearchParams();
-
-    if (q) query.set('q', q);
-    if (dateFrom) query.set('date_from', dateFrom);
-    if (dateTo) query.set('date_to', dateTo);
-    if (category) query.set('mice_category', category);
-    if (eventType) query.set('event_type', eventType);
-
-    const suffix = query.toString() ? `?${query.toString()}` : '';
-
     return (
         <ResourcePageShell
-            role={currentRole()}
-            current="MICE Registry"
-            eyebrow="Reports"
             title="MICE Registry"
-            description="Monitor MICE-related events, participants, economic activity, and reporting records."
+            eyebrow="Reports"
+            icon={FileSpreadsheet}
+            breadcrumbs={breadcrumbsFor(role)}
+            subtitle="Formal registry for Meetings, Incentives, Conferences, and Exhibitions records, participant counts, visitor origin, room nights, and tourism receipt reporting."
+            actions={
+                <>
+                    <ResourceActionLink href={`${path}/print`} variant="secondary">
+                        Print Report
+                    </ResourceActionLink>
+
+                    <ResourceActionLink href={`${path}/export`} variant="secondary">
+                        Export
+                    </ResourceActionLink>
+
+                    {role === 'admin' ? (
+                        <ResourceActionLink href={`${path}/create`}>
+                            New MICE Record
+                        </ResourceActionLink>
+                    ) : null}
+                </>
+            }
         >
-            <div className="space-y-5">
-                <section className="mice-hero">
-                    <div>
-                        <p className="backend-booking-label">MICE Registry</p>
-                        <h1>
-                            Reporting records for meetings, incentives,
-                            conventions, and exhibitions.
-                        </h1>
-                        <span>
-                            Keep reporting clean and printable. Use the form for
-                            encoded entries and the print/export actions for
-                            submission-ready reports.
-                        </span>
-                    </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <ResourceStatCard
+                    label="Records"
+                    value={totalRecords}
+                    description="Loaded registry records."
+                    icon={FileSpreadsheet}
+                />
 
-                    <div className="flex flex-wrap gap-2">
-                        <Link
-                            href={`${path}/create`}
-                            className="alh-primary-button"
-                        >
-                            <Plus className="h-4 w-4" />
-                            New Record
-                        </Link>
-                        <a
-                            href={`${path}/export${suffix}`}
-                            className="alh-secondary-button"
-                        >
-                            <Download className="h-4 w-4" />
-                            Export
-                        </a>
-                        <a
-                            href={`${path}/print${suffix}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="alh-secondary-button"
-                        >
-                            <Printer className="h-4 w-4" />
-                            Print
-                        </a>
-                    </div>
-                </section>
+                <ResourceStatCard
+                    label="Participants"
+                    value={Number(totalParticipants).toLocaleString()}
+                    description="Total local, domestic, and foreign participants."
+                    icon={UsersRound}
+                />
 
-                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <MiceKpi
-                        label="Records"
-                        value={props.stats?.records ?? records.length}
-                        helper="Loaded MICE records in the current view."
-                        icon={FileBarChart}
-                    />
-                    <MiceKpi
-                        label="Participants"
-                        value={props.stats?.participants ?? participants}
-                        helper="Local and foreign participants combined."
-                        icon={Users}
-                    />
-                    <MiceKpi
-                        label="Room Nights"
-                        value={props.stats?.room_nights ?? roomNights}
-                        helper="Room-night count encoded for reporting."
-                        icon={CalendarDays}
-                    />
-                    <MiceKpi
-                        label="Revenue / Impact"
-                        value={money(props.stats?.revenue ?? revenue)}
-                        helper="Encoded revenue or economic impact."
-                        icon={BarChart3}
-                    />
-                </section>
+                <ResourceStatCard
+                    label="Room Nights"
+                    value={Number(totalRoomNights).toLocaleString()}
+                    description="Estimated room nights."
+                    icon={Building2}
+                />
 
-                <section className="mice-panel overflow-hidden">
-                    <div className="mice-panel-header">
-                        <div>
-                            <p className="backend-booking-label">
-                                Registry Records
-                            </p>
-                            <h2>
-                                {records.length} visible record
-                                {records.length === 1 ? '' : 's'}
-                            </h2>
-                            <span>
-                                Filter by title, organizer, category, event
-                                type, or event date range.
-                            </span>
-                        </div>
-                    </div>
+                <ResourceStatCard
+                    label="Tourism Receipts"
+                    value={money(totalReceipts)}
+                    description="Estimated tourism receipts."
+                    icon={ReceiptText}
+                />
+            </div>
 
-                    <form onSubmit={applyFilters} className="mice-filter-grid">
-                        <div className="relative xl:col-span-2">
-                            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                                value={q}
-                                onChange={(event) => setQ(event.target.value)}
-                                className="backend-booking-input pl-10"
-                                placeholder="Search event, organizer, venue..."
-                            />
-                        </div>
-
-                        <input
-                            type="date"
-                            value={dateFrom}
-                            onChange={(event) =>
-                                setDateFrom(event.target.value)
-                            }
-                            className="backend-booking-input"
-                            aria-label="Date from"
-                        />
-                        <input
-                            type="date"
-                            value={dateTo}
-                            onChange={(event) => setDateTo(event.target.value)}
-                            className="backend-booking-input"
-                            aria-label="Date to"
-                        />
-
-                        <select
-                            value={category}
-                            onChange={(event) =>
-                                setCategory(event.target.value)
-                            }
-                            className="backend-booking-input"
-                        >
-                            <option value="">All categories</option>
-                            <option value="meeting">Meeting</option>
-                            <option value="incentive">Incentive</option>
-                            <option value="convention">Convention</option>
-                            <option value="exhibition">Exhibition</option>
-                            <option value="event">Event</option>
-                        </select>
-
-                        <select
-                            value={eventType}
-                            onChange={(event) =>
-                                setEventType(event.target.value)
-                            }
-                            className="backend-booking-input"
-                        >
-                            <option value="">All event types</option>
-                            <option value="local">Local</option>
-                            <option value="regional">Regional</option>
-                            <option value="national">National</option>
-                            <option value="international">International</option>
-                        </select>
-
-                        <button
-                            type="submit"
-                            className="alh-primary-button justify-center"
-                        >
-                            Apply
-                        </button>
-                        <button
-                            type="button"
-                            onClick={resetFilters}
-                            className="alh-secondary-button justify-center"
-                        >
-                            Reset
-                        </button>
-                    </form>
-
-                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                        {records.map((record) => (
-                            <article key={record.id} className="mice-row">
-                                <div className="min-w-0">
-                                    <div className="flex flex-wrap gap-2">
-                                        <span className="alh-status-chip is-public">
-                                            {cleanLabel(record.mice_category)}
-                                        </span>
-                                        <span className="booking-mini-pill">
-                                            {cleanLabel(record.event_type)}
-                                        </span>
-                                        {record.booking_id ? (
-                                            <span className="booking-mini-pill">
-                                                Booking #{record.booking_id}
-                                            </span>
-                                        ) : null}
-                                    </div>
-
-                                    <h3>{recordTitle(record)}</h3>
-                                    <p>
-                                        {organizer(record)} · {venue(record)} ·{' '}
-                                        {compactDate(
-                                            record.event_date_from ||
-                                                record.event_date,
-                                        )}
-                                    </p>
-
-                                    <div className="mt-4 grid gap-3 md:grid-cols-4">
-                                        <div className="alh-admin-mini-box">
-                                            <span>Participants</span>
-                                            <strong>
-                                                {totalParticipants(record)}
-                                            </strong>
-                                        </div>
-                                        <div className="alh-admin-mini-box">
-                                            <span>Local / Foreign</span>
-                                            <strong>
-                                                {localParticipants(record)} /{' '}
-                                                {foreignParticipants(record)}
-                                            </strong>
-                                        </div>
-                                        <div className="alh-admin-mini-box">
-                                            <span>Room Nights</span>
-                                            <strong>
-                                                {numberValue(
-                                                    record.room_nights,
-                                                )}
-                                            </strong>
-                                        </div>
-                                        <div className="alh-admin-mini-box">
-                                            <span>Revenue</span>
-                                            <strong>
-                                                {money(
-                                                    record.revenue ??
-                                                        record.economic_impact,
-                                                )}
-                                            </strong>
-                                        </div>
-                                    </div>
+            <div className="mt-5">
+                <ResourceSection
+                    title="Registry records"
+                    eyebrow="MICE Report"
+                    description="Review submitted MICE reports, verify event information, and prepare print/export reports."
+                >
+                    <ResourceToolbar
+                        searchPlaceholder="Search event, establishment, organizer, venue, origin, or remarks..."
+                        right={
+                            <div className="flex flex-wrap gap-2">
+                                <div className="flex min-h-11 items-center gap-2 rounded-full border border-[#d9c7a6]/70 bg-white px-4 dark:border-white/10 dark:bg-white/7">
+                                    <CalendarDays className="h-4 w-4 shrink-0 text-[#9d7b3d] dark:text-[#f1d89b]" />
+                                    <input
+                                        value={year}
+                                        onChange={(event) => setYear(event.target.value)}
+                                        placeholder="Year"
+                                        className="w-20 bg-transparent text-sm font-semibold text-[#21180d] outline-none placeholder:text-[#8a7a63] dark:text-white dark:placeholder:text-white/42"
+                                    />
                                 </div>
 
-                                <div className="flex flex-wrap gap-2 xl:justify-end">
-                                    <Link
-                                        href={`${path}/${record.id}/edit`}
-                                        className="alh-admin-neutral-button"
-                                    >
-                                        <Edit3 className="h-4 w-4" />
-                                        Edit
-                                    </Link>
-                                    <button
-                                        type="button"
-                                        onClick={() => destroy(record)}
-                                        className="alh-admin-danger-button"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </button>
-                                </div>
-                            </article>
-                        ))}
-                    </div>
+                                <select
+                                    value={status}
+                                    onChange={(event) => setStatus(event.target.value)}
+                                    className="min-h-11 rounded-full border border-[#d9c7a6]/70 bg-white px-4 text-sm font-semibold text-[#2f2517] outline-none dark:border-white/10 dark:bg-white/7 dark:text-white"
+                                >
+                                    <option value="">All statuses</option>
+                                    <option value="draft">Draft</option>
+                                    <option value="submitted">Submitted</option>
+                                    <option value="approved">Approved</option>
+                                </select>
+
+                                <button
+                                    type="button"
+                                    onClick={search}
+                                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#2f2517] px-5 text-sm font-semibold text-white shadow-[0_18px_44px_rgba(47,37,23,0.18)] transition hover:-translate-y-0.5 hover:bg-[#4a3921] dark:bg-white dark:text-[#17120b]"
+                                >
+                                    <Search className="h-4 w-4" />
+                                    Search
+                                </button>
+                            </div>
+                        }
+                    />
+
+                    {records.length === 0 ? (
+                        <ResourceEmptyState
+                            icon={FileSpreadsheet}
+                            title="No MICE records found"
+                            description="Submitted MICE survey records and manually encoded MICE registry entries will appear here."
+                        />
+                    ) : (
+                        <div className="grid gap-4">
+                            {records.map((record) => (
+                                <MiceRecordCard
+                                    key={record.id}
+                                    record={record}
+                                    role={role}
+                                    path={path}
+                                    onDelete={() => destroy(record)}
+                                />
+                            ))}
+                        </div>
+                    )}
 
                     <Pagination links={links} />
-                </section>
+                </ResourceSection>
             </div>
         </ResourcePageShell>
     );
 }
 
-export function MiceRegistryFormPage() {
-    const { props } = usePage() as unknown as { props: Props };
-    const path = basePath();
-    const record = props.record ?? props.miceRecord;
-    const isEdit = Boolean(record?.id);
-    const bookings = props.bookings || [];
-
-    const [form, setForm] = useState({
-        booking_id: String(record?.booking_id ?? ''),
-        event_name: String(record?.event_name || record?.type_of_event || ''),
-        organizer_name: String(
-            record?.organizer_name || record?.company_name || '',
-        ),
-        venue_area: String(record?.venue_area || record?.venue || ''),
-        event_date_from: String(
-            record?.event_date_from || record?.event_date || '',
-        ),
-        event_date_to: String(
-            record?.event_date_to || record?.event_date || '',
-        ),
-        mice_category: String(record?.mice_category || 'meeting'),
-        event_type: String(record?.event_type || 'local'),
-        local_participants: String(
-            record?.local_participants ?? record?.participants_local ?? '0',
-        ),
-        foreign_participants: String(
-            record?.foreign_participants ?? record?.participants_foreign ?? '0',
-        ),
-        room_nights: String(record?.room_nights ?? '0'),
-        revenue: String(record?.revenue ?? record?.economic_impact ?? '0'),
-        remarks: String(record?.remarks || ''),
-    });
-    const [saving, setSaving] = useState(false);
-
-    function submit(event: FormEvent) {
-        event.preventDefault();
-        setSaving(true);
-
-        const payload = {
-            ...form,
-            type_of_event: form.event_name,
-            company_name: form.organizer_name,
-            venue: form.venue_area,
-            event_date: form.event_date_from,
-            participants_local: form.local_participants,
-            participants_foreign: form.foreign_participants,
-            total_participants:
-                numberValue(form.local_participants) +
-                numberValue(form.foreign_participants),
-            economic_impact: form.revenue,
-        };
-
-        const options = {
-            preserveScroll: true,
-            onFinish: () => setSaving(false),
-        };
-
-        if (isEdit) {
-            router.put(`${path}/${record?.id}`, payload, options);
-            return;
-        }
-
-        router.post(path, payload, options);
-    }
-
+function MiceRecordCard({
+    record,
+    role,
+    path,
+    onDelete,
+}: {
+    record: MiceRecord;
+    role: string;
+    path: string;
+    onDelete: () => void;
+}) {
     return (
-        <ResourcePageShell
-            role={currentRole()}
-            current={isEdit ? 'Edit MICE Record' : 'Create MICE Record'}
-            eyebrow="Reports"
-            title={isEdit ? 'Edit MICE Record' : 'Create MICE Record'}
-            description="Encode MICE report information in a clean two-column form."
-        >
-            <div className="space-y-5">
-                <section className="mice-hero">
-                    <div>
-                        <p className="backend-booking-label">MICE Form</p>
-                        <h1>
-                            {isEdit
-                                ? 'Update report record.'
-                                : 'Encode a new report record.'}
-                        </h1>
-                        <span>
-                            Keep MICE data consistent with bookings where
-                            possible. Link a booking record when the MICE entry
-                            came from an actual reservation.
-                        </span>
-                    </div>
+        <article className="overflow-hidden rounded-[1.45rem] border border-[#d9c7a6]/70 bg-[#fffaf0]/72 shadow-[0_18px_58px_rgba(47,37,23,0.08)] dark:border-white/10 dark:bg-white/[0.035]">
+            <div className="border-b border-[#eadcc2]/80 p-5 dark:border-white/10">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(record.status)}`}>
+                                {cleanLabel(record.status)}
+                            </span>
 
-                    <Link href={path} className="alh-secondary-button">
-                        <ArrowLeft className="h-4 w-4" />
-                        Back to Registry
-                    </Link>
-                </section>
+                            <span className="rounded-full border border-[#d9c7a6]/70 bg-white px-3 py-1 text-xs font-bold text-[#7a5a24] dark:border-white/10 dark:bg-white/7 dark:text-[#f1d89b]">
+                                Record #{textValue(record.record_no ?? record.id)}
+                            </span>
 
-                <section className="mice-panel overflow-hidden">
-                    <div className="mice-panel-header">
-                        <div>
-                            <p className="backend-booking-label">
-                                Record Details
-                            </p>
-                            <h2>MICE registry form</h2>
+                            <span className="rounded-full border border-[#d9c7a6]/70 bg-white px-3 py-1 text-xs font-bold text-[#7a5a24] dark:border-white/10 dark:bg-white/7 dark:text-[#f1d89b]">
+                                {textValue(record.year_recorded, new Date().getFullYear().toString())}
+                            </span>
                         </div>
+
+                        <h3 className="mt-4 text-2xl font-semibold tracking-[-0.05em] text-[#21180d] dark:text-white">
+                            {recordTitle(record)}
+                        </h3>
+
+                        <p className="mt-2 text-sm leading-7 text-[#6e604c] dark:text-white/56">
+                            {textValue(record.establishment_name)} · {textValue(record.venue_area)} · {formatDate(record.event_date_from)} to {formatDate(record.event_date_to)}
+                        </p>
                     </div>
 
-                    <form onSubmit={submit} className="mice-form-grid">
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Linked Booking
-                            </span>
-                            <select
-                                value={form.booking_id}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        booking_id: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            >
-                                <option value="">No linked booking</option>
-                                {bookings.map((booking) => (
-                                    <option key={booking.id} value={booking.id}>
-                                        #{booking.id} ·{' '}
-                                        {booking.type_of_event ||
-                                            booking.company_name ||
-                                            booking.client_name}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
+                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                        <Link
+                            href={`${path}/${record.id}/edit`}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[#d9c7a6]/70 bg-white px-4 text-sm font-semibold text-[#2f2517] transition hover:bg-[#f7f0e3] dark:border-white/10 dark:bg-white/7 dark:text-white dark:hover:bg-white/12"
+                        >
+                            <Edit3 className="h-4 w-4" />
+                            Edit
+                        </Link>
 
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Event Name
-                            </span>
-                            <input
-                                value={form.event_name}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        event_name: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                                required
-                            />
-                        </label>
-
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Organizer
-                            </span>
-                            <input
-                                value={form.organizer_name}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        organizer_name: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            />
-                        </label>
-
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Venue Area
-                            </span>
-                            <input
-                                value={form.venue_area}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        venue_area: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            />
-                        </label>
-
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Date From
-                            </span>
-                            <input
-                                type="date"
-                                value={form.event_date_from}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        event_date_from: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            />
-                        </label>
-
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Date To
-                            </span>
-                            <input
-                                type="date"
-                                value={form.event_date_to}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        event_date_to: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            />
-                        </label>
-
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                MICE Category
-                            </span>
-                            <select
-                                value={form.mice_category}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        mice_category: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            >
-                                <option value="meeting">Meeting</option>
-                                <option value="incentive">Incentive</option>
-                                <option value="convention">Convention</option>
-                                <option value="exhibition">Exhibition</option>
-                                <option value="event">Event</option>
-                            </select>
-                        </label>
-
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Event Type
-                            </span>
-                            <select
-                                value={form.event_type}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        event_type: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            >
-                                <option value="local">Local</option>
-                                <option value="regional">Regional</option>
-                                <option value="national">National</option>
-                                <option value="international">
-                                    International
-                                </option>
-                            </select>
-                        </label>
-
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Local Participants
-                            </span>
-                            <input
-                                value={form.local_participants}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        local_participants: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            />
-                        </label>
-
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Foreign Participants
-                            </span>
-                            <input
-                                value={form.foreign_participants}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        foreign_participants:
-                                            event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            />
-                        </label>
-
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Room Nights
-                            </span>
-                            <input
-                                value={form.room_nights}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        room_nights: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            />
-                        </label>
-
-                        <label className="grid gap-2">
-                            <span className="backend-booking-label">
-                                Revenue / Economic Impact
-                            </span>
-                            <input
-                                value={form.revenue}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        revenue: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input"
-                            />
-                        </label>
-
-                        <label className="grid gap-2 md:col-span-2">
-                            <span className="backend-booking-label">
-                                Remarks
-                            </span>
-                            <textarea
-                                rows={5}
-                                value={form.remarks}
-                                onChange={(event) =>
-                                    setForm((current) => ({
-                                        ...current,
-                                        remarks: event.target.value,
-                                    }))
-                                }
-                                className="backend-booking-input min-h-[130px] py-3"
-                            />
-                        </label>
-
-                        <div className="md:col-span-2">
+                        {role === 'admin' ? (
                             <button
-                                type="submit"
-                                disabled={saving}
-                                className="alh-primary-button justify-center disabled:opacity-60"
+                                type="button"
+                                onClick={onDelete}
+                                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-rose-600 px-4 text-sm font-semibold text-white transition hover:bg-rose-700"
                             >
-                                <Save className="h-4 w-4" />
-                                {saving
-                                    ? 'Saving...'
-                                    : isEdit
-                                      ? 'Update Record'
-                                      : 'Save Record'}
+                                <Trash2 className="h-4 w-4" />
+                                Delete
                             </button>
-                        </div>
-                    </form>
-                </section>
+                        ) : null}
+                    </div>
+                </div>
             </div>
-        </ResourcePageShell>
+
+            <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-4">
+                <InfoBox icon={UsersRound} label="Participants" value={participantTotal(record).toLocaleString()} />
+                <InfoBox icon={Globe2} label="Origin" value={`${textValue(record.main_origin_city)} · ${textValue(record.main_origin_country)}`} />
+                <InfoBox icon={Building2} label="Room Nights" value={numberValue(record.estimated_room_nights).toLocaleString()} />
+                <InfoBox icon={ReceiptText} label="Receipts" value={money(record.estimated_tourism_receipts)} />
+                <InfoBox icon={UsersRound} label="Same-day Visitors" value={numberValue(record.same_day_visitors).toLocaleString()} />
+                <InfoBox icon={UsersRound} label="Overnight Visitors" value={numberValue(record.overnight_visitors).toLocaleString()} />
+                <InfoBox icon={ShieldCheck} label="DOT Accredited" value={yesNo(record.dot_accredited)} />
+                <InfoBox icon={CalendarDays} label="Submitted" value={formatDateTime(record.submitted_at ?? record.created_at)} />
+            </div>
+
+            <div className="border-t border-[#eadcc2]/80 p-5 dark:border-white/10">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <InfoLine icon={Building2} label="Organization" value={textValue(record.organization_name)} />
+                    <InfoLine icon={UsersRound} label="Organizer" value={textValue(record.organizer_name)} />
+                    <InfoLine icon={Mail} label="Email" value={textValue(record.email)} />
+                    <InfoLine icon={MapPin} label="Address" value={textValue(record.address)} />
+                    <InfoLine icon={ReceiptText} label="Remarks" value={textValue(record.remarks, 'No remarks')} />
+                    <InfoLine icon={ShieldCheck} label="Permit / Member" value={`Permit: ${yesNo(record.permit_to_engage)} · Member: ${yesNo(record.active_member)}`} />
+                </div>
+            </div>
+        </article>
+    );
+}
+
+function InfoBox({
+    icon: Icon,
+    label,
+    value,
+}: {
+    icon: typeof UsersRound;
+    label: string;
+    value: string;
+}) {
+    return (
+        <div className="rounded-[1rem] border border-[#eadcc2]/80 bg-white/70 p-3 dark:border-white/10 dark:bg-white/[0.035]">
+            <Icon className="h-4 w-4 text-[#9d7b3d] dark:text-[#f1d89b]" />
+            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9d7b3d] dark:text-[#f1d89b]">
+                {label}
+            </p>
+            <p className="mt-1 line-clamp-2 text-sm font-semibold text-[#21180d] dark:text-white">
+                {value}
+            </p>
+        </div>
+    );
+}
+
+function InfoLine({
+    icon: Icon,
+    label,
+    value,
+}: {
+    icon: typeof UsersRound;
+    label: string;
+    value: string;
+}) {
+    return (
+        <div className="flex items-start gap-3 rounded-[1rem] border border-[#eadcc2]/80 bg-white/60 p-3 dark:border-white/10 dark:bg-white/[0.035]">
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#9d7b3d] dark:text-[#f1d89b]" />
+            <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9d7b3d] dark:text-[#f1d89b]">
+                    {label}
+                </p>
+                <p className="mt-1 break-words text-sm leading-6 text-[#6e604c] dark:text-white/56">
+                    {value}
+                </p>
+            </div>
+        </div>
     );
 }
 
 export function MiceRegistryPrintPage() {
-    const { props } = usePage() as unknown as { props: Props };
-    const raw = props.records ?? props.miceRecords ?? props.registry;
-    const records = collection<MiceRecord>(raw);
-    const participants = records.reduce(
-        (sum, record) => sum + totalParticipants(record),
-        0,
-    );
-    const revenue = records.reduce(
-        (sum, record) =>
-            sum + numberValue(record.revenue ?? record.economic_impact),
-        0,
-    );
+    const { props, records, role, path } = useMiceRecords();
+
+    const totalParticipants = records.reduce((sum, record) => sum + participantTotal(record), 0);
+    const totalRoomNights = records.reduce((sum, record) => sum + numberValue(record.estimated_room_nights), 0);
+    const totalReceipts = records.reduce((sum, record) => sum + numberValue(record.estimated_tourism_receipts), 0);
 
     return (
         <>
-            <Head title="MICE Registry Print" />
+            <Head title="Print MICE Registry" />
 
-            <div className="print-report-page">
-                <div className="print-report-toolbar no-print">
-                    <button
-                        type="button"
-                        onClick={() => window.print()}
-                        className="alh-primary-button"
-                    >
-                        <Printer className="h-4 w-4" />
-                        Print MICE Report
-                    </button>
-                </div>
+            <div className="min-h-screen bg-white text-[#17120b] print:bg-white">
+                <div className="mx-auto max-w-[14in] px-6 py-6 print:max-w-none print:px-0 print:py-0">
+                    <div className="mb-5 flex items-center justify-between gap-4 print:hidden">
+                        <Link
+                            href={path}
+                            className="inline-flex min-h-10 items-center justify-center rounded-full border border-[#d9c7a6] px-4 text-sm font-semibold text-[#2f2517]"
+                        >
+                            Back to Registry
+                        </Link>
 
-                <main className="print-report-paper">
-                    <header className="print-report-header">
-                        <p>MICE Registry Report</p>
-                        <h1>Baguio Convention and Cultural Center</h1>
-                        <span>
-                            Generated {compactDate(props.generated_at)} ·{' '}
-                            {records.length} records · {participants}{' '}
-                            participants · {money(revenue)} revenue/impact
-                        </span>
-                    </header>
+                        <button
+                            type="button"
+                            onClick={() => window.print()}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#2f2517] px-5 text-sm font-semibold text-white"
+                        >
+                            <Printer className="h-4 w-4" />
+                            Print
+                        </button>
+                    </div>
 
-                    <section className="print-report-section">
-                        <h2>Summary</h2>
-                        <table className="print-report-table">
-                            <tbody>
-                                <tr>
-                                    <td>Total Records</td>
-                                    <td>{records.length}</td>
-                                </tr>
-                                <tr>
-                                    <td>Total Participants</td>
-                                    <td>{participants}</td>
-                                </tr>
-                                <tr>
-                                    <td>Total Revenue / Economic Impact</td>
-                                    <td>{money(revenue)}</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <section className="border-b-2 border-[#17120b] pb-4 text-center">
+                        <p className="text-xs font-bold uppercase tracking-[0.24em]">
+                            Republic of the Philippines · City Government of Baguio
+                        </p>
+                        <h1 className="mt-2 text-3xl font-bold uppercase tracking-[-0.03em]">
+                            Baguio Convention and Cultural Center
+                        </h1>
+                        <p className="mt-1 text-sm font-semibold uppercase tracking-[0.18em]">
+                            MICE Registry Report
+                        </p>
+                        <p className="mt-2 text-xs">
+                            Generated {formatDateTime(new Date().toISOString())} · Workspace: {cleanLabel(role)}
+                        </p>
                     </section>
 
-                    <section className="print-report-section">
-                        <h2>Registry Records</h2>
-                        <table className="print-report-table">
+                    <section className="mt-4 grid grid-cols-4 gap-2">
+                        <PrintKpi label="Records" value={records.length.toLocaleString()} />
+                        <PrintKpi label="Participants" value={totalParticipants.toLocaleString()} />
+                        <PrintKpi label="Room Nights" value={totalRoomNights.toLocaleString()} />
+                        <PrintKpi label="Receipts" value={money(totalReceipts)} />
+                    </section>
+
+                    <section className="mt-5 overflow-hidden border border-[#17120b]">
+                        <table className="w-full border-collapse text-[10px]">
                             <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Event</th>
-                                    <th>Organizer</th>
-                                    <th>Venue</th>
-                                    <th>Date</th>
-                                    <th>Category</th>
-                                    <th>Type</th>
-                                    <th>Participants</th>
-                                    <th>Room Nights</th>
-                                    <th>Revenue</th>
+                                <tr className="bg-[#17120b] text-white">
+                                    <PrintTh>No.</PrintTh>
+                                    <PrintTh>Year</PrintTh>
+                                    <PrintTh>Establishment</PrintTh>
+                                    <PrintTh>Event</PrintTh>
+                                    <PrintTh>Category</PrintTh>
+                                    <PrintTh>Venue</PrintTh>
+                                    <PrintTh>Date</PrintTh>
+                                    <PrintTh>Organizer</PrintTh>
+                                    <PrintTh>Origin</PrintTh>
+                                    <PrintTh>Participants</PrintTh>
+                                    <PrintTh>Room Nights</PrintTh>
+                                    <PrintTh>Receipts</PrintTh>
+                                    <PrintTh>Status</PrintTh>
                                 </tr>
                             </thead>
+
                             <tbody>
-                                {records.length > 0 ? (
-                                    records.map((record) => (
-                                        <tr key={record.id}>
-                                            <td>#{record.id}</td>
-                                            <td>{recordTitle(record)}</td>
-                                            <td>{organizer(record)}</td>
-                                            <td>{venue(record)}</td>
-                                            <td>
-                                                {compactDate(
-                                                    record.event_date_from ||
-                                                        record.event_date,
-                                                )}{' '}
-                                                to{' '}
-                                                {compactDate(
-                                                    record.event_date_to ||
-                                                        record.event_date,
-                                                )}
-                                            </td>
-                                            <td>
-                                                {cleanLabel(
-                                                    record.mice_category,
-                                                )}
-                                            </td>
-                                            <td>
-                                                {cleanLabel(record.event_type)}
-                                            </td>
-                                            <td>{totalParticipants(record)}</td>
-                                            <td>
-                                                {numberValue(
-                                                    record.room_nights,
-                                                )}
-                                            </td>
-                                            <td>
-                                                {money(
-                                                    record.revenue ??
-                                                        record.economic_impact,
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
+                                {records.length === 0 ? (
                                     <tr>
-                                        <td colSpan={10}>
+                                        <td colSpan={13} className="border border-[#17120b] p-4 text-center">
                                             No MICE records found.
                                         </td>
                                     </tr>
+                                ) : (
+                                    records.map((record, index) => (
+                                        <tr key={record.id} className="break-inside-avoid">
+                                            <PrintTd>{textValue(record.record_no ?? index + 1)}</PrintTd>
+                                            <PrintTd>{textValue(record.year_recorded)}</PrintTd>
+                                            <PrintTd>{textValue(record.establishment_name)}</PrintTd>
+                                            <PrintTd>{recordTitle(record)}</PrintTd>
+                                            <PrintTd>{textValue(record.event_category)}</PrintTd>
+                                            <PrintTd>{textValue(record.venue_area)}</PrintTd>
+                                            <PrintTd>
+                                                {formatDate(record.event_date_from)}
+                                                <br />
+                                                {formatDate(record.event_date_to)}
+                                            </PrintTd>
+                                            <PrintTd>{textValue(record.organizer_name ?? record.organization_name)}</PrintTd>
+                                            <PrintTd>
+                                                {textValue(record.main_origin_city)}
+                                                <br />
+                                                {textValue(record.main_origin_country)}
+                                            </PrintTd>
+                                            <PrintTd>{participantTotal(record).toLocaleString()}</PrintTd>
+                                            <PrintTd>{numberValue(record.estimated_room_nights).toLocaleString()}</PrintTd>
+                                            <PrintTd>{money(record.estimated_tourism_receipts)}</PrintTd>
+                                            <PrintTd>{cleanLabel(record.status)}</PrintTd>
+                                        </tr>
+                                    ))
                                 )}
                             </tbody>
                         </table>
                     </section>
 
-                    <footer className="print-report-footer">
-                        <strong>BCCC EASE</strong>
-                        <span>
-                            MICE registry generated for internal tourism and
-                            convention reporting.
-                        </span>
-                    </footer>
-                </main>
+                    <section className="mt-6 grid grid-cols-3 gap-8 text-xs">
+                        <SignatureBlock label="Prepared by" />
+                        <SignatureBlock label="Reviewed by" />
+                        <SignatureBlock label="Approved by" />
+                    </section>
+                </div>
             </div>
         </>
     );
 }
+
+function PrintKpi({ label, value }: { label: string; value: string }) {
+    return (
+        <article className="border border-[#17120b] p-3 text-center">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em]">{label}</p>
+            <p className="mt-1 text-lg font-bold">{value}</p>
+        </article>
+    );
+}
+
+function PrintTh({ children }: { children: React.ReactNode }) {
+    return <th className="border border-[#17120b] px-2 py-2 text-left font-bold">{children}</th>;
+}
+
+function PrintTd({ children }: { children: React.ReactNode }) {
+    return <td className="border border-[#17120b] px-2 py-2 align-top">{children}</td>;
+}
+
+function SignatureBlock({ label }: { label: string }) {
+    return (
+        <div className="pt-10 text-center">
+            <div className="border-t border-[#17120b] pt-2">
+                <p className="font-bold uppercase">{label}</p>
+                <p className="mt-1 text-[10px]">Name / Signature / Date</p>
+            </div>
+        </div>
+    );
+}
+
+export default MiceRegistryReportPage;
