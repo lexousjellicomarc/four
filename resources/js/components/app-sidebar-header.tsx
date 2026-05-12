@@ -307,8 +307,8 @@ export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: Breadcrum
 
     return (
         <>
-            <header className="sticky top-0 z-[70] border-b border-[#d9c7a6]/60 bg-[#fffaf0]/88 shadow-[0_14px_50px_rgba(47,37,23,0.08)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#101419]/84">
-                <div className="mx-auto flex h-[4.5rem] w-full max-w-[1920px] items-center gap-2 px-3 sm:px-4 lg:px-5 xl:px-6">
+            <header className="backend-main-topbar sticky top-0 z-[70] border-b border-[#d9c7a6]/60 bg-[#fffaf0]/88 shadow-[0_14px_50px_rgba(47,37,23,0.08)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#101419]/84">
+                <div className="backend-main-topbar-inner mx-auto flex min-h-[4.5rem] w-full max-w-[1920px] items-center gap-2 px-3 py-2 sm:px-4 lg:px-5 xl:px-6">
                     <button
                         type="button"
                         onClick={() => setMobileOpen(true)}

@@ -263,7 +263,7 @@ export function AppSidebar() {
     }, [page.url, sections]);
 
     return (
-        <aside className="fixed inset-y-0 left-0 z-[80] hidden w-[17.25rem] border-r border-[#d9c7a6]/70 bg-[#fffaf0]/90 shadow-[18px_0_80px_rgba(47,37,23,0.10)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#101419]/90 lg:flex lg:flex-col">
+        <aside className="backend-sidebar fixed inset-y-0 left-0 z-[80] hidden w-[17.25rem] border-r border-[#d9c7a6]/70 bg-[#fffaf0]/90 shadow-[18px_0_80px_rgba(47,37,23,0.10)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#101419]/90 lg:flex lg:flex-col">
             <div className="flex min-h-0 flex-1 flex-col p-3">
                 <Link
                     href={backendHomeHref(role)}

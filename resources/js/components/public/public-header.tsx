@@ -431,10 +431,10 @@ export default function PublicHeader() {
 
     return (
         <>
-            <header className="fixed inset-x-0 top-0 z-[99980] border-b border-black/8 bg-[#fffaf0]/82 shadow-[0_12px_50px_rgba(49,37,19,0.08)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#0f1216]/74">
-                <div className="mx-auto flex h-[72px] w-full max-w-[1920px] items-center gap-2 px-3 sm:px-4 lg:px-5 2xl:px-7">
-                    <Link href="/" className="group flex min-w-0 items-center gap-3">
-                        <span className="grid h-26 w-26 shrink-0 place-items-center overflow-hidden">
+            <header className="bccc-public-header fixed inset-x-0 top-0 z-[99980] border-b border-black/8 bg-[#fffaf0]/88 shadow-[0_12px_50px_rgba(49,37,19,0.08)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#0f1216]/82">
+                <div className="bccc-public-header-inner mx-auto flex h-[68px] w-full max-w-[1920px] items-center gap-2 px-3 sm:px-4 lg:px-5 2xl:px-7">
+                    <Link href="/" className="bccc-public-brand group flex min-w-0 items-center gap-3">
+                        <span className="bccc-public-seal grid h-10 w-10 shrink-0 place-items-center overflow-hidden sm:h-11 sm:w-11">
                             <SafeImage
                                 src={sealUrl}
                                 fallbackSrc="/marketing/images/branding/FINAL.png"
@@ -443,7 +443,7 @@ export default function PublicHeader() {
                             />
                         </span>
 
-                        <span className="hidden min-w-0 sm:block">
+                        <span className="bccc-public-caption hidden min-w-0 sm:block">
                             {officialCaption}
                         </span>
                     </Link>
@@ -452,7 +452,7 @@ export default function PublicHeader() {
 
                     <DesktopNav url={url} />
 
-                    <div className="ml-auto flex shrink-0 items-center gap-2">
+                    <div className="bccc-public-actions ml-auto flex shrink-0 items-center gap-2">
                         <ExternalMiniLinks visitaUrl={visitaUrl} artsUrl={artsUrl} />
 
                         <ThemeButton />
@@ -461,8 +461,8 @@ export default function PublicHeader() {
                             src={breatheLogoUrl}
                             fallbackSrc="/marketing/images/branding/breathe-light.png"
                             alt="Breathe Baguio"
-                            className="hidden h-14 w-auto max-w-[10rem] object-contain md:block"
-                            wrapperClassName="hidden h-10 w-[7rem] md:grid"
+                            className="bccc-public-breathe-logo hidden h-8 w-auto max-w-[6.5rem] object-contain xl:block"
+                            wrapperClassName="hidden h-8 w-[6.5rem] xl:grid"
                         />
 
                         <Link

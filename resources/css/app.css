@@ -4420,3 +4420,1094 @@ aside > div:first-child {
     flex: 0 0 auto !important;
   }
 }
+
+/* =========================================================
+   FINAL RESPONSIVE / STICKY STABILITY PATCH
+   Scope: public header, public availability dock, backend
+   sidebar/topbar, and booking create confirmation bar.
+   This patch is intentionally scoped. It does not override
+   the project color theme globally.
+   ========================================================= */
+
+html,
+body,
+#app {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
+}
+
+/* ---------- PUBLIC HEADER ---------- */
+.bccc-public-header {
+    height: 68px !important;
+    min-height: 68px !important;
+    max-height: 68px !important;
+    overflow: visible !important;
+}
+
+.bccc-public-header-inner {
+    height: 68px !important;
+    min-height: 68px !important;
+    max-height: 68px !important;
+    overflow: visible !important;
+}
+
+.bccc-public-brand,
+.bccc-public-actions {
+    min-width: 0 !important;
+}
+
+.bccc-public-seal {
+    width: 2.65rem !important;
+    height: 2.65rem !important;
+    max-width: 2.65rem !important;
+    max-height: 2.65rem !important;
+}
+
+.bccc-public-seal img {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+}
+
+.bccc-public-caption {
+    max-width: min(34vw, 26rem) !important;
+}
+
+.bccc-public-caption p:first-child {
+    font-size: clamp(0.68rem, 0.78vw, 0.88rem) !important;
+    letter-spacing: 0.08em !important;
+    line-height: 1.08 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.bccc-public-caption p:last-child {
+    font-size: clamp(0.55rem, 0.68vw, 0.68rem) !important;
+    line-height: 1.05 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.bccc-public-breathe-logo,
+.bccc-public-header img[alt="Breathe Baguio"] {
+    width: auto !important;
+    height: 2rem !important;
+    max-width: 6.5rem !important;
+    max-height: 2rem !important;
+    object-fit: contain !important;
+}
+
+.bccc-public-header nav,
+.bccc-public-header [class*='DesktopNav'] {
+    min-width: 0 !important;
+}
+
+.bccc-public-header a,
+.bccc-public-header button {
+    flex-shrink: 0;
+}
+
+/* Protect the hero from being pushed down by oversized header images. */
+.bccc-public-header + *,
+.bccc-public-header ~ * {
+    min-width: 0;
+}
+
+/* ---------- PUBLIC AVAILABILITY DOCK ---------- */
+.bccc-availability-dock {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    overflow: visible !important;
+    pointer-events: none;
+}
+
+.bccc-availability-dock-panel {
+    pointer-events: auto;
+    max-height: min(38svh, 15rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+
+.bccc-availability-form {
+    align-items: stretch !important;
+}
+
+.bccc-availability-form > * {
+    min-width: 0 !important;
+}
+
+.bccc-availability-dock input,
+.bccc-availability-dock select,
+.bccc-availability-dock button {
+    max-width: 100% !important;
+}
+
+.bccc-availability-dock button[type='submit'] {
+    min-height: 3.65rem !important;
+    white-space: nowrap !important;
+}
+
+/* Give public pages enough bottom space so the fixed dock does not cover content. */
+body:has(.bccc-availability-dock) main {
+    padding-bottom: clamp(8rem, 12svh, 11rem);
+}
+
+/* ---------- BACKEND SHELL / SIDEBAR / TOPBAR ---------- */
+.backend-shell,
+.backend-main {
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
+.backend-sidebar {
+    top: 0 !important;
+    bottom: 0 !important;
+    height: 100svh !important;
+    max-height: 100svh !important;
+    overflow: hidden !important;
+}
+
+.backend-sidebar > div {
+    height: 100% !important;
+    max-height: 100% !important;
+}
+
+.backend-sidebar [class*='overflow-y-auto'] {
+    overscroll-behavior: contain;
+}
+
+.backend-topbar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 120 !important;
+    min-height: 68px !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+.backend-topbar > div {
+    min-width: 0 !important;
+}
+
+.backend-topbar nav {
+    min-width: 0 !important;
+}
+
+.backend-topbar a,
+.backend-topbar button {
+    flex-shrink: 0;
+}
+
+/* Keep backend content below topbar but do not add excessive spacing. */
+.backend-main main,
+.backend-page-frame,
+.backend-page-container,
+.booking-role-page-shell {
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
+/* ---------- BOOKING CREATE CONFIRM / ACTION BAR ---------- */
+.booking-step-footer-sticky {
+    position: fixed !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 17.25rem !important;
+    z-index: 9500 !important;
+    width: auto !important;
+    max-width: calc(100vw - 17.25rem) !important;
+    overflow: visible !important;
+}
+
+.booking-step-footer-inner {
+    width: min(100%, 1500px) !important;
+    max-width: 100% !important;
+    margin-inline: auto !important;
+    display: grid !important;
+    grid-template-columns: minmax(8.5rem, auto) minmax(0, 1fr) minmax(13rem, auto) !important;
+    gap: 0.85rem !important;
+    align-items: center !important;
+}
+
+.booking-step-footer-actions {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 0.65rem !important;
+    min-width: 0 !important;
+}
+
+.booking-step-footer-status {
+    min-width: 0 !important;
+    text-align: center !important;
+}
+
+.booking-step-footer-status strong,
+.booking-step-footer-status span {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+html.booking-wizard-screen-active,
+body.booking-wizard-screen-active {
+    overflow-y: auto !important;
+    overflow-x: clip !important;
+    height: auto !important;
+    min-height: 100% !important;
+}
+
+html.booking-wizard-screen-active .booking-lux-form {
+    padding-bottom: 8.5rem !important;
+}
+
+html.booking-wizard-screen-active .booking-wizard-stage,
+html.booking-wizard-screen-active .booking-step-panel,
+html.booking-wizard-screen-active .booking-package-screen-step,
+html.booking-wizard-screen-active .booking-schedule-step-panel {
+    overflow: visible !important;
+    max-height: none !important;
+}
+
+/* ---------- LARGE LAPTOP / TABLET ---------- */
+@media (max-width: 1280px) {
+    .bccc-public-caption {
+        max-width: 24rem !important;
+    }
+
+    .bccc-public-header-inner {
+        gap: 0.5rem !important;
+    }
+
+    .bccc-public-breathe-logo,
+    .bccc-public-header img[alt="Breathe Baguio"] {
+        display: none !important;
+    }
+
+    .bccc-availability-form {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+
+    .bccc-availability-dock button[type='submit'] {
+        min-height: 3.3rem !important;
+    }
+}
+
+@media (max-width: 1024px) {
+    .bccc-public-header,
+    .bccc-public-header-inner {
+        height: 64px !important;
+        min-height: 64px !important;
+        max-height: 64px !important;
+    }
+
+    .bccc-public-seal {
+        width: 2.45rem !important;
+        height: 2.45rem !important;
+        max-width: 2.45rem !important;
+        max-height: 2.45rem !important;
+    }
+
+    .backend-main {
+        padding-left: 0 !important;
+    }
+
+    .backend-topbar {
+        min-height: 64px !important;
+    }
+
+    .booking-step-footer-sticky {
+        left: 0 !important;
+        max-width: 100vw !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bccc-public-header,
+    .bccc-public-header-inner {
+        height: 60px !important;
+        min-height: 60px !important;
+        max-height: 60px !important;
+    }
+
+    .bccc-public-header-inner {
+        padding-inline: 0.75rem !important;
+    }
+
+    .bccc-public-seal {
+        width: 2.25rem !important;
+        height: 2.25rem !important;
+        max-width: 2.25rem !important;
+        max-height: 2.25rem !important;
+    }
+
+    .bccc-public-caption {
+        display: none !important;
+    }
+
+    .bccc-public-actions {
+        gap: 0.45rem !important;
+    }
+
+    .bccc-public-actions > *:not(:last-child):not(button) {
+        display: none !important;
+    }
+
+    .bccc-availability-dock-panel {
+        max-height: min(48svh, 19rem) !important;
+        padding: 0.55rem !important;
+    }
+
+    .bccc-availability-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 0.45rem !important;
+        padding-inline: 0.55rem !important;
+    }
+
+    .bccc-availability-form > button[type='submit'] {
+        grid-column: 1 / -1;
+        min-height: 3rem !important;
+        border-radius: 0.8rem !important;
+    }
+
+    .bccc-availability-dock input,
+    .bccc-availability-dock select {
+        height: 2rem !important;
+        font-size: 0.78rem !important;
+    }
+
+    body:has(.bccc-availability-dock) main {
+        padding-bottom: 13rem !important;
+    }
+
+    .backend-topbar {
+        min-height: 60px !important;
+        overflow-x: auto !important;
+        overflow-y: visible !important;
+        scrollbar-width: none;
+    }
+
+    .backend-topbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .booking-step-footer-sticky {
+        padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom)) !important;
+    }
+
+    .booking-step-footer-inner {
+        grid-template-columns: 1fr !important;
+        gap: 0.5rem !important;
+    }
+
+    .booking-step-footer-status {
+        order: -1;
+    }
+
+    .booking-step-footer-actions {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        width: 100% !important;
+    }
+
+    .booking-footer-previous,
+    .booking-step-footer-sticky .booking-secondary-action,
+    .booking-step-footer-sticky .booking-ghost-action,
+    .booking-step-footer-sticky .booking-primary-action {
+        width: 100% !important;
+        min-width: 0 !important;
+        justify-content: center !important;
+    }
+
+    html.booking-wizard-screen-active .booking-lux-form {
+        padding-bottom: 14rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .bccc-availability-form {
+        grid-template-columns: 1fr !important;
+    }
+
+    .bccc-availability-dock-panel {
+        max-height: min(56svh, 24rem) !important;
+    }
+
+    body:has(.bccc-availability-dock) main {
+        padding-bottom: 17rem !important;
+    }
+}
+
+/* =========================================================
+   FINAL PUBLIC FOOTER GAP + BOOKING STICKY HEADER/BAR PATCH
+   Scope-only override. Keep this at the very bottom of app.css.
+   ========================================================= */
+
+/* Stop the sticky public availability dock from leaving artificial white space
+   after the footer. Older dock code may write inline padding, so !important is
+   required here until every browser session reloads the fixed component. */
+html:has(.bccc-public-header),
+body:has(.bccc-public-header),
+#app:has(.bccc-public-header) {
+    min-height: 100% !important;
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+    overflow-x: clip !important;
+}
+
+body:has(.bccc-public-header) main {
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+body:has(.bccc-public-header) footer {
+    margin-bottom: 0 !important;
+    padding-bottom: max(2rem, env(safe-area-inset-bottom)) !important;
+}
+
+body:has(.bccc-availability-dock) footer {
+    padding-top: clamp(2.5rem, 5vw, 4.5rem) !important;
+}
+
+.bccc-availability-dock {
+    bottom: env(safe-area-inset-bottom) !important;
+    pointer-events: none !important;
+}
+
+.bccc-availability-dock-panel {
+    pointer-events: auto !important;
+    max-height: min(34svh, 13.5rem) !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+}
+
+/* Make the booking page header/step navbar truly sticky. */
+html.booking-wizard-screen-active,
+body.booking-wizard-screen-active {
+    scroll-padding-top: 7rem !important;
+}
+
+.booking-lux-form > .booking-stepper,
+.booking-stepper {
+    position: sticky !important;
+    top: calc(68px + 0.75rem) !important;
+    z-index: 9300 !important;
+    margin-top: 0.35rem !important;
+    margin-bottom: 0.85rem !important;
+    padding: 0.55rem !important;
+    border: 1px solid var(--bccc-backend-line) !important;
+    background: color-mix(in srgb, var(--bccc-backend-panel) 94%, transparent) !important;
+    backdrop-filter: blur(18px) !important;
+    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.12) !important;
+}
+
+.booking-stepper .booking-wizard-step-pill {
+    min-height: 3.15rem !important;
+    padding: 0.55rem 0.65rem !important;
+    gap: 0.5rem !important;
+}
+
+.booking-stepper .booking-step-icon {
+    height: 1.75rem !important;
+    width: 1.75rem !important;
+    flex-basis: 1.75rem !important;
+}
+
+.booking-stepper .booking-wizard-step-pill span.min-w-0 > span,
+.booking-stepper .booking-wizard-step-pill > span:last-child > span {
+    font-size: 0.8rem !important;
+    line-height: 1.15 !important;
+}
+
+.booking-stepper .booking-wizard-step-pill small {
+    font-size: 0.66rem !important;
+    line-height: 1.15 !important;
+}
+
+/* Compact booking confirm/action bar. */
+.booking-step-footer-sticky {
+    min-height: 0 !important;
+    padding: 0.45rem 1rem calc(0.45rem + env(safe-area-inset-bottom)) !important;
+    border-top: 1px solid var(--bccc-backend-line) !important;
+    background: color-mix(in srgb, var(--bccc-backend-panel) 94%, transparent) !important;
+    backdrop-filter: blur(18px) !important;
+}
+
+.booking-step-footer-inner {
+    min-height: 0 !important;
+    grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) minmax(12rem, auto) !important;
+    gap: 0.55rem !important;
+}
+
+.booking-step-footer-sticky .booking-secondary-action,
+.booking-step-footer-sticky .booking-ghost-action,
+.booking-step-footer-sticky .booking-primary-action {
+    min-height: 2.55rem !important;
+    padding: 0.55rem 0.9rem !important;
+    font-size: 0.82rem !important;
+    line-height: 1 !important;
+}
+
+.booking-step-footer-status {
+    gap: 0 !important;
+}
+
+.booking-step-footer-status span {
+    font-size: 0.58rem !important;
+    line-height: 1.05 !important;
+}
+
+.booking-step-footer-status strong {
+    font-size: 0.78rem !important;
+    line-height: 1.15 !important;
+}
+
+html.booking-wizard-screen-active .booking-lux-form {
+    padding-bottom: 5.75rem !important;
+}
+
+@media (max-width: 1280px) {
+    .booking-lux-form > .booking-stepper,
+    .booking-stepper {
+        top: calc(64px + 0.65rem) !important;
+    }
+
+    .booking-stepper {
+        display: flex !important;
+        gap: 0.5rem !important;
+        overflow-x: auto !important;
+        overflow-y: visible !important;
+        scrollbar-width: none !important;
+        overscroll-behavior-x: contain !important;
+    }
+
+    .booking-stepper::-webkit-scrollbar {
+        display: none !important;
+    }
+
+    .booking-stepper .booking-wizard-step-pill {
+        flex: 0 0 auto !important;
+        min-width: 10rem !important;
+    }
+}
+
+@media (max-width: 768px) {
+    body:has(.bccc-public-header) footer {
+        padding-bottom: max(1.5rem, env(safe-area-inset-bottom)) !important;
+    }
+
+    body:has(.bccc-availability-dock) footer {
+        padding-top: 2.25rem !important;
+    }
+
+    .bccc-availability-dock-panel {
+        max-height: min(43svh, 17rem) !important;
+    }
+
+    html.booking-wizard-screen-active,
+    body.booking-wizard-screen-active {
+        scroll-padding-top: 5.7rem !important;
+    }
+
+    .booking-lux-form > .booking-stepper,
+    .booking-stepper {
+        top: calc(60px + 0.45rem) !important;
+        margin-bottom: 0.65rem !important;
+        padding: 0.45rem !important;
+    }
+
+    .booking-stepper .booking-wizard-step-pill {
+        min-width: 9.25rem !important;
+        min-height: 2.95rem !important;
+        padding: 0.48rem 0.58rem !important;
+    }
+
+    .booking-step-footer-sticky {
+        padding: 0.4rem 0.65rem calc(0.4rem + env(safe-area-inset-bottom)) !important;
+    }
+
+    .booking-step-footer-inner {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+        gap: 0.45rem !important;
+    }
+
+    .booking-step-footer-status {
+        display: none !important;
+    }
+
+    .booking-step-footer-actions {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.45rem !important;
+    }
+
+    .booking-footer-previous,
+    .booking-step-footer-sticky .booking-secondary-action,
+    .booking-step-footer-sticky .booking-ghost-action,
+    .booking-step-footer-sticky .booking-primary-action {
+        width: 100% !important;
+        min-height: 2.5rem !important;
+        justify-content: center !important;
+        padding-inline: 0.65rem !important;
+    }
+
+    html.booking-wizard-screen-active .booking-lux-form {
+        padding-bottom: 6.75rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .booking-step-footer-inner {
+        grid-template-columns: 1fr !important;
+    }
+
+    .booking-step-footer-actions {
+        grid-template-columns: 1fr !important;
+    }
+
+    html.booking-wizard-screen-active .booking-lux-form {
+        padding-bottom: 9rem !important;
+    }
+}
+/* =========================================================
+   FINAL BOOKING CREATE STICKY HEADER + FLOATING SUMMARY FIX
+   Scope: booking pages only. Does not touch public header theme.
+   ========================================================= */
+
+   html.booking-wizard-screen-active,
+   body.booking-wizard-screen-active {
+     height: auto !important;
+     min-height: 100% !important;
+     max-height: none !important;
+     overflow-x: hidden !important;
+     overflow-y: auto !important;
+     scroll-behavior: smooth;
+     scroll-padding-top: 7.25rem;
+   }
+
+   /* Keep app/root from locking scroll while booking create is active */
+   html.booking-wizard-screen-active #app,
+   html.booking-wizard-screen-active main,
+   html.booking-wizard-screen-active .backend-booking-page,
+   html.booking-wizard-screen-active .booking-lux-form,
+   html.booking-wizard-screen-active .booking-wizard-stage,
+   html.booking-wizard-screen-active .booking-step-panel {
+     height: auto !important;
+     min-height: 0 !important;
+     max-height: none !important;
+     overflow: visible !important;
+   }
+
+   /* =========================================================
+      1) STICKY BOOKING PAGE HEADER
+      This is the title/action row from your screenshot:
+      "Reserve Your Event Space" + Dashboard/Calendar/New Booking/profile.
+      Targets common RoleWorkspaceShell header wrappers safely.
+      ========================================================= */
+
+   html.booking-wizard-screen-active .role-workspace-header,
+   html.booking-wizard-screen-active .workspace-header,
+   html.booking-wizard-screen-active .backend-workspace-header,
+   html.booking-wizard-screen-active .backend-page-header,
+   html.booking-wizard-screen-active .app-page-header,
+   html.booking-wizard-screen-active .resource-page-header,
+   html.booking-wizard-screen-active .page-header,
+   html.booking-wizard-screen-active [data-role-workspace-header],
+   html.booking-wizard-screen-active [data-workspace-header] {
+     position: sticky !important;
+     top: 0 !important;
+     z-index: 9300 !important;
+     margin-top: 0 !important;
+     isolation: isolate;
+     overflow: visible !important;
+     background: color-mix(in srgb, var(--bccc-backend-bg, #fbf5ea) 94%, transparent) !important;
+     border-bottom: 1px solid var(--bccc-backend-line, rgba(148, 116, 65, 0.22)) !important;
+     backdrop-filter: blur(22px);
+     -webkit-backdrop-filter: blur(22px);
+     box-shadow: 0 16px 48px rgba(47, 37, 23, 0.08);
+   }
+
+   /* Dark theme version without changing your theme tokens */
+   .dark html.booking-wizard-screen-active .role-workspace-header,
+   .dark html.booking-wizard-screen-active .workspace-header,
+   .dark html.booking-wizard-screen-active .backend-workspace-header,
+   .dark html.booking-wizard-screen-active .backend-page-header,
+   .dark html.booking-wizard-screen-active .app-page-header,
+   .dark html.booking-wizard-screen-active .resource-page-header,
+   .dark html.booking-wizard-screen-active .page-header,
+   .dark html.booking-wizard-screen-active [data-role-workspace-header],
+   .dark html.booking-wizard-screen-active [data-workspace-header] {
+     background: color-mix(in srgb, var(--bccc-backend-bg, #0d0f12) 92%, transparent) !important;
+     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
+   }
+
+   /* If RoleWorkspaceShell has inner flex/grid rows, make them compact and centered */
+   html.booking-wizard-screen-active .role-workspace-header > *,
+   html.booking-wizard-screen-active .workspace-header > *,
+   html.booking-wizard-screen-active .backend-workspace-header > *,
+   html.booking-wizard-screen-active .backend-page-header > *,
+   html.booking-wizard-screen-active .app-page-header > *,
+   html.booking-wizard-screen-active .resource-page-header > *,
+   html.booking-wizard-screen-active .page-header > * {
+     align-items: center !important;
+   }
+
+   /* Prevent title/action row from being too tall */
+   html.booking-wizard-screen-active .role-workspace-header,
+   html.booking-wizard-screen-active .workspace-header,
+   html.booking-wizard-screen-active .backend-workspace-header,
+   html.booking-wizard-screen-active .backend-page-header,
+   html.booking-wizard-screen-active .app-page-header,
+   html.booking-wizard-screen-active .resource-page-header,
+   html.booking-wizard-screen-active .page-header {
+     min-height: 4.35rem !important;
+     padding-top: 0.55rem !important;
+     padding-bottom: 0.55rem !important;
+   }
+
+   /* Title side compactness */
+   html.booking-wizard-screen-active .role-workspace-header h1,
+   html.booking-wizard-screen-active .workspace-header h1,
+   html.booking-wizard-screen-active .backend-workspace-header h1,
+   html.booking-wizard-screen-active .backend-page-header h1,
+   html.booking-wizard-screen-active .app-page-header h1,
+   html.booking-wizard-screen-active .resource-page-header h1,
+   html.booking-wizard-screen-active .page-header h1 {
+     font-size: clamp(1.15rem, 1.5vw, 1.65rem) !important;
+     line-height: 1.05 !important;
+     letter-spacing: -0.045em;
+   }
+
+   /* Breadcrumb/description compactness under title */
+   html.booking-wizard-screen-active .role-workspace-header p,
+   html.booking-wizard-screen-active .workspace-header p,
+   html.booking-wizard-screen-active .backend-workspace-header p,
+   html.booking-wizard-screen-active .backend-page-header p,
+   html.booking-wizard-screen-active .app-page-header p,
+   html.booking-wizard-screen-active .resource-page-header p,
+   html.booking-wizard-screen-active .page-header p {
+     line-height: 1.25 !important;
+   }
+
+   /* Header action buttons: keep them clean and not oversized */
+   html.booking-wizard-screen-active .role-workspace-header a,
+   html.booking-wizard-screen-active .workspace-header a,
+   html.booking-wizard-screen-active .backend-workspace-header a,
+   html.booking-wizard-screen-active .backend-page-header a,
+   html.booking-wizard-screen-active .app-page-header a,
+   html.booking-wizard-screen-active .resource-page-header a,
+   html.booking-wizard-screen-active .page-header a,
+   html.booking-wizard-screen-active .role-workspace-header button,
+   html.booking-wizard-screen-active .workspace-header button,
+   html.booking-wizard-screen-active .backend-workspace-header button,
+   html.booking-wizard-screen-active .backend-page-header button,
+   html.booking-wizard-screen-active .app-page-header button,
+   html.booking-wizard-screen-active .resource-page-header button,
+   html.booking-wizard-screen-active .page-header button {
+     min-height: 2.5rem !important;
+   }
+
+   /* =========================================================
+      2) STICKY STEP NAV BELOW THE BOOKING HEADER
+      ========================================================= */
+
+   html.booking-wizard-screen-active .booking-stepper {
+     position: sticky !important;
+     top: 5.1rem !important;
+     z-index: 9200 !important;
+     display: grid;
+     grid-template-columns: repeat(6, minmax(0, 1fr));
+     gap: 0.65rem;
+     width: 100%;
+     margin-top: 0.85rem;
+     margin-bottom: 1rem;
+     padding: 0.7rem;
+     border: 1px solid var(--bccc-backend-line);
+     background: color-mix(in srgb, var(--bccc-backend-panel) 94%, transparent);
+     backdrop-filter: blur(20px);
+     -webkit-backdrop-filter: blur(20px);
+     box-shadow: 0 16px 42px rgba(47, 37, 23, 0.08);
+   }
+
+   html.booking-wizard-screen-active .booking-stepper .booking-wizard-step-pill {
+     min-height: 3.55rem;
+     padding: 0.65rem 0.75rem;
+   }
+
+   /* Keep content from hiding underneath both sticky bars */
+   html.booking-wizard-screen-active .booking-step-panel,
+   html.booking-wizard-screen-active .booking-package-screen-step,
+   html.booking-wizard-screen-active .booking-schedule-step-panel,
+   html.booking-wizard-screen-active .booking-digital-form,
+   html.booking-wizard-screen-active .public-booking-prefill-banner {
+     scroll-margin-top: 10.5rem;
+   }
+
+   /* =========================================================
+      3) FLOATING SUMMARY BUTTON
+      Right middle of screen, always visible above content.
+      ========================================================= */
+
+   .booking-summary-fab {
+     position: fixed !important;
+     top: 50% !important;
+     right: 1.25rem !important;
+     bottom: auto !important;
+     left: auto !important;
+     z-index: 9600 !important;
+     transform: translateY(-50%) !important;
+
+     display: inline-flex !important;
+     min-height: 3rem !important;
+     min-width: 3rem !important;
+     align-items: center !important;
+     justify-content: center !important;
+     gap: 0.5rem !important;
+
+     border: 1px solid var(--bccc-backend-gold-line, rgba(176, 141, 72, 0.5)) !important;
+     border-radius: 999px !important;
+     background: color-mix(in srgb, var(--bccc-backend-panel, #fffaf0) 94%, transparent) !important;
+     color: var(--bccc-backend-text, #21180d) !important;
+     padding: 0.85rem 1rem !important;
+     font-size: 0.78rem !important;
+     font-weight: 900 !important;
+     letter-spacing: 0.12em !important;
+     text-transform: uppercase !important;
+     box-shadow: 0 18px 56px rgba(47, 37, 23, 0.18) !important;
+     backdrop-filter: blur(20px);
+     -webkit-backdrop-filter: blur(20px);
+     transition:
+       transform 220ms ease,
+       box-shadow 220ms ease,
+       border-color 220ms ease,
+       background 220ms ease !important;
+   }
+
+   .booking-summary-fab:hover {
+     transform: translateY(-50%) translateX(-4px) scale(1.02) !important;
+     border-color: var(--bccc-backend-gold, #b08d48) !important;
+     box-shadow: 0 24px 70px rgba(47, 37, 23, 0.26) !important;
+   }
+
+   .booking-summary-fab svg {
+     height: 1rem !important;
+     width: 1rem !important;
+   }
+
+   /* Summary drawer/overlay must sit above sticky footer/header */
+   .booking-summary-overlay {
+     position: fixed !important;
+     inset: 0 !important;
+     z-index: 9700 !important;
+     pointer-events: none;
+     background: rgba(0, 0, 0, 0);
+     opacity: 0;
+     transition:
+       opacity 220ms ease,
+       background 220ms ease;
+   }
+
+   .booking-summary-overlay.is-open {
+     pointer-events: auto;
+     background: rgba(0, 0, 0, 0.42);
+     opacity: 1;
+     backdrop-filter: blur(8px);
+   }
+
+   .booking-summary-drawer {
+     position: fixed !important;
+     top: 0 !important;
+     right: 0 !important;
+     bottom: 0 !important;
+     z-index: 9800 !important;
+     width: min(100%, 28rem) !important;
+     max-width: 28rem !important;
+     overflow-y: auto !important;
+     background: var(--bccc-backend-panel, #fffaf0) !important;
+     border-left: 1px solid var(--bccc-backend-line, rgba(148, 116, 65, 0.22)) !important;
+     box-shadow: -26px 0 90px rgba(0, 0, 0, 0.24) !important;
+     transform: translateX(105%) !important;
+     transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+   }
+
+   .booking-summary-drawer.is-open {
+     transform: translateX(0) !important;
+   }
+
+   /* =========================================================
+      4) CONFIRM / STEP FOOTER BAR — shorter and still sticky
+      ========================================================= */
+
+   .booking-step-footer-sticky {
+     position: fixed !important;
+     left: var(--bccc-sidebar-width, clamp(14rem, 17vw, 18rem)) !important;
+     right: 0 !important;
+     bottom: 0 !important;
+     z-index: 9500 !important;
+     border-top: 1px solid var(--bccc-backend-line) !important;
+     background: color-mix(in srgb, var(--bccc-backend-panel) 94%, transparent) !important;
+     padding: 0.5rem clamp(0.85rem, 2vw, 1.25rem) calc(0.5rem + env(safe-area-inset-bottom)) !important;
+     backdrop-filter: blur(20px);
+     -webkit-backdrop-filter: blur(20px);
+     box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.12) !important;
+   }
+
+   .booking-step-footer-inner {
+     display: grid !important;
+     width: 100% !important;
+     max-width: 1500px !important;
+     margin-inline: auto !important;
+     grid-template-columns: minmax(7.5rem, auto) minmax(8rem, 1fr) minmax(12rem, auto) !important;
+     align-items: center !important;
+     gap: 0.75rem !important;
+   }
+
+   .booking-step-footer-sticky .booking-secondary-action,
+   .booking-step-footer-sticky .booking-ghost-action,
+   .booking-step-footer-sticky .booking-primary-action {
+     min-height: 2.55rem !important;
+     padding: 0.65rem 0.95rem !important;
+   }
+
+   .booking-step-footer-status {
+     display: grid !important;
+     gap: 0.05rem !important;
+     text-align: center !important;
+   }
+
+   .booking-step-footer-status span {
+     font-size: 0.62rem !important;
+     letter-spacing: 0.14em !important;
+   }
+
+   .booking-step-footer-status strong {
+     font-size: 0.82rem !important;
+     line-height: 1.15 !important;
+   }
+
+   /* Give enough bottom space for the shorter fixed footer, not excessive */
+   html.booking-wizard-screen-active .booking-lux-form {
+     padding-bottom: 5.75rem !important;
+   }
+
+   /* =========================================================
+      5) RESPONSIVE
+      ========================================================= */
+
+   @media (max-width: 1280px) {
+     html.booking-wizard-screen-active .booking-stepper {
+       grid-template-columns: repeat(3, minmax(0, 1fr));
+     }
+
+     .booking-step-footer-sticky {
+       left: var(--bccc-sidebar-width, 15rem) !important;
+     }
+   }
+
+   @media (max-width: 1024px) {
+     html.booking-wizard-screen-active,
+     body.booking-wizard-screen-active {
+       scroll-padding-top: 6.5rem;
+     }
+
+     .booking-step-footer-sticky {
+       left: 0 !important;
+     }
+
+     html.booking-wizard-screen-active .booking-stepper {
+       top: 4.75rem !important;
+     }
+
+     .booking-summary-fab {
+       right: 0.85rem !important;
+     }
+   }
+
+   @media (max-width: 768px) {
+     html.booking-wizard-screen-active,
+     body.booking-wizard-screen-active {
+       scroll-padding-top: 6rem;
+     }
+
+     html.booking-wizard-screen-active .role-workspace-header,
+     html.booking-wizard-screen-active .workspace-header,
+     html.booking-wizard-screen-active .backend-workspace-header,
+     html.booking-wizard-screen-active .backend-page-header,
+     html.booking-wizard-screen-active .app-page-header,
+     html.booking-wizard-screen-active .resource-page-header,
+     html.booking-wizard-screen-active .page-header {
+       min-height: auto !important;
+       padding-top: 0.5rem !important;
+       padding-bottom: 0.5rem !important;
+     }
+
+     html.booking-wizard-screen-active .booking-stepper {
+       top: 4.25rem !important;
+       display: flex !important;
+       gap: 0.6rem !important;
+       overflow-x: auto !important;
+       overflow-y: hidden !important;
+       padding: 0.6rem !important;
+       scrollbar-width: none;
+     }
+
+     html.booking-wizard-screen-active .booking-stepper::-webkit-scrollbar {
+       display: none;
+     }
+
+     html.booking-wizard-screen-active .booking-stepper .booking-wizard-step-pill {
+       flex: 0 0 auto !important;
+       min-width: 10.5rem !important;
+       min-height: 3.35rem !important;
+     }
+
+     .booking-summary-fab {
+       top: auto !important;
+       right: 0.85rem !important;
+       bottom: 5.25rem !important;
+       transform: none !important;
+       min-height: 2.75rem !important;
+       min-width: 2.75rem !important;
+       padding: 0.75rem 0.9rem !important;
+     }
+
+     .booking-summary-fab:hover {
+       transform: translateY(-3px) !important;
+     }
+
+     .booking-step-footer-inner {
+       grid-template-columns: 1fr !important;
+       gap: 0.45rem !important;
+     }
+
+     .booking-step-footer-status {
+       order: -1 !important;
+     }
+
+     .booking-step-footer-actions {
+       display: grid !important;
+       grid-template-columns: 1fr !important;
+       gap: 0.45rem !important;
+     }
+
+     .booking-footer-previous,
+     .booking-step-footer-sticky .booking-secondary-action,
+     .booking-step-footer-sticky .booking-ghost-action,
+     .booking-step-footer-sticky .booking-primary-action {
+       width: 100% !important;
+       justify-content: center !important;
+     }
+
+     html.booking-wizard-screen-active .booking-lux-form {
+       padding-bottom: 10.75rem !important;
+     }
+   }

@@ -122,31 +122,24 @@ function useAvailabilityDockLayout() {
     const [footerLift, setFooterLift] = useState(0);
 
     useEffect(() => {
-        const footer = document.querySelector<HTMLElement>('footer');
-        const previousBodyPadding = document.body.style.paddingBottom;
-        const previousFooterPaddingTop = footer?.style.paddingTop ?? '';
-
-        function dockHeight() {
-            return Math.ceil(dockRef.current?.getBoundingClientRect().height ?? 132);
-        }
-
         function update() {
-            const height = dockHeight();
             const footerElement = document.querySelector<HTMLElement>('footer');
 
-            document.body.style.paddingBottom = `${height + 18}px`;
-
-            if (footerElement) {
-                footerElement.style.paddingTop = `${height + 24}px`;
-
-                const rect = footerElement.getBoundingClientRect();
-                const overlap = Math.max(0, window.innerHeight - rect.top);
-
-                setFooterLift(overlap);
+            if (!footerElement) {
+                setFooterLift(0);
                 return;
             }
 
-            setFooterLift(0);
+            const rect = footerElement.getBoundingClientRect();
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+            /*
+             * Lift the fixed dock only when the footer enters the viewport.
+             * Do not add inline body/footer padding because that creates the
+             * large blank space after the public footer.
+             */
+            const overlap = Math.max(0, viewportHeight - rect.top);
+            setFooterLift(Math.ceil(overlap));
         }
 
         update();
@@ -157,6 +150,11 @@ function useAvailabilityDockLayout() {
             observer.observe(dockRef.current);
         }
 
+        const footerElement = document.querySelector<HTMLElement>('footer');
+        if (footerElement) {
+            observer.observe(footerElement);
+        }
+
         window.addEventListener('scroll', update, { passive: true });
         window.addEventListener('resize', update);
 
@@ -164,12 +162,6 @@ function useAvailabilityDockLayout() {
             observer.disconnect();
             window.removeEventListener('scroll', update);
             window.removeEventListener('resize', update);
-
-            document.body.style.paddingBottom = previousBodyPadding;
-
-            if (footer) {
-                footer.style.paddingTop = previousFooterPaddingTop;
-            }
         };
     }, []);
 
@@ -608,7 +600,7 @@ export default function HeroAvailabilityBar({ venueOptions }: Props) {
         <>
             <motion.section
     ref={dockRef}
-    className="fixed inset-x-0 z-[8500] w-screen px-0"
+    className="bccc-availability-dock fixed inset-x-0 z-[8500] w-screen px-0"
     style={{
         bottom: `calc(${footerLift}px + env(safe-area-inset-bottom))`,
     }}
@@ -617,10 +609,10 @@ export default function HeroAvailabilityBar({ venueOptions }: Props) {
     transition={{ duration: 0.42, ease }}
     aria-label="Sticky availability checker"
 >
-    <div className="w-full rounded-none border-y border-[#d9c7a6]/80 bg-[#fffaf0]/96 p-2 shadow-[0_-12px_60px_rgba(47,37,23,0.18)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#101419]/96">
+    <div className="bccc-availability-dock-panel w-full rounded-none border-y border-[#d9c7a6]/80 bg-[#fffaf0]/96 p-2 shadow-[0_-12px_60px_rgba(47,37,23,0.18)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#101419]/96">
     <form
     onSubmit={handleSubmit}
-    className="mx-auto grid w-full max-w-[1800px] gap-2 px-3 sm:px-4 lg:grid-cols-[1fr_1fr_1.1fr_1.1fr_0.85fr_auto] lg:px-6"
+    className="bccc-availability-form mx-auto grid w-full max-w-[1800px] gap-2 px-3 sm:px-4 lg:grid-cols-[1fr_1fr_1.1fr_1.1fr_0.85fr_auto] lg:px-6"
 >
                         <FieldShell label="From" icon={<CalendarDays className="h-3.5 w-3.5" />}>
                             <input

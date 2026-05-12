@@ -17,10 +17,10 @@ export default function AppSidebarLayout({
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.70),rgba(246,240,228,0.82))] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(12,15,20,0.96))]" />
             </div>
 
-            <div className="relative z-10 flex min-h-screen">
+            <div className="backend-shell relative z-10 flex min-h-screen">
                 <AppSidebar />
 
-                <div className="flex min-w-0 flex-1 flex-col lg:pl-[17.25rem]">
+                <div className="backend-main flex min-w-0 flex-1 flex-col lg:pl-[17.25rem]">
                     <AppSidebarHeader breadcrumbs={breadcrumbs} />
 
                     <AppContent>
