@@ -417,11 +417,12 @@ function paymentHref(role: RoleKey, payment: DashboardPayment) {
 function getStat(
     stats: Record<string, unknown> | undefined,
     keys: string[],
-    fallback = 0,
-) {
+    fallback: string | number | null = 0,
+): string | number | null {
     for (const key of keys) {
         if (stats?.[key] !== undefined && stats?.[key] !== null) {
-            return stats[key];
+            const value = stats[key];
+            return typeof value === 'string' || typeof value === 'number' ? value : fallback;
         }
     }
 
@@ -893,10 +894,7 @@ export function WorkspaceDashboardPage() {
     ];
 
     function refreshDashboard() {
-        router.reload({
-            preserveScroll: true,
-            preserveState: true,
-        });
+        router.reload();
     }
 
     return (

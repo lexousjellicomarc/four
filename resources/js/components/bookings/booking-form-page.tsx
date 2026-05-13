@@ -105,9 +105,10 @@ type BookingFormItem = {
 };
 
 type BookingFormData = {
+  [key: string]: any;
   service_id: string;
   items: BookingFormItem[];
-  payment_meta: Record<string, unknown>;
+  payment_meta: Record<string, any>;
 
   organization_type: string;
   company_name: string;
@@ -956,7 +957,7 @@ export function BookingFormPage() {
       body.style.minHeight = '100%';
       body.style.overflowX = 'hidden';
       body.style.overflowY = 'auto';
-      body.style.paddingBottom = '9rem';
+      body.style.paddingBottom = '5.75rem';
 
       if (root) {
         root.style.height = 'auto';
@@ -1089,7 +1090,7 @@ export function BookingFormPage() {
 
     const {
       data,
-      setData,
+      setData: rawSetData,
       post,
       put,
       processing,
@@ -1152,6 +1153,9 @@ export function BookingFormPage() {
       reservation_notes: '',
     });
 
+
+    const setData = rawSetData as unknown as (key: string, value: any) => void;
+
     const mergedErrors = {
       ...errors,
       ...stepErrors,
@@ -1212,14 +1216,14 @@ export function BookingFormPage() {
       if (item.key === 'FULL_HALL') {
         next = ['FULL_HALL'];
       } else {
-        const withoutFullHall = current.filter((key) => key !== 'FULL_HALL');
+        const withoutFullHall = current.filter((key) => key !== 'FULL_HALL') as BookingVenueKey[];
 
-        const toggled = withoutFullHall.includes(item.key)
+        const toggled: BookingVenueKey[] = withoutFullHall.includes(item.key)
           ? withoutFullHall.filter((key) => key !== item.key)
           : [...withoutFullHall, item.key];
 
         const allIncludedIndividuallySelected = FULL_HALL_INCLUDED_KEYS.every((key) =>
-          toggled.includes(key),
+          toggled.includes(key as BookingVenueKey),
         );
 
         next = allIncludedIndividuallySelected ? ['FULL_HALL'] : toggled;
@@ -1586,14 +1590,14 @@ export function BookingFormPage() {
 
     return (
       <>
-        <button type="button" className="booking-summary-fab" onClick={() => setSummaryOpen(true)}>
+        <button type="button" className="booking-summary-fab" onClick={() => setSummaryOpen(true)} aria-label="Open reservation summary">
           <ReceiptText className="h-4 w-4" />
           Summary
         </button>
 
         <div className={cx('booking-summary-overlay', summaryOpen && 'is-open')} onClick={() => setSummaryOpen(false)} />
 
-        <aside className={cx('booking-summary-drawer', summaryOpen && 'is-open')}>
+        <aside className={cx('booking-summary-drawer', summaryOpen && 'is-open')} aria-hidden={!summaryOpen}>
           <header className="flex items-start justify-between gap-4 border-b border-[var(--bccc-backend-line)] p-5">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[var(--bccc-backend-gold)]">

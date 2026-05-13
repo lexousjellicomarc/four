@@ -30,11 +30,7 @@ export function NavFooter({
                                 className="text-neutral-600 hover:text-neutral-800 dark:text-neutral-300 dark:hover:text-neutral-100"
                             >
                                 <a
-                                    href={
-                                        typeof item.href === 'string'
-                                            ? item.href
-                                            : item.href.url
-                                    }
+                                    href={typeof item.href === 'string' ? item.href : String((item.href as any)?.url ?? '/')}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                 >

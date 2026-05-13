@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Booking;
 use App\Models\BookingLifecycleEvent;
 use App\Models\BookingPayment;
+use App\Support\BookingStatusCatalog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -40,6 +41,8 @@ class PaymentReviewService
         ?int $userId = null,
         ?string $remarks = null
     ): void {
+        $status = BookingStatusCatalog::normalizePaymentProofStatus($status, 'pending');
+
         $payload = [];
 
         if (Schema::hasColumn($payment->getTable(), 'status')) {
@@ -135,8 +138,17 @@ class PaymentReviewService
             $booking->forceFill($bookingPayload)->save();
         }
 
+        $booking = $booking->fresh(['payments', 'bookingServices.service']);
+
+        try {
+            app(BookingService::class)->syncLifecycleStatus($booking);
+            $booking = $booking->fresh(['payments', 'bookingServices.service']);
+        } catch (\Throwable) {
+            // Payment review should not fail just because lifecycle automation is unavailable.
+        }
+
         $this->recordLifecycleEvent(
-            booking: $booking->fresh(),
+            booking: $booking,
             userId: $userId,
             description: $eventDescription,
             meta: [

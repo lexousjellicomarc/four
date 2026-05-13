@@ -71,7 +71,7 @@ export function RoleWorkspaceBar() {
                                         : 'text-current/70 hover:bg-white/10 hover:text-current'
                                 }`}
                             >
-                                <Link href={item.href}>
+                                <Link href={href}>
                                     {Icon ? (
                                         <Icon className="mr-1.5 h-3.5 w-3.5" />
                                     ) : null}
@@ -121,7 +121,7 @@ export function RoleWorkspaceBar() {
                             return (
                                 <Link
                                     key={`${item.title}-${href}`}
-                                    href={item.href}
+                                    href={href}
                                     className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition ${
                                         active
                                             ? 'bg-accent text-accent-foreground'

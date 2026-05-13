@@ -117,7 +117,7 @@ export default function VerifyEmail({ status }: Props) {
                         <motion.div
                             initial={reducedMotion ? false : { opacity: 0, y: 24, scale: 0.97, filter: 'blur(12px)' }}
                             animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-                            transition={transition}
+                            transition={transition as any}
                             className="grid w-full max-w-[1040px] overflow-hidden rounded-[2.25rem] border border-[#d9c7a6]/70 bg-white/76 shadow-[0_35px_120px_rgba(47,37,23,0.26)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#101419]/76 lg:grid-cols-[0.95fr_1.05fr]"
                         >
                             <aside className="relative hidden min-h-[36rem] overflow-hidden bg-[#17120b] lg:block">

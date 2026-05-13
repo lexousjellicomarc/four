@@ -39,7 +39,7 @@ export default function ServiceFormModal({
 
     const {
         data,
-        setData,
+        setData: rawSetData,
         post,
         put,
         processing,
@@ -57,6 +57,8 @@ export default function ServiceFormModal({
         max_guests: '',
         capacity_note: '',
     });
+
+    const setData = rawSetData as unknown as ((data: Record<string, any>) => void) & ((key: string, value: any) => void);
 
     useEffect(() => {
         if (isEdit && service) {

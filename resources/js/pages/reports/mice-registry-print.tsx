@@ -162,7 +162,7 @@ export default function MiceRegistryFormPage({
     const submit = (event: React.FormEvent) => {
         event.preventDefault();
 
-        const payload = form.transform((data) => ({
+        form.transform((data) => ({
             ...data,
             booking_id: data.booking_id === '' ? null : Number(data.booking_id),
             record_no: data.record_no === '' ? null : Number(data.record_no),
@@ -182,11 +182,11 @@ export default function MiceRegistryFormPage({
         }));
 
         if (mode === 'create') {
-            payload.post('/reports/mice-registry');
+            form.post('/reports/mice-registry');
             return;
         }
 
-        payload.put(`/reports/mice-registry/${record?.id}`);
+        form.put(`/reports/mice-registry/${record?.id}`);
     };
 
     const availableYears =

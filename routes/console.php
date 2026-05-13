@@ -11,3 +11,8 @@ Schedule::command('bookings:expire-deadlines')
     ->everyFifteenMinutes()
     ->withoutOverlapping()
     ->runInBackground();
+
+Schedule::command('bookings:sync-lifecycle --quiet-report')
+    ->everyThirtyMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();

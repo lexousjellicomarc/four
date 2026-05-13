@@ -16,6 +16,7 @@ use App\Models\Service;
 use App\Models\ServiceType;
 use App\Services\Contracts\BookingServiceInterface;
 use App\Services\NotificationService;
+use App\Support\BookingStatusCatalog;
 use App\Support\WorkspaceAccess;
 use App\Support\WorkspacePage;
 use Carbon\Carbon;
@@ -608,7 +609,7 @@ class BookingController extends Controller
         $gateway = strtolower(trim((string) ($data['payment_gateway'] ?? '')));
         $method = strtolower(trim((string) ($data['payment_method'] ?? 'online')));
         $paymentType = strtolower(trim((string) ($data['payment_type'] ?? 'down')));
-        $status = strtolower(trim((string) ($data['status'] ?? 'pending')));
+        $status = BookingStatusCatalog::normalizePaymentProofStatus((string) ($data['status'] ?? 'pending'), 'pending');
 
         if ($gateway === 'cash') {
             $method = 'cash';
@@ -619,16 +620,6 @@ class BookingController extends Controller
         } elseif ($method === '') {
             $method = 'online';
         }
-
-        $status = match ($status) {
-            'verified' => 'verified',
-            'paid' => 'paid',
-            'confirmed' => 'confirmed',
-            'failed' => 'failed',
-            'declined' => 'declined',
-            'refunded' => 'refunded',
-            default => 'pending',
-        };
 
         if (! $canManage) {
             $status = 'pending';
@@ -685,13 +676,13 @@ class BookingController extends Controller
         $normalized['declined_at'] = $existingPayment?->declined_at;
         $normalized['failed_at'] = $existingPayment?->failed_at;
 
-        if (in_array($status, ['confirmed', 'verified', 'paid'], true)) {
+        if (in_array($status, ['confirmed', 'approved', 'verified', 'paid', 'completed', 'settled'], true)) {
             $normalized['paid_at'] = $normalized['paid_at'] ?: $now;
             $normalized['verified_at'] = $normalized['verified_at'] ?: $now;
             $normalized['approved_at'] = $normalized['approved_at'] ?: $now;
             $normalized['declined_at'] = null;
             $normalized['failed_at'] = null;
-        } elseif ($status === 'declined') {
+        } elseif (in_array($status, ['declined', 'rejected'], true)) {
             $normalized['declined_at'] = $now;
             $normalized['failed_at'] = null;
         } elseif ($status === 'failed') {
@@ -726,7 +717,7 @@ class BookingController extends Controller
 
         $data['client_email'] = strtolower(trim((string) $user->email));
         $data['created_by_user_id'] = $user->id;
-        $data['booking_status'] = 'pending';
+        $data['booking_status'] = 'pencil_booked';
         $data['payment_status'] = 'unpaid';
 
         unset(

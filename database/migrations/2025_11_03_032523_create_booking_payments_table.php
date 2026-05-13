@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('booking_payments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('booking_id')->nullable()->constrained('bookings')->nullOnDelete();
-            $table->enum('status', ['pending', 'confirmed', 'failed', 'declined', 'refunded']);
+            $table->string('status', 50)->default('pending')->index();
             $table->string('payment_method');
             $table->decimal('amount', 10, 2);
             $table->string('transaction_reference')->nullable()->unique();

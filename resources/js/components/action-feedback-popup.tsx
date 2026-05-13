@@ -168,7 +168,7 @@ export default function ActionFeedbackPopup() {
 
     const [mounted, setMounted] = useState(false);
     const [popup, setPopup] = useState<PopupState | null>(null);
-    const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+    const timerRef = useRef<number | null>(null);
 
     const candidate = useMemo<PopupState | null>(() => {
         const successMessage = flash?.success ?? flash?.message ?? flash?.status;

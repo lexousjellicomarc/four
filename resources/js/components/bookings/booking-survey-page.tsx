@@ -88,6 +88,7 @@ type MiceFormData = {
   domestic_female_participants: string;
   foreign_male_participants: string;
   foreign_female_participants: string;
+  total_participants?: string;
 
   main_origin_country: string;
   main_origin_province: string;

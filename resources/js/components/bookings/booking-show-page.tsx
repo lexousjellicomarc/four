@@ -353,15 +353,16 @@ export function BookingShowPage() {
     const canDelete = Boolean(props.canDeleteBooking);
     const canManagePayments = Boolean(props.canManagePayments);
     const isUser = role === 'user';
-    const timeline = eventTimeline(booking);
-    const surveyProof = proofUrl(booking);
+    const currentBooking = booking;
+    const timeline = eventTimeline(currentBooking);
+    const surveyProof = proofUrl(currentBooking);
 
     function deleteBooking() {
         if (!window.confirm('Delete this booking record? This action cannot be undone.')) {
             return;
         }
 
-        router.delete(`${bookingBasePath(role)}/${booking.id}`, {
+        router.delete(`${bookingBasePath(role)}/${currentBooking.id}`, {
             preserveScroll: false,
         });
     }

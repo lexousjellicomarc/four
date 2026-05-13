@@ -20,7 +20,7 @@ export default function PageTransition({
 
   if (reduceMotion || mode === 'plain') {
     return (
-      <main className={className} {...props}>
+      <main className={className} {...(props as any)}>
         {children}
       </main>
     );
@@ -69,7 +69,7 @@ export default function PageTransition({
       initial={variants[mode].initial}
       animate={variants[mode].animate}
       transition={variants[mode].transition}
-      {...props}
+      {...(props as any)}
     >
       {children}
     </motion.main>

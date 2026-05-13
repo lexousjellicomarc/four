@@ -109,7 +109,7 @@ export function roleCalendarBasePath(role: RoleKey): string {
     if (role === 'admin') return '/admin/calendar';
     if (role === 'manager') return '/manager/calendar';
     if (role === 'staff') return '/staff/calendar';
-    return '/my-dashboard';
+    return '/my-calendar';
 }
 
 export function roleBookingShowPath(

@@ -48,7 +48,7 @@ export function StaggeredList({
   ...props
 }: StaggeredListProps) {
   const reduceMotion = useReducedMotion();
-  const MotionElement = listElements[as];
+  const MotionElement = listElements[as] as any;
 
   if (reduceMotion) {
     return (
@@ -91,7 +91,7 @@ export function StaggeredItem({
   ...props
 }: StaggeredItemProps) {
   const reduceMotion = useReducedMotion();
-  const MotionElement = itemElements[as];
+  const MotionElement = itemElements[as] as any;
 
   if (reduceMotion) {
     return (

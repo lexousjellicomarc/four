@@ -42,7 +42,7 @@ export type RoleTone = {
 };
 
 export function getRoleFromAuth(auth?: Auth | null): RoleKey {
-    return getPrimaryRole(auth?.roles ?? []);
+    return getPrimaryRole((auth?.roles ?? []).map((role) => (typeof role === 'string' ? role : String(role.name ?? ''))));
 }
 
 export function getRoleTone(role: RoleKey): RoleTone {

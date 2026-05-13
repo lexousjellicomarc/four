@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\BookingFinancialSummaryService;
+use App\Support\BookingStatusCatalog;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -32,6 +33,23 @@ class Booking extends Model
         'display_client',
         'financial_summary',
     ];
+
+
+    public function setBookingStatusAttribute($value): void
+    {
+        $this->attributes['booking_status'] = BookingStatusCatalog::normalizeBookingStatus(
+            is_string($value) ? $value : (string) $value,
+            'pencil_booked'
+        );
+    }
+
+    public function setPaymentStatusAttribute($value): void
+    {
+        $this->attributes['payment_status'] = BookingStatusCatalog::normalizeBookingPaymentStatus(
+            is_string($value) ? $value : (string) $value,
+            'unpaid'
+        );
+    }
 
     public function service(): BelongsTo
     {

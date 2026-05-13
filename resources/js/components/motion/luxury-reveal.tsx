@@ -45,7 +45,7 @@ export default function LuxuryReveal({
   ...props
 }: LuxuryRevealProps) {
   const reduceMotion = useReducedMotion();
-  const MotionElement = motionElements[as];
+  const MotionElement = motionElements[as] as any;
 
   if (reduceMotion || immediate) {
     return (

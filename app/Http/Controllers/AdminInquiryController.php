@@ -12,14 +12,16 @@ use Inertia\Response;
 
 class AdminInquiryController extends Controller
 {
+    private string $table = 'inquiries';
+
     public function index(Request $request): Response
     {
-        $query = PublicInquiry::query()
-            ->latest();
+        $search = trim((string) $request->input('q', ''));
+        $status = trim((string) $request->input('status', ''));
 
-        if ($request->filled('q')) {
-            $search = trim((string) $request->input('q'));
+        $query = PublicInquiry::query()->latest();
 
+        if ($search !== '') {
             $query->where(function ($builder) use ($search): void {
                 $builder
                     ->where('name', 'like', "%{$search}%")
@@ -28,18 +30,18 @@ class AdminInquiryController extends Controller
                     ->orWhere('subject', 'like', "%{$search}%")
                     ->orWhere('message', 'like', "%{$search}%");
 
-                if (Schema::hasColumn('public_inquiries', 'inquiry_type')) {
+                if ($this->hasColumn('inquiry_type')) {
                     $builder->orWhere('inquiry_type', 'like', "%{$search}%");
                 }
 
-                if (Schema::hasColumn('public_inquiries', 'venue')) {
+                if ($this->hasColumn('venue')) {
                     $builder->orWhere('venue', 'like', "%{$search}%");
                 }
             });
         }
 
-        if ($request->filled('status') && Schema::hasColumn('public_inquiries', 'status')) {
-            $query->where('status', $request->string('status')->toString());
+        if ($status !== '' && $this->hasColumn('status')) {
+            $query->where('status', $status);
         }
 
         $inquiries = $query
@@ -51,8 +53,8 @@ class AdminInquiryController extends Controller
             'workspaceRole' => $this->workspaceRole($request),
             'inquiries' => $inquiries,
             'filters' => [
-                'q' => $request->input('q', ''),
-                'status' => $request->input('status', ''),
+                'q' => $search,
+                'status' => $status,
             ],
             'notificationSummary' => $this->notificationSummary(),
         ]);
@@ -68,7 +70,7 @@ class AdminInquiryController extends Controller
             'status' => $validated['status'],
         ];
 
-        if ($validated['status'] !== 'new' && Schema::hasColumn('public_inquiries', 'read_at') && blank($inquiry->read_at)) {
+        if ($validated['status'] !== 'new' && $this->hasColumn('read_at') && blank($inquiry->read_at)) {
             $data['read_at'] = now();
         }
 
@@ -96,7 +98,6 @@ class AdminInquiryController extends Controller
             'status' => $inquiry->status ?? 'new',
             'read_at' => optional($inquiry->read_at)->toDateTimeString(),
             'created_at' => optional($inquiry->created_at)->toDateTimeString(),
-
             'inquiry_type' => $this->safeAttribute($inquiry, 'inquiry_type'),
             'event_date' => $this->safeAttribute($inquiry, 'event_date'),
             'venue' => $this->safeAttribute($inquiry, 'venue'),
@@ -128,13 +129,14 @@ class AdminInquiryController extends Controller
     {
         $newInquiryCount = 0;
 
-        if (Schema::hasTable('public_inquiries')) {
+        if (Schema::hasTable($this->table)) {
             $newInquiryCount = PublicInquiry::query()
                 ->when(
-                    Schema::hasColumn('public_inquiries', 'status'),
+                    $this->hasColumn('status'),
                     fn ($query) => $query->where(function ($builder): void {
                         $builder
                             ->whereNull('status')
+                            ->orWhere('status', '')
                             ->orWhere('status', 'new');
                     }),
                     fn ($query) => $query
@@ -146,5 +148,10 @@ class AdminInquiryController extends Controller
             'newInquiries' => $newInquiryCount,
             'totalUnread' => $newInquiryCount,
         ];
+    }
+
+    private function hasColumn(string $column): bool
+    {
+        return Schema::hasTable($this->table) && Schema::hasColumn($this->table, $column);
     }
 }

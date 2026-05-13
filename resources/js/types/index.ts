@@ -75,7 +75,8 @@ export type Breadcrumb = BreadcrumbItem;
 
 export type NavItem = {
     title: string;
-    href: string;
+    href: string | { url?: string | null } | Record<string, unknown>;
+    url?: string | null;
     icon?: LucideIcon;
     isActive?: boolean;
     exact?: boolean;
@@ -232,6 +233,7 @@ export type Service = {
     rate?: number | string | null;
     price?: number | string | null;
     unit?: string | null;
+    uom?: string | null;
     min_guests?: number | null;
     max_guests?: number | null;
     capacity_note?: string | null;
@@ -278,3 +280,46 @@ export type DateString = string;
 export type MoneyValue = number | string;
 
 export * from './public-content';
+
+
+export type NavGroup = {
+    title: string;
+    items: NavItem[];
+    description?: string | null;
+};
+
+export type Booking = BookingListItem & {
+    service_id?: ID | null;
+    service?: Service | null;
+    services?: Service[] | null;
+    booking_services?: BookingServiceItem[] | null;
+    organization_type?: string | null;
+    client_address?: string | null;
+    client_region?: string | null;
+    client_province?: string | null;
+    client_city_municipality?: string | null;
+    client_barangay?: string | null;
+    client_zip_code?: string | null;
+    client_street_address?: string | null;
+    head_of_organization?: string | null;
+    survey_email?: string | null;
+    expired_at?: string | null;
+    payment_balance_due_at?: string | null;
+    deadline_at?: string | null;
+    payment_meta?: Record<string, unknown> | null;
+    [key: string]: unknown;
+};
+
+export type ServiceTypeEntity = ServiceType;
+
+export type ServiceTypeOption = {
+    id: ID;
+    name: string;
+    label?: string | null;
+    value?: ID | null;
+    description?: string | null;
+    capacity?: string | number | null;
+    min_capacity?: number | null;
+    max_capacity?: number | null;
+    is_active?: boolean | number | null;
+};

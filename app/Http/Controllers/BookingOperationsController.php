@@ -85,7 +85,7 @@ class BookingOperationsController extends Controller
             ? collect()
             : BookingPayment::query()
                 ->with(['booking'])
-                ->where('status', 'pending')
+                ->whereIn('status', ['pending', 'submitted', 'for_review'])
                 ->whereIn('booking_id', $visibleIds)
                 ->latest('created_at')
                 ->limit(8)
@@ -252,7 +252,7 @@ class BookingOperationsController extends Controller
         $attention = $filters['attention'];
 
         if ($attention === 'needs_review') {
-            $query->whereHas('payments', fn (Builder $payments) => $payments->where('status', 'pending'));
+            $query->whereHas('payments', fn (Builder $payments) => $payments->whereIn('status', ['pending', 'submitted', 'for_review']));
             return;
         }
 

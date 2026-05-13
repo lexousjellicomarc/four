@@ -312,6 +312,10 @@ Route::middleware(['auth', 'verified', 'role:admin'])
             ->whereNumber('user')
             ->name('users.roles.update');
 
+        Route::post('/users/{user}/verify-email', [UserController::class, 'verifyEmail'])
+            ->whereNumber('user')
+            ->name('users.verify-email');
+
         Route::resource('/users', UserController::class)
             ->where(['user' => '[0-9]+']);
 
@@ -637,6 +641,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/my-dashboard', [WorkspaceHomeController::class, 'index'])
         ->name('user.dashboard');
 
+    Route::get('/my-calendar', WorkspaceCalendarController::class)
+        ->name('user.calendar');
+
     Route::get('/book', [BookingController::class, 'create'])
         ->name('user.bookings.create');
 
@@ -930,6 +937,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('permission:users.manage')
         ->whereNumber('user')
         ->name('users.roles.update');
+
+    Route::post('/users/{user}/verify-email', [UserController::class, 'verifyEmail'])
+        ->middleware('permission:users.manage')
+        ->whereNumber('user')
+        ->name('users.verify-email');
 
     Route::resource('users', UserController::class)
         ->middleware('permission:users.manage')

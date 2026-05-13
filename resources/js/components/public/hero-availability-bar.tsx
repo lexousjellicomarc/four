@@ -453,7 +453,7 @@ function AvailabilityResultModal({
                                                         from: result.from,
                                                         to: result.to,
                                                         venue: result.venue,
-                                                        eventType: result.event_type,
+                                                        event_type: result.event_type,
                                                         guests: result.guests,
                                                     })}
                                                     className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#2f2517] px-5 text-sm font-bold text-white transition hover:bg-[#4a3921] dark:bg-[#f1d89b] dark:text-[#17120b]"

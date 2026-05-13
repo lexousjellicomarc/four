@@ -30,6 +30,7 @@ export type BookingVenueCatalogItem = {
   idealFor: string[];
   guidelines: string[];
   searchNames: string[];
+  fallbackClass?: string;
 };
 
 export type BookingGuidelineSection = {
@@ -263,4 +264,24 @@ export function estimateSelectedVenueCharge(
     (total, item) => total + estimateVenueCharge(item, usage, durationHours),
     0,
   );
+}
+
+
+export function isIncludedByFullHall(key: BookingVenueKey): boolean {
+  return FULL_HALL_INCLUDED_KEYS.includes(key);
+}
+
+export function packageDisplayItems<T extends BookingVenueCatalogItem>(items: T[]): T[] {
+  if (!items.some((item) => item.key === 'FULL_HALL')) {
+    return items;
+  }
+
+  const byKey = new Map(items.map((item) => [item.key, item]));
+  const fullHall = byKey.get('FULL_HALL');
+  const catalogIncluded = BOOKING_VENUE_CATALOG.filter((item) => isIncludedByFullHall(item.key));
+
+  return [
+    ...(fullHall ? [fullHall] : []),
+    ...catalogIncluded.map((catalogItem) => byKey.get(catalogItem.key) ?? (catalogItem as T)),
+  ];
 }

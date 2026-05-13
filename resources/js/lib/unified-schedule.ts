@@ -242,7 +242,7 @@ export function deriveDayStatus(options: {
     return 'available';
 }
 
-export function scheduleStatusLabel(status: ScheduleDayStatus) {
+export function scheduleStatusLabel(status: ScheduleDayStatus | string | null | undefined) {
     switch (status) {
         case 'blocked':
             return 'Blocked';
@@ -261,7 +261,7 @@ export function scheduleStatusLabel(status: ScheduleDayStatus) {
     }
 }
 
-export function scheduleStatusDescription(status: ScheduleDayStatus) {
+export function scheduleStatusDescription(status: ScheduleDayStatus | string | null | undefined) {
     switch (status) {
         case 'blocked':
             return 'This date is blocked for internal schedule control.';
@@ -280,7 +280,7 @@ export function scheduleStatusDescription(status: ScheduleDayStatus) {
     }
 }
 
-export function scheduleStatusTone(status: ScheduleDayStatus) {
+export function scheduleStatusTone(status: ScheduleDayStatus | string | null | undefined) {
     switch (status) {
         case 'my-booking':
             return 'border-[#174f40] bg-[#174f40] text-white';

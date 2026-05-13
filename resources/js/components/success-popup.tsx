@@ -72,7 +72,7 @@ function formatDateTimeLocal(iso: string) {
 export default function PencilBookedSuccessPopup() {
     const [mounted, setMounted] = useState(false);
     const [payload, setPayload] = useState<PencilBookedPopupPayload | null>(null);
-    const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+    const timerRef = useRef<number | null>(null);
 
     const close = () => {
         if (timerRef.current) {

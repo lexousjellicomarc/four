@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\BookingStatusCatalog;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateBookingRequest extends FormRequest
@@ -9,6 +10,30 @@ class UpdateBookingRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+
+    protected function prepareForValidation(): void
+    {
+        $payload = [];
+
+        if ($this->has('booking_status')) {
+            $payload['booking_status'] = BookingStatusCatalog::normalizeBookingStatus(
+                (string) $this->input('booking_status'),
+                'pencil_booked'
+            );
+        }
+
+        if ($this->has('payment_status')) {
+            $payload['payment_status'] = BookingStatusCatalog::normalizeBookingPaymentStatus(
+                (string) $this->input('payment_status'),
+                'unpaid'
+            );
+        }
+
+        if ($payload !== []) {
+            $this->merge($payload);
+        }
     }
 
     public function rules(): array

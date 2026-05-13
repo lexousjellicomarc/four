@@ -673,8 +673,7 @@ import {
         calendarManagePath(role),
         { month: nextMonth },
         {
-          preserveState: false,
-          preserveScroll: true,
+                    preserveUrl: true,
           replace: true,
         },
       );
@@ -781,7 +780,7 @@ import {
         }
 
         setModalOpen(false);
-        router.reload({ preserveScroll: true, preserveState: false });
+        router.reload();
       } catch (exception) {
         setError(exception instanceof Error ? exception.message : 'Unable to save calendar block.');
       } finally {
@@ -800,7 +799,7 @@ import {
 
       try {
         await sendJson(`${calendarBlockBasePath(role)}/${id}`, 'DELETE');
-        router.reload({ preserveScroll: true, preserveState: false });
+        router.reload();
       } catch (exception) {
         window.alert(exception instanceof Error ? exception.message : 'Unable to delete calendar block.');
       }

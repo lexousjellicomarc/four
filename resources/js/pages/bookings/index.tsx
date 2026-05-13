@@ -317,28 +317,29 @@ function paymentLabel(status?: string | null) {
 }
 
 function getOutstandingBalance(booking: Booking) {
-    const itemsTotal = Number(booking?.totals?.items_total ?? 0);
+    const totals = (booking?.totals ?? {}) as Record<string, any>;
+    const itemsTotal = Number(totals.items_total ?? 0);
     const paid = Number(
-        booking?.totals?.confirmed_payments_total ??
-            booking?.totals?.payments_total ??
+        totals.confirmed_payments_total ??
+            totals.payments_total ??
             0,
     );
     return Math.max(itemsTotal - paid, 0);
 }
 
 function getItemsTotal(booking: Booking) {
-    return Number(booking?.totals?.items_total ?? 0);
+    return Number(((booking?.totals ?? {}) as Record<string, any>).items_total ?? 0);
 }
 
-function getServicesPreview(booking: Booking) {
+function getServicesPreview(booking: Booking): string {
     if (Array.isArray(booking.items) && booking.items.length > 0) {
         return booking.items
-            .map((item) => item.service_name || 'Service')
+            .map((item) => String(item.service_name || 'Service'))
             .filter(Boolean)
             .join(', ');
     }
 
-    if (booking.service_name) return booking.service_name;
+    if (booking.service_name) return String(booking.service_name);
     return 'No service items attached';
 }
 
@@ -1056,7 +1057,7 @@ export default function Bookings(props: BookingsPageProps) {
                                                         Services
                                                     </div>
                                                     <div className="mt-2 text-sm leading-7">
-                                                        {servicesPreview}
+                                                        {String(servicesPreview)}
                                                     </div>
                                                     <div className="mt-2 text-xs text-muted-foreground">
                                                         Created by:{' '}
@@ -1199,9 +1200,9 @@ export default function Bookings(props: BookingsPageProps) {
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="max-w-[260px] truncate text-sm">
-                                                            {getServicesPreview(
+                                                            {String(getServicesPreview(
                                                                 booking,
-                                                            )}
+                                                            ))}
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-right">

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\BookingFinancialSummaryService;
+use App\Support\BookingStatusCatalog;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -38,23 +39,26 @@ class BookingPayment extends Model
         static::saving(function (BookingPayment $payment) {
             $now = now();
 
-            if (in_array($payment->status, ['confirmed', 'approved', 'verified', 'paid'], true)) {
+            $status = BookingStatusCatalog::normalizePaymentProofStatus((string) ($payment->status ?? ''), 'pending');
+            $payment->status = $status;
+
+            if (in_array($status, ['confirmed', 'approved', 'verified', 'paid', 'completed', 'settled'], true)) {
                 $payment->paid_at ??= $now;
             }
 
-            if (in_array($payment->status, ['confirmed', 'approved', 'verified'], true)) {
+            if (in_array($status, ['confirmed', 'approved', 'verified', 'paid', 'completed', 'settled'], true)) {
                 $payment->verified_at ??= $now;
             }
 
-            if (in_array($payment->status, ['confirmed', 'approved'], true)) {
+            if (in_array($status, ['confirmed', 'approved', 'verified', 'paid', 'completed', 'settled'], true)) {
                 $payment->approved_at ??= $now;
             }
 
-            if ($payment->status === 'declined') {
+            if (in_array($status, ['declined', 'rejected'], true)) {
                 $payment->declined_at ??= $now;
             }
 
-            if ($payment->status === 'failed') {
+            if ($status === 'failed') {
                 $payment->failed_at ??= $now;
             }
         });
@@ -70,6 +74,23 @@ class BookingPayment extends Model
                 app(BookingFinancialSummaryService::class)->syncBookingPaymentStatus($payment->booking);
             }
         });
+    }
+
+
+    public function setStatusAttribute($value): void
+    {
+        $this->attributes['status'] = BookingStatusCatalog::normalizePaymentProofStatus(
+            is_string($value) ? $value : (string) $value,
+            'pending'
+        );
+    }
+
+    public function setPaymentStatusAttribute($value): void
+    {
+        $this->attributes['payment_status'] = BookingStatusCatalog::normalizePaymentProofStatus(
+            is_string($value) ? $value : (string) $value,
+            'pending'
+        );
     }
 
     public function booking(): BelongsTo
@@ -94,6 +115,9 @@ class BookingPayment extends Model
             'approved' => 'Approved',
             'verified' => 'Verified',
             'declined' => 'Declined',
+            'rejected' => 'Rejected',
+            'for_review' => 'For Review',
+            'submitted' => 'Submitted',
             'failed' => 'Failed',
             'pending' => 'Pending Review',
             default => ucfirst((string) ($this->status ?: 'Pending')),

@@ -13,7 +13,7 @@ export function AppContent({ children, className = '', ...props }: AppContentPro
         <main
             {...props}
             className={cx(
-                'relative z-10 min-h-[calc(100vh-4.5rem)] w-full px-3 pb-6 pt-3 sm:px-4 lg:px-5 xl:px-6',
+                'backend-app-content relative z-10 min-h-[calc(100vh-4.5rem)] w-full px-3 pb-6 pt-3 sm:px-4 lg:px-5 xl:px-6',
                 'motion-safe:animate-[bcccBackendContentIn_0.28s_ease-out_both]',
                 className,
             )}

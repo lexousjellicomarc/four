@@ -98,7 +98,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                     return (
                                                         <Link
                                                             key={`${item.title}-${href}`}
-                                                            href={item.href}
+                                                            href={hrefToString(item.href)}
                                                             className={cn(
                                                                 'flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-bold transition',
                                                                 active
@@ -147,7 +147,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                             : 'text-current/70 hover:bg-white/10 hover:text-current',
                                     )}
                                 >
-                                    <Link href={item.href}>
+                                    <Link href={hrefToString(item.href)}>
                                         {Icon ? (
                                             <Icon className="mr-1.5 h-3.5 w-3.5" />
                                         ) : null}

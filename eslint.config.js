@@ -7,11 +7,27 @@ import typescript from 'typescript-eslint';
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
+    {
+        ignores: [
+            'vendor/**',
+            'node_modules/**',
+            'public/**',
+            'storage/**',
+            'bootstrap/cache/**',
+            'bootstrap/ssr/**',
+            'resources/js/actions/**',
+            'resources/js/routes/**',
+            'resources/js/wayfinder/**',
+            'resources/js/components/admin-resource/_archive_old/**',
+            'tailwind.config.js',
+        ],
+    },
     js.configs.recommended,
     ...typescript.configs.recommended,
     {
         ...react.configs.flat.recommended,
-        ...react.configs.flat['jsx-runtime'], 
+        ...react.configs.flat['jsx-runtime'],
+        files: ['resources/js/**/*.{ts,tsx,js,jsx}'],
         languageOptions: {
             globals: {
                 ...globals.browser,
@@ -29,6 +45,7 @@ export default [
         },
     },
     {
+        files: ['resources/js/**/*.{ts,tsx}'],
         plugins: {
             'react-hooks': reactHooks,
         },
@@ -37,8 +54,5 @@ export default [
             'react-hooks/exhaustive-deps': 'warn',
         },
     },
-    {
-        ignores: ['vendor', 'node_modules', 'public', 'bootstrap/ssr', 'tailwind.config.js'],
-    },
-    prettier, // Turn off all rules that might conflict with Prettier
+    prettier,
 ];

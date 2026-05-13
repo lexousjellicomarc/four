@@ -293,7 +293,7 @@ export default function AuthAccessPage({
                                             checks={checks}
                                             passwordStrength={passwordStrength}
                                             onSubmit={submitRegister}
-                                            transition={softTransition}
+                                            transition={softTransition as any}
                                             reducedMotion={reducedMotion}
                                         />
                                     </AuthPane>
@@ -307,7 +307,7 @@ export default function AuthAccessPage({
                                             status={status}
                                             canResetPassword={canResetPassword}
                                             onSubmit={submitLogin}
-                                            transition={softTransition}
+                                            transition={softTransition as any}
                                             reducedMotion={reducedMotion}
                                         />
                                     </AuthPane>
@@ -330,7 +330,7 @@ export default function AuthAccessPage({
                                                   borderRadius: '0 2.25rem 2.25rem 0',
                                               }
                                     }
-                                    transition={panelTransition}
+                                    transition={panelTransition as any}
                                 >
                                     <AnimatePresence mode="wait" initial={false}>
                                         <motion.img
@@ -341,7 +341,7 @@ export default function AuthAccessPage({
                                             initial={reducedMotion ? false : { opacity: 0, scale: 1.06, filter: 'blur(12px)' }}
                                             animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
                                             exit={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 1.04, filter: 'blur(10px)' }}
-                                            transition={softTransition}
+                                            transition={softTransition as any}
                                         />
                                     </AnimatePresence>
 
@@ -353,7 +353,7 @@ export default function AuthAccessPage({
                                         key={`image-copy-${mode}`}
                                         initial={reducedMotion ? false : { opacity: 0, y: 24, filter: 'blur(10px)' }}
                                         animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                                        transition={softTransition}
+                                        transition={softTransition as any}
                                         className="absolute bottom-8 left-8 right-8 text-left text-white"
                                     >
                                         <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-[#f1d89b]">

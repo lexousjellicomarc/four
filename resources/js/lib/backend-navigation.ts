@@ -99,7 +99,12 @@ function pathRoleFallback(): BackendRole | null {
         return 'staff';
     }
 
-    if (path.startsWith('/my-dashboard') || path.startsWith('/my-bookings') || path.startsWith('/book')) {
+    if (
+        path.startsWith('/my-dashboard') ||
+        path.startsWith('/my-bookings') ||
+        path.startsWith('/my-calendar') ||
+        path.startsWith('/book')
+    ) {
         return 'user';
     }
 
@@ -224,7 +229,7 @@ export function backendCalendarHref(role: BackendRole): string {
         return '/staff/calendar';
     }
 
-    return '/calendar';
+    return '/my-calendar';
 }
 
 export function backendPaymentReviewHref(role: BackendRole): string {
@@ -509,6 +514,12 @@ export function backendNavSections(role: BackendRole): BackendNavSection[] {
                     icon: LayoutDashboard,
                     exact: true,
                     description: 'Booking overview',
+                },
+                {
+                    title: 'My Calendar',
+                    href: '/my-calendar',
+                    icon: CalendarDays,
+                    description: 'Clean month view for your booking requests',
                 },
                 {
                     title: 'My Bookings',

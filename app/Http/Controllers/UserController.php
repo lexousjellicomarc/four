@@ -244,6 +244,23 @@ class UserController extends Controller
             ->with('success', 'User updated successfully.');
     }
 
+    public function verifyEmail(Request $request, User $user): RedirectResponse
+    {
+        if (! $user->email_verified_at) {
+            $user->forceFill([
+                'email_verified_at' => now(),
+            ])->save();
+
+            if ($request->user()) {
+                $this->notifications->userUpdated($user, $request->user(), [
+                    'email_verified_at' => [null, $user->email_verified_at?->format('Y-m-d H:i:s')],
+                ]);
+            }
+        }
+
+        return back()->with('success', 'Email marked as verified successfully.');
+    }
+
     public function destroy(Request $request, User $user): RedirectResponse
     {
         if ((int) $user->id === (int) auth()->id()) {

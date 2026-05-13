@@ -23,8 +23,8 @@ return new class extends Migration
             $table->datetime('booking_date_from');
             $table->datetime('booking_date_to');
             $table->integer('number_of_guests')->default(0);
-            $table->enum('booking_status', ['pending', 'confirmed', 'active', 'cancelled', 'declined', 'completed']);
-            $table->enum('payment_status', ['unpaid', 'partial', 'paid', 'owing']);
+            $table->string('booking_status', 50)->default('pencil_booked')->index();
+            $table->string('payment_status', 50)->default('unpaid')->index();
             $table->timestamps();
         });
     }

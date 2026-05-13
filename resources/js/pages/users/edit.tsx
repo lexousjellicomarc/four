@@ -4,13 +4,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
+import { workspaceUsersPath } from '@/lib/workspace-paths';
 import type { BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Users', href: '/users' },
-    { title: 'Edit', href: '#' },
-];
 
 type UserData = {
     id: number;
@@ -73,9 +69,17 @@ export default function EditUser({ user, availableRoles }: EditUserProps) {
         email_is_verified: user.email_is_verified,
     });
 
+    const usersIndexUrl = workspaceUsersPath();
+    const usersEditUrl = workspaceUsersPath(`${user.id}/edit`);
+
+    const breadcrumbs: BreadcrumbItem[] = [
+        { title: 'Users', href: usersIndexUrl },
+        { title: 'Edit', href: usersEditUrl },
+    ];
+
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        put(`/users/${user.id}`);
+        put(workspaceUsersPath(String(user.id)));
     }
 
     return (
@@ -502,7 +506,7 @@ export default function EditUser({ user, availableRoles }: EditUserProps) {
 
                     <div className="flex flex-wrap justify-end gap-3">
                         <Button type="button" variant="outline" asChild>
-                            <Link href="/users">Cancel</Link>
+                            <Link href={usersIndexUrl}>Cancel</Link>
                         </Button>
                         <Button type="submit" disabled={processing}>
                             {processing ? 'Saving...' : 'Save Changes'}

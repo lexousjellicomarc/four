@@ -19,12 +19,11 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { workspaceUsersPath } from '@/lib/workspace-paths';
 import type { BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Pencil, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react';
+import { MailCheck, Pencil, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Users', href: '/users' }];
 
 type User = {
     id: number;
@@ -97,12 +96,20 @@ export default function UsersIndex({
         };
     }, [safeUsers]);
 
+    const usersIndexUrl = workspaceUsersPath();
+    const usersCreateUrl = workspaceUsersPath('create');
+    const usersRolesUrl = workspaceUsersPath('roles');
+
+    const breadcrumbs: BreadcrumbItem[] = [
+        { title: 'Users', href: usersIndexUrl },
+    ];
+
     function handleSearch(e: React.FormEvent) {
         e.preventDefault();
         const params: { search?: string; role?: string } = {};
         if (search.trim()) params.search = search.trim();
         if (roleFilter && roleFilter !== 'all') params.role = roleFilter;
-        router.get('/users', params, {
+        router.get(usersIndexUrl, params, {
             preserveState: true,
             preserveScroll: true,
         });
@@ -111,13 +118,19 @@ export default function UsersIndex({
     function handleClearFilters() {
         setSearch('');
         setRoleFilter('all');
-        router.get('/users', {}, { preserveState: true, preserveScroll: true });
+        router.get(usersIndexUrl, {}, { preserveState: true, preserveScroll: true });
+    }
+
+    function handleVerifyEmail(user: User) {
+        router.post(workspaceUsersPath(`${user.id}/verify-email`), {}, {
+            preserveScroll: true,
+        });
     }
 
     function handleDelete() {
         if (!deleteTarget) return;
 
-        router.delete(`/users/${deleteTarget.id}`, {
+        router.delete(workspaceUsersPath(String(deleteTarget.id)), {
             preserveScroll: true,
             onFinish: () => setDeleteTarget(null),
         });
@@ -141,14 +154,14 @@ export default function UsersIndex({
 
                     <div className="flex flex-wrap gap-2">
                         <Button variant="outline" asChild>
-                            <Link href="/users/roles">
+                            <Link href={usersRolesUrl}>
                                 <ShieldCheck className="mr-2 h-4 w-4" />
                                 Manage Roles
                             </Link>
                         </Button>
 
                         <Button asChild>
-                            <Link href="/users/create">
+                            <Link href={usersCreateUrl}>
                                 <UserPlus className="mr-2 h-4 w-4" />
                                 Add User
                             </Link>
@@ -367,13 +380,25 @@ export default function UsersIndex({
 
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">
+                                                    {!user.email_verified_at ? (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            type="button"
+                                                            title="Mark email as verified"
+                                                            onClick={() => handleVerifyEmail(user)}
+                                                        >
+                                                            <MailCheck className="h-4 w-4" />
+                                                        </Button>
+                                                    ) : null}
+
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
                                                         asChild
                                                     >
                                                         <Link
-                                                            href={`/users/${user.id}/edit`}
+                                                            href={workspaceUsersPath(`${user.id}/edit`)}
                                                         >
                                                             <Pencil className="h-4 w-4" />
                                                         </Link>

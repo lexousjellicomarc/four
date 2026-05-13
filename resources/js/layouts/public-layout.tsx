@@ -58,10 +58,10 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
     const siteSettings = page.props.siteSettings;
 
     return (
-        <div className="min-h-screen bg-[#f8f5ef] text-[#201a12] antialiased dark:bg-[#0d0f12] dark:text-white">
+        <div className="bccc-public-shell min-h-screen bg-[#f8f5ef] text-[#201a12] antialiased dark:bg-[#0d0f12] dark:text-white">
             <PublicHeader />
 
-            <main className="relative overflow-hidden">
+            <main className="bccc-public-main relative overflow-hidden">
                 {children}
             </main>
 

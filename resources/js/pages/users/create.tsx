@@ -4,13 +4,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
+import { workspaceUsersPath } from '@/lib/workspace-paths';
 import type { BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Users', href: '/users' },
-    { title: 'Create', href: '/users/create' },
-];
 
 interface CreateUserProps {
     availableRoles: string[];
@@ -56,9 +52,17 @@ export default function CreateUser({
         email_is_verified: defaults?.email_is_verified ?? true,
     });
 
+    const usersIndexUrl = workspaceUsersPath();
+    const usersCreateUrl = workspaceUsersPath('create');
+
+    const breadcrumbs: BreadcrumbItem[] = [
+        { title: 'Users', href: usersIndexUrl },
+        { title: 'Create', href: usersCreateUrl },
+    ];
+
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        post('/users');
+        post(usersIndexUrl);
     }
 
     return (
@@ -469,7 +473,7 @@ export default function CreateUser({
 
                     <div className="flex flex-wrap justify-end gap-3">
                         <Button type="button" variant="outline" asChild>
-                            <Link href="/users">Cancel</Link>
+                            <Link href={usersIndexUrl}>Cancel</Link>
                         </Button>
                         <Button type="submit" disabled={processing}>
                             {processing ? 'Creating...' : 'Create User'}

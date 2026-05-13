@@ -8,7 +8,10 @@ import type { ReactNode } from 'react';
 type ResourcePageShellProps = {
     title: string;
     subtitle?: string;
+    description?: string;
     eyebrow?: string;
+    current?: string;
+    role?: string;
     icon?: LucideIcon;
     breadcrumbs?: BreadcrumbItem[];
     actions?: ReactNode;
@@ -45,6 +48,7 @@ function cx(...classes: Array<string | false | null | undefined>) {
 export function ResourcePageShell({
     title,
     subtitle,
+    description,
     eyebrow = 'Admin Workspace',
     icon: Icon,
     breadcrumbs = [],
@@ -71,9 +75,9 @@ export function ResourcePageShell({
                                 {title}
                             </h1>
 
-                            {subtitle ? (
+                            {(subtitle || description) ? (
                                 <p className="mt-3 max-w-4xl text-sm leading-7 text-[#6e604c] dark:text-white/58">
-                                    {subtitle}
+                                    {subtitle || description}
                                 </p>
                             ) : null}
                         </div>

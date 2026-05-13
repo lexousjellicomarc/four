@@ -48,7 +48,7 @@ export function RoleWorkspaceShell({
       <Head title={title} />
 
       <section
-        className={`relative mb-5 overflow-hidden border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] shadow-[var(--bccc-backend-shadow-soft)] backdrop-blur-xl ${
+        className={`role-workspace-header relative mb-5 overflow-hidden border border-[var(--bccc-backend-line)] bg-[var(--bccc-backend-panel)] shadow-[var(--bccc-backend-shadow-soft)] backdrop-blur-xl ${
           compact ? 'p-5' : 'p-5 sm:p-6 lg:p-7'
         }`}
       >

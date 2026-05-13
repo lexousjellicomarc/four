@@ -97,7 +97,7 @@ function inferState(booking?: BookingDeadlineLike | null, seconds?: number | nul
         return 'protected';
     }
 
-    if (seconds === null) {
+    if (seconds == null) {
         return 'none';
     }
 
@@ -113,7 +113,7 @@ function inferState(booking?: BookingDeadlineLike | null, seconds?: number | nul
 }
 
 function formatDuration(seconds: number | null): string {
-    if (seconds === null) {
+    if (seconds == null) {
         return 'No deadline';
     }
 

@@ -989,7 +989,7 @@ function RecordGrid({
         if (!window.confirm(`Delete "${titleOf(record, readableType(type))}"?`)) return;
 
         router.delete(endpointFor(type, record), {
-            preserveScroll: true,
+            preserveUrl: true,
             onSuccess: () => {
                 notifySuccess(`${readableType(type)} deleted successfully.`, 'Deleted successfully');
             },
@@ -1260,15 +1260,18 @@ function ContentModal({ modal, onClose }: { modal: ModalState; onClose: () => vo
         setErrorMessage('');
         setSuccessMessage('');
 
-        const payload = new FormData();
-        appendContentPayload(payload, modal.type, form);
+        if (!modal) return;
 
-        if (modal.mode === 'edit') {
+        const activeModal = modal;
+        const payload = new FormData();
+        appendContentPayload(payload, activeModal.type, form);
+
+        if (activeModal.mode === 'edit') {
             payload.append('_method', 'PUT');
         }
 
         try {
-            const result = await submitContentRequest(endpointFor(modal.type, modal.record), payload);
+            const result = await submitContentRequest(endpointFor(activeModal.type, activeModal.record), payload);
             const message = extractSuccessMessage(result);
 
             setSuccessMessage(message);
@@ -1292,9 +1295,8 @@ function ContentModal({ modal, onClose }: { modal: ModalState; onClose: () => vo
                         'flash',
                         'errors',
                     ],
-                    preserveScroll: true,
-                    preserveState: false,
-                });
+                    preserveUrl: true,
+                                    });
             }, 700);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unable to save content.';
@@ -1764,7 +1766,7 @@ function SettingsPanel({ settings }: { settings: SiteSettings }) {
         setProcessing(true);
 
         router.put('/admin/site-settings', form, {
-            preserveScroll: true,
+            preserveUrl: true,
             onSuccess: () => {
                 notifySuccess('Site settings saved successfully.', 'Saved successfully');
             },

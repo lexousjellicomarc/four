@@ -87,6 +87,8 @@ export type PublicEventItem = PublicImageSet & {
     endsAt?: string | null;
     ends_at?: string | null;
     date?: string | null;
+    dateEnd?: string | null;
+    date_end?: string | null;
     event_date?: string | null;
     monthLabel?: string | null;
     month_label?: string | null;
@@ -94,8 +96,10 @@ export type PublicEventItem = PublicImageSet & {
     day_label?: string | null;
     timeLabel?: string | null;
     time_label?: string | null;
+    time?: string | null;
     publicCalendarTitle?: string | null;
     public_calendar_title?: string | null;
+    scope?: 'bccc' | 'city' | string | null;
     isPublic?: boolean;
     is_public?: LaravelBoolean | null;
     featured?: boolean;

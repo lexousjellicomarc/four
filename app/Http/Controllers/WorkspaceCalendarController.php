@@ -22,11 +22,9 @@ class WorkspaceCalendarController extends Controller
     {
         /** @var BookingService $bookingService */
         $bookingService = app(BookingService::class);
-
         $bookingService->syncLifecycleStatuses();
 
         $countsAll = $bookingService->getStatusCounts();
-
         $counts = [
             'pending' => $countsAll['pending'] ?? 0,
             'confirmed' => $countsAll['confirmed'] ?? 0,
@@ -34,13 +32,10 @@ class WorkspaceCalendarController extends Controller
             'completed' => $countsAll['completed'] ?? 0,
         ];
 
-        $user = $request->user();
         $monthParam = (string) $request->query('month', '');
-
         $start = preg_match('/^\d{4}-\d{2}$/', $monthParam)
             ? Carbon::createFromFormat('Y-m', $monthParam)->startOfMonth()
             : Carbon::now()->startOfMonth();
-
         $end = $start->copy()->endOfMonth();
 
         $monthAvailability = [];
@@ -58,10 +53,10 @@ class WorkspaceCalendarController extends Controller
             ];
         }
 
-        $events = $this->buildCalendarEvents($request, $start, $end);
         $workspaceRole = $this->resolveWorkspaceRole($request);
+        $events = $this->buildCalendarEvents($request, $workspaceRole, $start, $end);
 
-        return Inertia::render($this->resolvePage($request), [
+        return Inertia::render($this->resolvePage($request, $workspaceRole), [
             'workspaceRole' => $workspaceRole,
             'counts' => $counts,
             'events' => $events,
@@ -72,40 +67,59 @@ class WorkspaceCalendarController extends Controller
     }
 
     private function resolveWorkspaceRole(Request $request): string
-{
-    $routeName = (string) optional($request->route())->getName();
+    {
+        $routeName = (string) optional($request->route())->getName();
 
-    if (str_starts_with($routeName, 'admin.')) {
-        return 'admin';
-    }
-
-    if (str_starts_with($routeName, 'manager.')) {
-        return 'manager';
-    }
-
-    if (str_starts_with($routeName, 'staff.')) {
-        return 'staff';
-    }
-
-    $user = $request->user();
-
-    if ($user && method_exists($user, 'hasRole')) {
-        if ($user->hasRole('admin')) {
+        if (str_starts_with($routeName, 'admin.')) {
             return 'admin';
         }
 
-        if ($user->hasRole('manager')) {
+        if (str_starts_with($routeName, 'manager.')) {
             return 'manager';
         }
 
-        if ($user->hasRole('staff')) {
+        if (str_starts_with($routeName, 'staff.')) {
             return 'staff';
         }
+
+        if (str_starts_with($routeName, 'user.')) {
+            return 'user';
+        }
+
+        $path = '/' . ltrim($request->path(), '/');
+
+        if (str_starts_with($path, '/admin/')) {
+            return 'admin';
+        }
+
+        if (str_starts_with($path, '/manager/')) {
+            return 'manager';
+        }
+
+        if (str_starts_with($path, '/staff/')) {
+            return 'staff';
+        }
+
+        $user = $request->user();
+
+        if ($user && method_exists($user, 'hasRole')) {
+            if ($user->hasRole('admin')) {
+                return 'admin';
+            }
+
+            if ($user->hasRole('manager')) {
+                return 'manager';
+            }
+
+            if ($user->hasRole('staff')) {
+                return 'staff';
+            }
+        }
+
+        return 'user';
     }
 
-    return 'user';
-}
-    private function resolvePage(Request $request): string
+    private function resolvePage(Request $request, string $workspaceRole): string
     {
         $routeName = (string) optional($request->route())->getName();
 
@@ -121,24 +135,24 @@ class WorkspaceCalendarController extends Controller
             return 'staff/calendar/index';
         }
 
+        if ($workspaceRole === 'user') {
+            return 'user/calendar/index';
+        }
+
         return 'dashboard';
     }
 
-    private function buildCalendarEvents(Request $request, Carbon $start, Carbon $end)
+    private function buildCalendarEvents(Request $request, string $workspaceRole, Carbon $start, Carbon $end)
     {
         $user = $request->user();
 
-        if ($user && method_exists($user, 'hasRole') && $user->hasRole('user')) {
-            return $this->buildUserBookingEvents($user->email, $start, $end);
+        if ($workspaceRole === 'user') {
+            return $this->buildUserBookingEvents((string) ($user?->email ?? ''), (int) ($user?->id ?? 0), $start, $end);
         }
 
-        $bookingEvents = $this->buildBookingEvents($start, $end);
-        $publicEventItems = $this->buildPublicEventItems($start, $end);
-        $blockEvents = $this->buildCalendarBlockEvents($start, $end);
-
-        return $bookingEvents
-            ->concat($publicEventItems)
-            ->concat($blockEvents)
+        return $this->buildBookingEvents($start, $end)
+            ->concat($this->buildPublicEventItems($start, $end))
+            ->concat($this->buildCalendarBlockEvents($start, $end))
             ->sortBy([
                 ['start', 'asc'],
                 ['title', 'asc'],
@@ -146,12 +160,20 @@ class WorkspaceCalendarController extends Controller
             ->values();
     }
 
-    private function buildUserBookingEvents(string $email, Carbon $start, Carbon $end)
+    private function buildUserBookingEvents(string $email, int $userId, Carbon $start, Carbon $end)
     {
         $ownBookings = Booking::query()
-            ->where('client_email', $email)
             ->whereDate('booking_date_to', '>=', $start)
             ->whereDate('booking_date_from', '<=', $end)
+            ->where(function ($query) use ($email, $userId): void {
+                if ($email !== '') {
+                    $query->orWhere('client_email', $email);
+                }
+
+                if ($userId > 0) {
+                    $query->orWhere('created_by_user_id', $userId);
+                }
+            })
             ->orderBy('booking_date_from')
             ->get([
                 'id',
@@ -202,7 +224,7 @@ class WorkspaceCalendarController extends Controller
             'id' => $booking->id,
             'kind' => 'booking',
             'title' => ($booking->type_of_event ? ($booking->type_of_event . ' – ') : '')
-                . ($booking->company_name ?? 'Booking'),
+                . ($booking->company_name ?: $booking->client_name ?: 'Booking'),
             'start' => optional($booking->booking_date_from)->format('Y-m-d\TH:i'),
             'end' => optional($booking->booking_date_to)->format('Y-m-d\TH:i'),
             'status' => $booking->booking_status,
@@ -323,6 +345,7 @@ class WorkspaceCalendarController extends Controller
             'BOARD ROOM',
             'BASEMENT',
             'GALLERY2600',
+            'LED WALL',
         ];
     }
 }

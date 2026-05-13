@@ -16,8 +16,8 @@ export default function BackendRouteLoader({
 
     const visibleRef = useRef(false);
     const openedAtRef = useRef(0);
-    const showTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-    const hideTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+    const showTimerRef = useRef<number | null>(null);
+    const hideTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         visibleRef.current = visible;

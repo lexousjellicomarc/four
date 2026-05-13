@@ -122,7 +122,7 @@ export default function PublicFooter() {
     ];
 
     return (
-        <footer className="relative overflow-hidden bg-[#120d06] px-4 pt-16 text-white sm:px-6 lg:px-8">
+        <footer className="bccc-public-footer relative overflow-hidden bg-[#120d06] px-4 pt-16 text-white sm:px-6 lg:px-8">
             <div className="pointer-events-none absolute inset-0">
                 <div className="absolute left-[-12rem] top-[-12rem] h-[32rem] w-[32rem] rounded-full bg-[#d8b56d]/12 blur-3xl" />
                 <div className="absolute bottom-[-16rem] right-[-10rem] h-[34rem] w-[34rem] rounded-full bg-white/6 blur-3xl" />

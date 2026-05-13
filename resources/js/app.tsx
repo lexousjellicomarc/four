@@ -1,18 +1,5 @@
 import '../css/app.css';
-import '../css/bccc-final-unified.css';
-import '../css/backend-shadcn.css';
-import '../css/backend-dashboard.css';
-import '../css/backend-bookings.css';
-import '../css/backend-admin-pages.css';
-import '../css/backend-final-polish.css';
-import '../css/backend-responsive-motion.css';
-import '../css/backend-booking-wizard.css';
-import '../css/backend-booking-preview-print.css';
-import '../css/backend-sidebar-theme-fix.css';
-import '../css/backend-booking-laptop-polish.css';
-import '../css/backend-booking-hotel-flow.css';
-import '../css/backend-booking-universal-responsive.css';
-import '../css/backend-booking-motion-responsive-final.css';
+import '../css/bccc-system.css';
 import AppNoticeCenter from '@/components/shared/app-notice-center';
 
 import ActionFeedbackPopup from '@/components/action-feedback-popup';

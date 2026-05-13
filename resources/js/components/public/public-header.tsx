@@ -16,11 +16,13 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 
-type PublicSiteSettings = {
+export type PublicSiteSettings = {
     logo_url?: string | null;
     city_seal_url?: string | null;
     baguio_logo_url?: string | null;
     breathe_baguio_logo_url?: string | null;
+    visitaUrl?: string | null;
+    visita_url?: string | null;
     creativeBaguioUrl?: string | null;
     creative_baguio_url?: string | null;
     arts_url?: string | null;
@@ -392,7 +394,7 @@ export default function PublicHeader() {
     const { props, url } = usePage<PageProps>();
     const [mobileOpen, setMobileOpen] = useState(false);
 
-    const settings = props.siteSettings || {};
+    const settings = (props.siteSettings || {}) as PublicSiteSettings;
 
     const sealUrl = settings.city_seal_url || settings.logo_url || '/marketing/images/branding/FINAL.png';
     const breatheLogoUrl =

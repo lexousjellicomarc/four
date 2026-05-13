@@ -19,8 +19,8 @@ export default function UserDashboard() {
     <RoleDashboardTemplate
       role="user"
       workspaceStats={props.workspaceStats}
-      recentBookings={props.recentBookings}
-      todaySchedule={props.todaySchedule}
+      recentBookings={props.recentBookings as any}
+      todaySchedule={props.todaySchedule as any}
       workspaceSummary={props.workspaceSummary}
     />
   );

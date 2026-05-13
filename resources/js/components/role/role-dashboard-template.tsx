@@ -299,6 +299,13 @@ function getPrimaryActions(role: RoleKey): ActionItem[] {
       cta: 'Start Booking',
     },
     {
+      title: 'My Calendar',
+      description: 'Open a clean month view of your own booking requests and schedule references.',
+      href: '/my-calendar',
+      icon: CalendarDays,
+      cta: 'Open Calendar',
+    },
+    {
       title: 'My Bookings',
       description: 'View submitted booking requests, payment proof, and status progress.',
       href: '/my-bookings',

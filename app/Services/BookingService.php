@@ -8,6 +8,8 @@ use App\Models\CalendarBlock;
 use App\Models\PublicEvent;
 use App\Models\Service;
 use App\Services\Contracts\BookingServiceInterface;
+use App\Support\BookingStatusCatalog;
+use App\Support\VenueAreaCatalog;
 use App\Support\WorkspaceAccess;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -19,6 +21,16 @@ use Illuminate\Validation\ValidationException;
 
 class BookingService implements BookingServiceInterface
 {
+    /**
+     * Statuses that occupy availability while a booking is still valid.
+     * Pencil-booked and review-stage bookings must block the venue until
+     * they are declined, cancelled, expired, archived, or completed.
+     */
+    protected function blockingBookingStatuses(): array
+    {
+        return VenueAreaCatalog::BLOCKING_BOOKING_STATUSES;
+    }
+
     protected function recordLifecycleEvent(
         Booking $booking,
         string $eventKey,
@@ -27,8 +39,7 @@ class BookingService implements BookingServiceInterface
         ?string $fromStatus = null,
         ?string $toStatus = null,
         ?string $fromPaymentStatus = null,
- 
-       ?string $toPaymentStatus = null,
+        ?string $toPaymentStatus = null,
         array $meta = [],
     ): void {
         if (! Schema::hasTable('booking_lifecycle_events')) {
@@ -269,6 +280,7 @@ class BookingService implements BookingServiceInterface
             $bookingData = $this->onlyBookingColumns($data);
 
             $this->normalizeContactFields($bookingData);
+            $this->normalizeStatusFields($bookingData);
 
             $user = auth()->user();
 
@@ -278,12 +290,12 @@ class BookingService implements BookingServiceInterface
 
             if ($user && ! WorkspaceAccess::isStaffLike(request())) {
                 $bookingData['client_email'] = strtolower(trim((string) $user->email));
-                $bookingData['booking_status'] = 'pending';
+                $bookingData['booking_status'] = 'pencil_booked';
                 $bookingData['payment_status'] = 'unpaid';
             }
 
-            $bookingData['payment_status'] = $bookingData['payment_status'] ?? 'unpaid';
-            $bookingData['booking_status'] = $bookingData['booking_status'] ?? 'pending';
+            $bookingData['payment_status'] = BookingStatusCatalog::normalizeBookingPaymentStatus($bookingData['payment_status'] ?? 'unpaid', 'unpaid');
+            $bookingData['booking_status'] = BookingStatusCatalog::normalizeBookingStatus($bookingData['booking_status'] ?? 'pencil_booked', 'pencil_booked');
 
             if (empty($items)) {
                 throw ValidationException::withMessages([
@@ -353,6 +365,7 @@ class BookingService implements BookingServiceInterface
             $bookingData = $this->onlyBookingColumns($data);
 
             $this->normalizeContactFields($bookingData);
+            $this->normalizeStatusFields($bookingData);
 
             $user = auth()->user();
 
@@ -606,6 +619,23 @@ class BookingService implements BookingServiceInterface
         }
     }
 
+    protected function normalizeStatusFields(array &$data): void
+    {
+        if (array_key_exists('booking_status', $data)) {
+            $data['booking_status'] = BookingStatusCatalog::normalizeBookingStatus(
+                is_string($data['booking_status']) ? $data['booking_status'] : (string) $data['booking_status'],
+                'pencil_booked'
+            );
+        }
+
+        if (array_key_exists('payment_status', $data)) {
+            $data['payment_status'] = BookingStatusCatalog::normalizeBookingPaymentStatus(
+                is_string($data['payment_status']) ? $data['payment_status'] : (string) $data['payment_status'],
+                'unpaid'
+            );
+        }
+    }
+
     protected function normalizedBookingItems(array $payload): array
     {
         $items = $payload['items'] ?? [];
@@ -773,7 +803,7 @@ class BookingService implements BookingServiceInterface
         if ($itemsTotal <= 0) {
             $newPaymentStatus = $confirmedPaid > 0 ? 'paid' : 'unpaid';
         } elseif ($confirmedPaid <= 0.0) {
-            $newPaymentStatus = $submittedPaid > 0.0 ? 'partial' : 'unpaid';
+            $newPaymentStatus = $submittedPaid > 0.0 ? 'for_review' : 'unpaid';
         } elseif ($confirmedPaid + 0.00001 >= $itemsTotal) {
             $newPaymentStatus = 'paid';
         } else {
@@ -1008,7 +1038,7 @@ class BookingService implements BookingServiceInterface
             if ($downPaymentDeadline->lte($now)) {
                 if ($submittedTotal > 0.0) {
                     return [
-                        'status' => 'pending',
+                        'status' => 'for_review',
                         'reason' => 'A payment was submitted but is still awaiting confirmation. Staff review is required before the booking can move forward.',
                     ];
                 }
@@ -1020,15 +1050,15 @@ class BookingService implements BookingServiceInterface
             }
 
             return [
-                'status' => 'pending',
-                'reason' => 'The booking is still inside the initial 24-hour window for the 50% down payment.',
+                'status' => 'pencil_booked',
+                'reason' => 'The booking is pencil booked and still inside the initial 24-hour window for the 50% down payment.',
             ];
         }
 
         if ($confirmedTotal + 0.00001 < $itemsTotal && $fullPaymentDeadline->lte($now)) {
             if ($submittedTotal > $confirmedTotal) {
                 return [
-                    'status' => 'pending',
+                    'status' => 'for_review',
                     'reason' => 'A remaining payment was submitted but is still awaiting confirmation. Staff review is required before the booking can move forward.',
                 ];
             }
@@ -1068,7 +1098,7 @@ class BookingService implements BookingServiceInterface
 
     protected function determineAutomaticBookingStatus(Booking $booking): string
     {
-        return (string) ($this->determineAutomaticBookingDecision($booking)['status'] ?? 'pending');
+        return (string) ($this->determineAutomaticBookingDecision($booking)['status'] ?? 'pencil_booked');
     }
 
     public function paymentPolicySnapshot(Booking $booking): array
@@ -1113,14 +1143,14 @@ class BookingService implements BookingServiceInterface
     protected function confirmedPaymentTotal(Booking $booking): float
     {
         return (float) $booking->payments
-            ->whereIn('status', ['confirmed', 'verified', 'paid'])
+            ->whereIn('status', ['confirmed', 'verified', 'approved', 'paid', 'completed', 'settled'])
             ->reduce(fn ($sum, $payment) => $sum + (float) $payment->amount, 0.0);
     }
 
     protected function submittedPaymentTotal(Booking $booking): float
     {
         return (float) $booking->payments
-            ->whereIn('status', ['pending', 'confirmed', 'verified', 'paid'])
+            ->whereIn('status', ['pending', 'submitted', 'for_review', 'confirmed', 'verified', 'approved', 'paid', 'completed', 'settled'])
             ->reduce(fn ($sum, $payment) => $sum + (float) $payment->amount, 0.0);
     }
 
@@ -1324,7 +1354,7 @@ class BookingService implements BookingServiceInterface
 
         $conflictingBooking = Booking::query()
             ->with(['bookingServices.service.serviceType', 'service.serviceType'])
-            ->whereIn('booking_status', ['confirmed', 'approved', 'active'])
+            ->whereIn('booking_status', $this->blockingBookingStatuses())
             ->when($ignoreBookingId, fn (Builder $query) => $query->where('id', '!=', $ignoreBookingId))
             ->where('booking_date_from', '<', $this->endForOverlap($to))
             ->where('booking_date_to', '>', $from)
@@ -1393,7 +1423,7 @@ class BookingService implements BookingServiceInterface
         };
     }
 
-    private function buildAvailabilityBlocks(Carbon $day, array $mergedIntervals): array
+    private function buildAvailabilityBlocks(Carbon $day, array $sourceIntervals): array
     {
         $blocks = [
             'AM' => [
@@ -1423,18 +1453,41 @@ class BookingService implements BookingServiceInterface
         ];
 
         foreach ($blocks as $key => $block) {
-            $available = true;
+            $booked = false;
+            $blocked = false;
+            $reasons = [];
 
-            foreach ($mergedIntervals as $interval) {
-                if ($this->overlaps($interval['from'], $interval['to'], $block['start'], $block['end'])) {
-                    $available = false;
-                    break;
+            foreach ($sourceIntervals as $interval) {
+                if (! $this->overlaps($interval['from'], $interval['to'], $block['start'], $block['end'])) {
+                    continue;
+                }
+
+                $source = (string) ($interval['source'] ?? 'booking');
+
+                if ($source === 'calendar_block') {
+                    $blocked = true;
+                } else {
+                    $booked = true;
+                }
+
+                $reason = trim((string) ($interval['reason'] ?? ''));
+
+                if ($reason !== '') {
+                    $reasons[] = $reason;
                 }
             }
 
             unset($blocks[$key]['start'], $blocks[$key]['end']);
 
-            $blocks[$key]['is_available'] = $available;
+            $isAvailable = ! $booked && ! $blocked;
+
+            $blocks[$key]['is_available'] = $isAvailable;
+            $blocks[$key]['isAvailable'] = $isAvailable;
+            $blocks[$key]['booked'] = $booked;
+            $blocks[$key]['blocked'] = $blocked;
+            $blocks[$key]['reason'] = $isAvailable
+                ? null
+                : (array_values(array_unique($reasons))[0] ?? ($blocked ? 'Blocked by admin calendar' : 'Reserved by booking'));
         }
 
         return $blocks;
@@ -1450,7 +1503,7 @@ class BookingService implements BookingServiceInterface
 
         $bookings = Booking::query()
             ->with(['bookingServices.service.serviceType', 'service.serviceType'])
-            ->whereIn('booking_status', ['active', 'confirmed', 'approved'])
+            ->whereIn('booking_status', $this->blockingBookingStatuses())
             ->when($excludeBookingId, fn (Builder $query) => $query->where('id', '!=', $excludeBookingId))
             ->where('booking_date_from', '<', $dayEnd)
             ->where('booking_date_to', '>', $dayStart)
@@ -1472,7 +1525,12 @@ class BookingService implements BookingServiceInterface
             $to = $end->lt($dayEnd) ? $end : $dayEnd->copy();
 
             if ($to->gt($from)) {
-                $intervals[] = compact('from', 'to');
+                $intervals[] = [
+                    'from' => $from,
+                    'to' => $to,
+                    'source' => 'booking',
+                    'reason' => trim((string) ($booking->public_calendar_title ?: $booking->type_of_event ?: $booking->company_name ?: 'Reserved by booking')),
+                ];
             }
         }
 
@@ -1480,7 +1538,7 @@ class BookingService implements BookingServiceInterface
             $calendarBlocks = CalendarBlock::query()
                 ->whereDate('date_from', '<=', $day->format('Y-m-d'))
                 ->whereDate('date_to', '>=', $day->format('Y-m-d'))
-                ->get(['id', 'block', 'area']);
+                ->get(['id', 'title', 'block', 'area', 'public_status', 'notes']);
 
             if ($area) {
                 $calendarBlocks = $calendarBlocks
@@ -1495,7 +1553,21 @@ class BookingService implements BookingServiceInterface
                 $to = $blockEnd->lt($dayEnd) ? $blockEnd : $dayEnd->copy();
 
                 if ($to->gt($from)) {
-                    $intervals[] = compact('from', 'to');
+                    $status = strtolower((string) ($block->public_status ?? 'red'));
+                    $label = match ($status) {
+                        'blue' => 'Public calendar block',
+                        'gold' => 'Private calendar reservation',
+                        default => 'Blocked by admin calendar',
+                    };
+
+                    $title = trim((string) ($block->title ?? ''));
+                    $intervals[] = [
+                        'from' => $from,
+                        'to' => $to,
+                        'source' => 'calendar_block',
+                        'reason' => $title !== '' ? $title : $label,
+                        'public_status' => $status,
+                    ];
                 }
             }
         }
@@ -1537,7 +1609,7 @@ class BookingService implements BookingServiceInterface
             $free = [['from' => '06:00', 'to' => '23:59']];
         }
 
-        $blocks = $this->buildAvailabilityBlocks($day, $merged);
+        $blocks = $this->buildAvailabilityBlocks($day, $intervals);
 
         $isFullyBooked = ! $blocks['AM']['is_available']
             && ! $blocks['PM']['is_available']
@@ -1752,7 +1824,7 @@ class BookingService implements BookingServiceInterface
 
         $publicVisibleBookingsQuery = Booking::query()
             ->with(['bookingServices.service.serviceType', 'service.serviceType'])
-            ->whereIn('booking_status', ['active', 'confirmed', 'approved'])
+            ->whereIn('booking_status', $this->blockingBookingStatuses())
             ->where('booking_date_from', '<', $dayEnd)
             ->where('booking_date_to', '>', $dayStart);
 
@@ -1782,19 +1854,26 @@ class BookingService implements BookingServiceInterface
             ->filter(fn ($block) => (bool) data_get($block, 'is_available', false))
             ->count();
 
+        $closedBlockCount = max(0, 3 - $availableBlockCount);
+        $isFullyBooked = $availableBlockCount === 0 || (bool) ($availability['is_fully_booked'] ?? false);
+
         $capacitySummary = $this->summarizePublicCapacityForArea($area, $guestCount);
         $eventProfile = $this->profilePublicEventType($eventType);
 
         $status = 'available';
 
-        if ($hasRedBlock) {
-            $status = 'blocked';
+        if ($isFullyBooked) {
+            if ($hasRedBlock) {
+                $status = 'blocked';
+            } elseif ($hasBlueBlock || $events->isNotEmpty() || $publicVisibleBookings->isNotEmpty()) {
+                $status = 'public_booked';
+            } else {
+                $status = 'private_booked';
+            }
+        } elseif ($hasRedBlock || $hasGoldBlock || $closedBlockCount > 0) {
+            $status = 'limited';
         } elseif ($hasBlueBlock || $events->isNotEmpty() || $publicVisibleBookings->isNotEmpty()) {
             $status = 'public_booked';
-        } elseif ($hasGoldBlock || (bool) ($availability['is_fully_booked'] ?? false)) {
-            $status = 'private_booked';
-        } elseif ($availableBlockCount > 0 && $availableBlockCount < 3) {
-            $status = 'limited';
         }
 
         $title = 'Selected date is currently available';
@@ -1834,7 +1913,7 @@ class BookingService implements BookingServiceInterface
             $note .= ' ' . $capacitySummary['message'];
         }
 
-        $canProceed = in_array($status, ['available', 'limited'], true);
+        $canProceed = $availableBlockCount > 0 && ! in_array($status, ['blocked', 'private_booked'], true);
 
         if ($capacitySummary['ok'] === false) {
             $canProceed = false;
@@ -2064,93 +2143,27 @@ class BookingService implements BookingServiceInterface
 
     private function canonicalAreaKey(?string $value): string
     {
-        $normalized = str_replace(' ', '', $this->normalizeAreaLabel($value));
-
-        $map = [
-            'fullhall' => 'full_hall',
-            'fullvenue' => 'full_hall',
-            'wholehall' => 'full_hall',
-            'entirehall' => 'full_hall',
-
-            'mainhall' => 'main_hall',
-            'mainfunctionhall' => 'main_hall',
-
-            'foyerlobbyarea' => 'foyer_lobby',
-            'foyerandlobbyarea' => 'foyer_lobby',
-            'foyerlobby' => 'foyer_lobby',
-            'foyer' => 'foyer_lobby',
-            'lobbyarea' => 'foyer_lobby',
-            'lobby' => 'foyer_lobby',
-
-            'viplounge' => 'vip_lounge',
-            'viploungearea' => 'vip_lounge',
-
-            'boardroom' => 'board_room',
-            'boardrm' => 'board_room',
-
-            'basement' => 'basement',
-
-            'gallery2600' => 'gallery2600',
-            'gallery' => 'gallery2600',
-
-            'wholevenue' => 'whole_venue',
-            'wholefacility' => 'whole_venue',
-            'entirevenue' => 'whole_venue',
-            'allareas' => 'whole_venue',
-            'allarea' => 'whole_venue',
-            'allspaces' => 'whole_venue',
-            'wholeplace' => 'whole_venue',
-            'whole' => 'whole_venue',
-        ];
-
-        return $map[$normalized] ?? $normalized;
+        return VenueAreaCatalog::canonicalKey($value);
     }
 
     private function normalizeAreaLabel(?string $value): string
     {
-        $value = mb_strtolower(trim((string) $value));
-        $value = str_replace(['&', '/'], [' and ', ' '], $value);
-        $value = preg_replace('/[^a-z0-9]+/u', ' ', $value) ?? '';
-
-        return trim(preg_replace('/\s+/u', ' ', $value) ?? '');
+        return VenueAreaCatalog::normalizeLabel($value);
     }
 
     private function isWholeVenueLabel(?string $value): bool
     {
-        return in_array($this->canonicalAreaKey($value), ['whole_venue', 'full_hall'], true);
+        return VenueAreaCatalog::isWholeVenue($value);
     }
 
     private function areaOverlapMatrix(): array
     {
-        return [
-            'whole_venue' => ['whole_venue', 'full_hall', 'main_hall', 'foyer_lobby', 'vip_lounge', 'board_room', 'basement', 'gallery2600'],
-            'full_hall' => ['whole_venue', 'full_hall', 'main_hall', 'foyer_lobby', 'vip_lounge', 'board_room', 'basement', 'gallery2600'],
-            'main_hall' => ['whole_venue', 'full_hall', 'main_hall'],
-            'foyer_lobby' => ['whole_venue', 'full_hall', 'foyer_lobby'],
-            'vip_lounge' => ['whole_venue', 'full_hall', 'vip_lounge'],
-            'board_room' => ['whole_venue', 'full_hall', 'board_room'],
-            'basement' => ['whole_venue', 'full_hall', 'basement'],
-            'gallery2600' => ['whole_venue', 'full_hall', 'gallery2600'],
-        ];
+        return VenueAreaCatalog::matrix();
     }
 
     private function areasOverlap(?string $candidate, ?string $selected): bool
     {
-        $candidateKey = $this->canonicalAreaKey($candidate);
-        $selectedKey = $this->canonicalAreaKey($selected);
-
-        if ($candidateKey === '' || $selectedKey === '') {
-            return false;
-        }
-
-        if ($candidateKey === $selectedKey) {
-            return true;
-        }
-
-        $matrix = $this->areaOverlapMatrix();
-
-        return in_array($selectedKey, $matrix[$candidateKey] ?? [], true)
-            || in_array($candidateKey, $matrix[$selectedKey] ?? [], true);
+        return VenueAreaCatalog::overlaps($candidate, $selected);
     }
 
     private function bookingMatchesArea(Booking $booking, string $area): bool
@@ -2253,7 +2266,7 @@ class BookingService implements BookingServiceInterface
     public function getUnavailableDates(?int $excludeBookingId = null): array
     {
         $bookings = Booking::query()
-            ->whereIn('booking_status', ['active', 'confirmed', 'approved'])
+            ->whereIn('booking_status', $this->blockingBookingStatuses())
             ->when($excludeBookingId, fn (Builder $query) => $query->where('id', '!=', $excludeBookingId))
             ->whereNotNull('booking_date_from')
             ->whereNotNull('booking_date_to')

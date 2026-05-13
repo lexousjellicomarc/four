@@ -210,7 +210,9 @@ export default function MiceRegistryFormPage() {
             form.transform((data) => ({
                 ...data,
                 _method: method.toUpperCase(),
-            })).post(submitUrl, {
+            }));
+
+            form.post(submitUrl, {
                 preserveScroll: true,
                 onSuccess: () => {
                     notifySuccess(successMessage, 'Saved successfully');

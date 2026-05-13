@@ -118,6 +118,7 @@ export const publicEventTypeOptions = [
 export const fallbackVenues: VenueOption[] = [
     { label: 'Full Hall', value: 'FULL HALL', category: 'Convention Hall', capacity: 'Large-scale events' },
     { label: 'Main Hall', value: 'MAIN HALL', category: 'Primary Venue', capacity: 'Major events' },
+    { label: 'LED Wall', value: 'LED WALL', category: 'Display Support', capacity: 'Presentation and stage visuals' },
     { label: 'Foyer & Lobby Area', value: 'FOYER & LOBBY AREA', category: 'Reception Area', capacity: 'Exhibits and pre-function' },
     { label: 'VIP Lounge', value: 'VIP LOUNGE', category: 'Private Area', capacity: 'Small formal groups' },
     { label: 'Board Room', value: 'BOARD ROOM', category: 'Meeting Room', capacity: 'Executive meetings' },
@@ -300,7 +301,7 @@ export function buildMonthWeeks(month: string): Date[][] {
 export function normalizeStatus(status?: string | null): AvailabilityStatus {
     const value = String(status || '').toLowerCase();
 
-    if (value === 'blocked') {
+    if (value === 'blocked' || value === 'closed' || value === 'unavailable') {
         return 'blocked';
     }
 
@@ -538,7 +539,7 @@ export function blockQueryHref(date: string, block: BlockKey, venue: string, eve
     return `/book?${query.toString()}`;
 }
 
-export function rangeBookingHref(result: AvailabilityRangeResponse) {
+export function rangeBookingHref(result: Pick<AvailabilityRangeResponse, 'from' | 'to' | 'venue'> & Partial<AvailabilityRangeResponse>) {
     const query = new URLSearchParams();
 
     query.set('date_from', `${result.from}T06:00`);

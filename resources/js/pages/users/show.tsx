@@ -1,4 +1,5 @@
 import AppLayout from '@/layouts/app-layout';
+import { workspaceUsersPath } from '@/lib/workspace-paths';
 import type { BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft, Edit, Mail, Phone, ShieldCheck, User2 } from 'lucide-react';
@@ -56,9 +57,13 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
 }
 
 export default function UserShow({ user }: Props) {
+    const usersIndexUrl = workspaceUsersPath();
+    const userShowUrl = workspaceUsersPath(String(user.id));
+    const userEditUrl = workspaceUsersPath(`${user.id}/edit`);
+
     const breadcrumbs: BreadcrumbItem[] = [
-        { title: 'Users', href: '/users' },
-        { title: user.name, href: `/users/${user.id}` },
+        { title: 'Users', href: usersIndexUrl },
+        { title: user.name, href: userShowUrl },
     ];
 
     return (
@@ -112,7 +117,7 @@ export default function UserShow({ user }: Props) {
 
                         <div className="flex flex-wrap gap-2">
                             <Link
-                                href="/users"
+                                href={usersIndexUrl}
                                 className="inline-flex items-center rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted"
                             >
                                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -120,7 +125,7 @@ export default function UserShow({ user }: Props) {
                             </Link>
 
                             <Link
-                                href={`/users/${user.id}/edit`}
+                                href={userEditUrl}
                                 className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
                             >
                                 <Edit className="mr-2 h-4 w-4" />

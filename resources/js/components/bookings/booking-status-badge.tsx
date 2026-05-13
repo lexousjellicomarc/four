@@ -5,6 +5,7 @@ type BookingStatusBadgeProps = {
     value?: string | null;
     label?: string;
     compact?: boolean;
+    size?: 'sm' | 'md' | 'lg';
     className?: string;
 };
 
@@ -94,8 +95,10 @@ export function BookingStatusBadge({
     value,
     label,
     compact = false,
+    size,
     className,
 }: BookingStatusBadgeProps) {
+    const normalizedCompact = compact || size === 'sm';
     const meta = bookingStatusMeta(value);
     const Icon = meta.icon;
 
@@ -103,11 +106,11 @@ export function BookingStatusBadge({
         <span
             className={cx(
                 meta.className,
-                compact ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1.5 text-[11px]',
+                normalizedCompact ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1.5 text-[11px]',
                 className,
             )}
         >
-            <Icon className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+            <Icon className={normalizedCompact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
             {label || meta.label}
         </span>
     );
